@@ -158,7 +158,7 @@ vetcari-app/
 │   ├── main.jsx                     # React root
 │   └── index.css                    # Tailwind direktifleri
 │
-├── ARCHITECTURE.md                  # Bu dosya
+├── docs/ARCHITECTURE.md             # Bu dosya
 ├── index.html
 ├── tailwind.config.js
 ├── vite.config.js
@@ -378,4 +378,4 @@ VITE_FIREBASE_APP_ID=...
 
 ## 11. Uygulama Yol Haritası
 
-> Yol haritası ayrı bir dosyada tutulmaktadır: [`ROADMAP.md`](file:///c:/Users/omerf/VetCari/vetcari-app/ROADMAP.md)
+> Yol haritası ayrı bir dosyada tutulmaktadır: [ROADMAP.md](./ROADMAP.md)
