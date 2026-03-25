@@ -1,5 +1,6 @@
 import React from 'react';
 import { History } from 'lucide-react';
+import { fmtDate } from '../../utils/formatters';
 
 export default function HistoryModal({ debtInfo, logs, onClose }) {
 
@@ -42,7 +43,7 @@ export default function HistoryModal({ debtInfo, logs, onClose }) {
                       <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${getBadgeColor(log.type)}`}>
                         {log.title}
                       </span>
-                      <time className="text-xs text-slate-400 font-medium">{log.date}</time>
+                      <time className="text-xs text-slate-400 font-medium">{fmtDate(log.date)}</time>
                     </div>
                     <div className="text-sm text-slate-700 leading-relaxed font-medium">
                       {log.message}

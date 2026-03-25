@@ -3,184 +3,133 @@ import { fmtTL, fmtQty } from './utils/formatters';
 import Header from './components/layout/Header';
 import DashboardView from './components/dashboard/DashboardView';
 import CustomersView from './components/customers/CustomersView';
-import DrugsView from './components/drugs/DrugsView';
 import CustomerDetail from './components/customers/CustomerDetail';
-
-// --- BAŞLANGIÇ VERİLERİ (MOCK DATA) ---
-const initialDrugs = [
-  { id: 1, name: 'Bravecto (Kene/Pire)', price: 450 },
-  { id: 2, name: 'İç Parazit Hapı (Tenikur)', price: 120 },
-  { id: 3, name: 'Karma Aşı', price: 600 }
-];
-
-const initialCustomers = [
-  { id: 1, name: 'Ayşe Yılmaz (Tarçın)', balance: 0 },
-  { id: 2, name: 'Kemal Demir (Karabaş)', balance: 150 }
-];
-
-const initialServiceDebts = [
-  { id: 1, customerId: 1, desc: 'Genel Muayene', amount: 400, date: '2023-10-25' }
-];
-
-const initialDrugDebts = [
-  { id: 1, customerId: 1, drugId: 1, qty: 1.5, maxPrice: 450, isFixed: false, date: '2023-10-25' },
-  { id: 2, customerId: 2, drugId: 2, qty: 3, maxPrice: 120, isFixed: true, date: '2023-10-20' }
-];
-
-const initialLogs = [
-  { id: 101, debtId: 1, date: '25.10.2023 10:00', title: 'Borç Açıldı', message: `1.5 Adet eklendi. (Birim fiyat: 450 ₺. Toplam: 675 ₺)`, type: 'info' },
-  { id: 102, debtId: 2, date: '20.10.2023 14:30', title: 'Borç Açıldı', message: `3 Adet eklendi. (Birim fiyat: 120 ₺. Toplam: 360 ₺)`, type: 'info' }
-];
+import { useAuth } from './hooks/useAuth';
+import Login from './components/auth/Login';
+import { useFirestore } from './hooks/useFirestore';
+import { 
+  addCustomer, 
+  deleteCustomer,
+  updateCustomerName,
+  addDrug, 
+  deleteDrug,
+  updateDrugPrice, 
+  toggleDebtLock, 
+  returnDrug, 
+  addServiceDebtOperations, 
+  deleteServiceDebtOperations,
+  addDrugDebtOperations, 
+  applyPaymentOperations 
+} from './services/firestoreOperations';
 
 export default function App() {
+  const { currentUser, loading } = useAuth();
+  const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
 
-  const [drugs, setDrugs] = useState(initialDrugs);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [serviceDebts, setServiceDebts] = useState(initialServiceDebts);
-  const [drugDebts, setDrugDebts] = useState(initialDrugDebts);
-  const [transactions, setTransactions] = useState(initialLogs);
-
-  const addLog = (debtId, title, message, type = 'neutral') => {
-    return {
-      id: Date.now() + Math.random(),
-      debtId,
-      date: new Date().toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }),
-      title,
-      message,
-      type
-    };
+  const handleAddCustomer = async (name) => {
+    const trimmedInfo = name.trim().toLowerCase();
+    const exists = customers.some(c => c.name.trim().toLowerCase() === trimmedInfo);
+    if (exists) {
+      alert(`"${name}" adında bir müşteri zaten kayıtlı!\n\nLütfen (Köpek/Kedi ismi) veya başka bir ayırt edici ek belirterek isimleri farklı yapmaya çalışın.`);
+      return;
+    }
+    await addCustomer(name);
   };
 
-  const handleAddCustomer = (name) => {
-    if (!name.trim()) return;
-    const newCustomer = { id: Date.now(), name: name.trim(), balance: 0 };
-    setCustomers([...customers, newCustomer]);
+  const handleUpdateCustomerName = async (customerId, newName) => {
+    const trimmedInfo = newName.trim().toLowerCase();
+    const exists = customers.some(c => c.id !== customerId && c.name.trim().toLowerCase() === trimmedInfo);
+    if (exists) {
+      alert(`"${newName}" adında bir müşteri zaten kayıtlı!`);
+      return;
+    }
+    await updateCustomerName(customerId, newName);
   };
 
-  const handleAddDrug = (name, price) => {
-    if (!name.trim() || price <= 0) return;
-    const newDrug = { id: Date.now(), name: name.trim(), price: parseFloat(price) };
-    setDrugs([...drugs, newDrug]);
+  const handleDeleteCustomer = async (customerId, totalDebt, balance) => {
+    if (totalDebt > 0 || balance > 0) {
+      alert("UYARI: Bu müşterinin aktif finansal bakiyesi (borç veya avans) bulunduğu için silinemez. Lütfen önce hesapları sıfırlayın.");
+      return;
+    }
+    if (window.confirm("Bu müşteriyi sistemden kalıcı olarak silmek istediğinize emin misiniz?")) {
+      await deleteCustomer(customerId);
+      setSelectedCustomerId(null);
+    }
   };
 
-  const handleUpdateDrugPrice = (drugId, newPrice) => {
-    setDrugs(prev => prev.map(d => d.id === drugId ? { ...d, price: newPrice } : d));
-
-    const generatedLogs = [];
-
-    const updatedDebts = drugDebts.map(debt => {
-      if (debt.drugId === drugId && !debt.isFixed && newPrice > debt.maxPrice) {
-        const oldTotalTl = debt.qty * debt.maxPrice;
-        const newTotalTl = debt.qty * newPrice;
-        const diffTl = newTotalTl - oldTotalTl;
-
-        generatedLogs.push(addLog(
-          debt.id,
-          'Fiyat Güncellemesi (Zam)',
-          `Birim fiyat ${fmtTL(debt.maxPrice)} -> ${fmtTL(newPrice)} oldu. Toplam borç ${fmtTL(oldTotalTl)}'den ${fmtTL(newTotalTl)}'ye çıktı (+${fmtTL(diffTl)} fark).`,
-          'warning'
-        ));
-
-        return { ...debt, maxPrice: newPrice };
-      }
-      return debt;
-    });
-
-    setDrugDebts(updatedDebts);
-    if (generatedLogs.length > 0) setTransactions(prev => [...prev, ...generatedLogs]);
+  const handleAddDrug = async (name, price) => {
+    const trimmedInfo = name.trim().toLowerCase();
+    const exists = drugs.some(d => d.name.trim().toLowerCase() === trimmedInfo);
+    if (exists) {
+      alert(`"${name}" adında bir ilaç sistemde zaten mevcut!\n\nEğer fiyatını değiştirmek istiyorsanız "İlaçlar & Fiyatlar" sekmesindeki "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
+      return;
+    }
+    await addDrug(name, price);
   };
 
-  const toggleDebtLock = (debtId) => {
+  const handleDeleteDrug = async (drugId) => {
+    const hasActiveDebt = drugDebts.some(d => d.drugId === drugId && d.qty > 0);
+    if (hasActiveDebt) {
+      alert("UYARI: Bu ilacın ödenmemiş aktif müşteri borçları bulunduğu için sistemden silinmesine izin verilmez!");
+      return;
+    }
+    
+    if (window.confirm("Bu ilacı kalıcı olarak silmek istediğinize emin misiniz?\nMüşterilerin geçmiş (ödenmiş) ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir.")) {
+      await deleteDrug(drugId);
+    }
+  };
+
+  const handleUpdateDrugPrice = async (drugId, newPrice) => {
+    await updateDrugPrice(drugId, newPrice, drugDebts);
+  };
+
+  const toggleDebtLockHandler = async (debtId) => {
     const debt = drugDebts.find(d => d.id === debtId);
-    if (debt) {
-      setTransactions(prev => [...prev, addLog(debtId, debt.isFixed ? 'Sabitleme Kaldırıldı' : 'Fiyat Sabitlendi', debt.isFixed ? 'Borç tekrar zamlara açık hale geldi.' : 'Borç donduruldu, zamlardan etkilenmeyecek.', 'neutral')]);
-      setDrugDebts(prev => prev.map(d => d.id === debtId ? { ...d, isFixed: !d.isFixed } : d));
+    if (debt) await toggleDebtLock(debt);
+  };
+
+  const handleDrugReturn = async (debt, returnQty) => {
+    const customer = customers.find(c => c.id === debt.customerId);
+    if (!customer) return;
+    await returnDrug(debt, returnQty, customer.balance);
+  };
+
+  const addServiceDebt = async (customerId, desc, amount) => {
+    await addServiceDebtOperations(customerId, desc, amount);
+  };
+
+  const deleteServiceDebt = async (debtId) => {
+    if (window.confirm("Hatalı işlemleri düzeltmek için: Bu hizmet kaydını iptal etmek istediğinize emin misiniz? (Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir)")) {
+      await deleteServiceDebtOperations(debtId);
     }
   };
 
-  const handleDrugReturn = (debt, returnQty) => {
-    if (returnQty <= 0) return;
-
-    if (returnQty <= debt.qty) {
-      let finalQty = debt.qty - returnQty;
-      const remainingTl = finalQty * debt.maxPrice;
-      let isSwept = false;
-
-      if (remainingTl <= 10) { isSwept = true; finalQty = 0; }
-
-      setDrugDebts(prev => prev.map(d => d.id === debt.id ? { ...d, qty: finalQty } : d).filter(d => d.qty > 0));
-
-      const logs = [addLog(debt.id, 'İade İşlemi', `${fmtQty(returnQty)} adet iade edildi. Kalan yeni borç: ${fmtQty(finalQty)} adet (${fmtTL(remainingTl)}).`, 'info')];
-      if (isSwept) logs.push(addLog(debt.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için sistem borcu sıfırladı.`, 'success'));
-      setTransactions(prev => [...prev, ...logs]);
-
-    } else {
-      const excessQty = returnQty - debt.qty;
-      const refundTl = excessQty * debt.maxPrice;
-
-      setDrugDebts(prev => prev.filter(d => d.id !== debt.id));
-      setCustomers(prev => prev.map(c => c.id === debt.customerId ? { ...c, balance: c.balance + refundTl } : c));
-      setTransactions(prev => [...prev, addLog(debt.id, 'Fazla İade (Avans)', `Tüm borç kapatıldı. Artan ${fmtQty(excessQty)} adet karşılığı ${fmtTL(refundTl)} avans yazıldı.`, 'success')]);
-    }
-  };
-
-  const addServiceDebt = (customerId, desc, amount) => {
-    const newDebt = { id: Date.now(), customerId, desc, amount, date: new Date().toISOString().split('T')[0] };
-    setServiceDebts([...serviceDebts, newDebt]);
-  };
-
-  const addDrugDebt = (customerId, drugId, qty) => {
-    const drug = drugs.find(d => d.id === drugId);
+  const addDrugDebt = async (customerId, drugId, qty) => {
+    const drug = drugs.find(d => String(d.id) === String(drugId));
     if (!drug) return;
-    const debtId = Date.now();
-    const newDebt = { id: debtId, customerId, drugId, qty, maxPrice: drug.price, isFixed: false, date: new Date().toISOString().split('T')[0] };
-    setDrugDebts([...drugDebts, newDebt]);
-    setTransactions(prev => [...prev, addLog(debtId, 'Borç Açıldı', `${fmtQty(qty)} Adet eklendi. (Birim fiyat: ${fmtTL(drug.price)}. Toplam Borç: ${fmtTL(qty * drug.price)})`, 'info')]);
+    await addDrugDebtOperations(customerId, drug, qty);
   };
 
-  const applyPayment = (customerId, receivedAmount, distributionArr) => {
-    let currentBalance = customers.find(c => c.id === customerId).balance + receivedAmount;
-
-    let newSDebts = [...serviceDebts];
-    let newDDebts = [...drugDebts];
-    let newLogs = [];
-
-    distributionArr.forEach(item => {
-      if (item.deduct <= 0) return;
-      currentBalance -= item.deduct;
-
-      if (item.type === 'service') {
-        const idx = newSDebts.findIndex(d => d.id === item.id);
-        if (idx !== -1) {
-          newSDebts[idx].amount -= item.deduct;
-          if (newSDebts[idx].amount <= 10) newSDebts.splice(idx, 1);
-        }
-      } else if (item.type === 'drug') {
-        const idx = newDDebts.findIndex(d => d.id === item.id);
-        if (idx !== -1) {
-          const qtyToDeduct = item.deduct / newDDebts[idx].maxPrice;
-          newDDebts[idx].qty -= qtyToDeduct;
-
-          const kalanAdet = newDDebts[idx].qty;
-          const kalanTlKarsiligi = kalanAdet * newDDebts[idx].maxPrice;
-
-          newLogs.push(addLog(item.id, 'Tahsilat', `${fmtTL(item.deduct)} ödendi. ${fmtQty(qtyToDeduct)} adet borçtan düşüldü. Kalan yeni borç: ${fmtQty(kalanAdet)} adet (${fmtTL(kalanTlKarsiligi)}).`, 'success'));
-
-          if (kalanTlKarsiligi <= 10) {
-            if (kalanTlKarsiligi > 0) newLogs.push(addLog(item.id, 'Süpürücü (Kapatıldı)', `Kalan mikro küsurat 10 TL altında olduğu için silindi.`, 'success'));
-            newDDebts.splice(idx, 1);
-          }
-        }
-      }
-    });
-
-    setServiceDebts(newSDebts);
-    setDrugDebts(newDDebts);
-    setCustomers(customers.map(c => c.id === customerId ? { ...c, balance: currentBalance } : c));
-    if (newLogs.length > 0) setTransactions(prev => [...prev, ...newLogs]);
+  const applyPayment = async (customerId, receivedAmount, distributionArr) => {
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return;
+    await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts);
   };
+
+  if (loading || dataLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600"></div>
+        <p className="text-slate-500 font-medium">Veriler Yükleniyor...</p>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
@@ -205,6 +154,8 @@ export default function App() {
             drugDebts={drugDebts}
             onSelect={(id) => { setSelectedCustomerId(id); setActiveTab('customerDetail'); }}
             onAddCustomer={handleAddCustomer}
+            onDeleteCustomer={handleDeleteCustomer}
+            onUpdateCustomerName={handleUpdateCustomerName}
           />
         )}
 
@@ -213,6 +164,7 @@ export default function App() {
             drugs={drugs}
             onUpdatePrice={handleUpdateDrugPrice}
             onAddDrug={handleAddDrug}
+            onDeleteDrug={handleDeleteDrug}
           />
         )}
 
@@ -224,9 +176,10 @@ export default function App() {
             drugDebts={drugDebts.filter(d => d.customerId === selectedCustomerId)}
             transactions={transactions}
             onBack={() => { setActiveTab('customers'); setSelectedCustomerId(null); }}
-            onToggleLock={toggleDebtLock}
+            onToggleLock={toggleDebtLockHandler}
             onReturnDrug={handleDrugReturn}
             onAddServiceDebt={(desc, amt) => addServiceDebt(selectedCustomerId, desc, amt)}
+            onDeleteServiceDebt={deleteServiceDebt}
             onAddDrugDebt={(drugId, qty) => addDrugDebt(selectedCustomerId, drugId, qty)}
             onApplyPayment={(amt, dist) => applyPayment(selectedCustomerId, amt, dist)}
           />

@@ -1,5 +1,7 @@
 import React from 'react';
-import { TrendingUp, LayoutDashboard, Users, Pill } from 'lucide-react';
+import { TrendingUp, LayoutDashboard, Users, Pill, LogOut } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../services/firebase';
 
 export default function Header({ activeTab, onNavigate }) {
   return (
@@ -27,6 +29,14 @@ export default function Header({ activeTab, onNavigate }) {
             className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center gap-2 ${activeTab === 'drugs' ? 'bg-indigo-600 shadow-sm' : 'hover:bg-indigo-600/50 text-indigo-100'}`}
           >
             <Pill className="w-4 h-4" /> İlaçlar & Fiyatlar
+          </button>
+          
+          <button
+            onClick={() => signOut(auth)}
+            title="Sistemden Çıkış Yap"
+            className="px-3 py-2 rounded-md font-medium transition-colors flex items-center hover:bg-rose-500 hover:text-white text-indigo-200 ml-1 border border-transparent hover:border-rose-400 group"
+          >
+            <LogOut className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
           </button>
         </nav>
       </div>

@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { Users, UserPlus } from 'lucide-react';
+import { Users, UserPlus, Edit2, Trash2, Check, X } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 
-export default function CustomersView({ customers, serviceDebts, drugDebts, onSelect, onAddCustomer }) {
+export default function CustomersView({ customers, serviceDebts, drugDebts, onSelect, onAddCustomer, onDeleteCustomer, onUpdateCustomerName }) {
   const [newCustomerName, setNewCustomerName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [tempName, setTempName] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const calculateTotalDebt = (customerId) => {
     const sDebt = serviceDebts.filter(d => d.customerId === customerId).reduce((sum, d) => sum + d.amount, 0);
@@ -22,6 +27,9 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Users className="w-6 h-6 text-indigo-600" /> Müşteriler Listesi</h2>
+        <div className="flex-1 w-full sm:w-auto px-0 sm:px-4">
+          <input type="text" placeholder="Müşteri Ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full border border-slate-300 shadow-sm rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+        </div>
         {!isAdding ? (
           <button onClick={() => setIsAdding(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"><UserPlus className="w-4 h-4" /> Yeni Müşteri Ekle</button>
         ) : (
@@ -34,13 +42,33 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {customers.map(c => {
+        {filteredCustomers.length === 0 && (
+          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-10 text-slate-500">Müşteri bulunamadı.</div>
+        )}
+        {filteredCustomers.map(c => {
           const totalDebt = calculateTotalDebt(c.id);
           const netBalance = c.balance - totalDebt;
           return (
-            <div key={c.id} onClick={() => onSelect(c.id)} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 cursor-pointer hover:shadow-md hover:border-indigo-400 transition-all group relative overflow-hidden">
+            <div key={c.id} onClick={() => { if (!editingId) onSelect(c.id); }} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 cursor-pointer hover:shadow-md hover:border-indigo-400 transition-all group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <h3 className="text-lg font-semibold text-slate-800 group-hover:text-indigo-600 mb-4 pr-4">{c.name}</h3>
+              
+              <div className="flex justify-between items-start mb-4">
+                {editingId === c.id ? (
+                  <div className="flex gap-2 w-full z-10" onClick={e => e.stopPropagation()}>
+                    <input type="text" value={tempName} onChange={e => setTempName(e.target.value)} className="w-full border border-slate-300 px-2 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" autoFocus />
+                    <button onClick={() => { onUpdateCustomerName(c.id, tempName); setEditingId(null); }} className="text-emerald-600 hover:text-emerald-800 p-1 bg-emerald-50 rounded"><Check className="w-4 h-4" /></button>
+                    <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded"><X className="w-4 h-4" /></button>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-semibold text-slate-800 group-hover:text-indigo-600 pr-4">{c.name}</h3>
+                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10" onClick={e => e.stopPropagation()}>
+                       <button onClick={() => { setEditingId(c.id); setTempName(c.name); }} title="İsmi Düzenle" className="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
+                       <button onClick={() => onDeleteCustomer(c.id, totalDebt, c.balance)} title="Müşteriyi Sil" className="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </>
+                )}
+              </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-slate-500">Güncel Borç:</span><span className="font-medium text-red-600">{fmtTL(totalDebt)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Avans/Bakiye:</span><span className="font-medium text-emerald-600">{fmtTL(c.balance)}</span></div>

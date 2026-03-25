@@ -1,0 +1,198 @@
+import { collection, doc, addDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { db } from './firebase';
+import { fmtTL, fmtQty } from '../utils/formatters';
+
+// Yardımcı: Log objesi oluşturucu
+const createLog = (debtId, title, message, type = 'neutral') => ({
+  debtId,
+  date: new Date().toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }),
+  timestamp: Date.now(),
+  title,
+  message,
+  type
+});
+
+export const addCustomer = async (name) => {
+  if (!name.trim()) return;
+  await addDoc(collection(db, 'customers'), { name: name.trim(), balance: 0 });
+};
+
+export const deleteCustomer = async (customerId) => {
+  await deleteDoc(doc(db, 'customers', customerId));
+};
+
+export const updateCustomerName = async (customerId, newName) => {
+  if (!newName.trim()) return;
+  await updateDoc(doc(db, 'customers', customerId), { name: newName.trim() });
+};
+
+export const addDrug = async (name, price) => {
+  if (!name.trim() || price <= 0) return;
+  await addDoc(collection(db, 'drugs'), { name: name.trim(), price: parseFloat(price) });
+};
+
+export const deleteDrug = async (drugId) => {
+  await deleteDoc(doc(db, 'drugs', drugId));
+};
+
+export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts) => {
+  if (newPrice <= 0) return;
+  const batch = writeBatch(db);
+  
+  batch.update(doc(db, 'drugs', drugId), { price: newPrice });
+
+  currentDrugDebts.forEach(debt => {
+    if (debt.drugId === drugId && !debt.isFixed && newPrice > debt.maxPrice) {
+      const oldTotalTl = debt.qty * debt.maxPrice;
+      const newTotalTl = debt.qty * newPrice;
+      const diffTl = newTotalTl - oldTotalTl;
+
+      batch.update(doc(db, 'drugDebts', debt.id), { maxPrice: newPrice });
+
+      const logRef = doc(collection(db, 'transactions'));
+      batch.set(logRef, createLog(
+        debt.id,
+        'Fiyat Güncellemesi (Zam)',
+        `Birim fiyat ${fmtTL(debt.maxPrice)} -> ${fmtTL(newPrice)} oldu. Toplam borç ${fmtTL(oldTotalTl)}'den ${fmtTL(newTotalTl)}'ye çıktı (+${fmtTL(diffTl)} fark).`,
+        'warning'
+      ));
+    }
+  });
+
+  await batch.commit();
+};
+
+export const toggleDebtLock = async (debt) => {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'drugDebts', debt.id), { isFixed: !debt.isFixed });
+  
+  const logRef = doc(collection(db, 'transactions'));
+  batch.set(logRef, createLog(
+    debt.id, 
+    debt.isFixed ? 'Sabitleme Kaldırıldı' : 'Fiyat Sabitlendi', 
+    debt.isFixed ? 'Borç tekrar zamlara açık hale geldi.' : 'Borç donduruldu, zamlardan etkilenmeyecek.', 
+    'neutral'
+  ));
+  
+  await batch.commit();
+};
+
+export const returnDrug = async (debt, returnQty, customerBalance) => {
+  if (returnQty <= 0) return;
+  const batch = writeBatch(db);
+
+  if (returnQty <= debt.qty) {
+    let finalQty = debt.qty - returnQty;
+    const remainingTl = finalQty * debt.maxPrice;
+    let isSwept = false;
+
+    if (remainingTl <= 10) { isSwept = true; finalQty = 0; }
+
+    if (finalQty > 0) {
+      batch.update(doc(db, 'drugDebts', debt.id), { qty: finalQty });
+    } else {
+      batch.delete(doc(db, 'drugDebts', debt.id));
+    }
+
+    const logRef1 = doc(collection(db, 'transactions'));
+    batch.set(logRef1, createLog(debt.id, 'İade İşlemi', `${fmtQty(returnQty)} adet iade edildi. Kalan yeni borç: ${fmtQty(finalQty)} adet (${fmtTL(remainingTl)}).`, 'info'));
+
+    if (isSwept) {
+      const logRef2 = doc(collection(db, 'transactions'));
+      batch.set(logRef2, createLog(debt.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için sistem borcu sıfırladı.`, 'success'));
+    }
+
+  } else {
+    const excessQty = returnQty - debt.qty;
+    const refundTl = excessQty * debt.maxPrice;
+
+    batch.delete(doc(db, 'drugDebts', debt.id));
+    batch.update(doc(db, 'customers', debt.customerId), { balance: customerBalance + refundTl });
+
+    const logRef = doc(collection(db, 'transactions'));
+    batch.set(logRef, createLog(debt.id, 'Fazla İade (Avans)', `Tüm borç kapatıldı. Artan ${fmtQty(excessQty)} adet karşılığı ${fmtTL(refundTl)} avans yazıldı.`, 'success'));
+  }
+
+  await batch.commit();
+};
+
+export const addServiceDebtOperations = async (customerId, desc, amount) => {
+  if (amount <= 0) return;
+  await addDoc(collection(db, 'serviceDebts'), {
+    customerId,
+    desc,
+    amount,
+    date: new Date().toISOString().split('T')[0]
+  });
+};
+
+export const deleteServiceDebtOperations = async (debtId) => {
+  await deleteDoc(doc(db, 'serviceDebts', debtId));
+};
+
+export const addDrugDebtOperations = async (customerId, drug, qty) => {
+  if (qty <= 0) return;
+  const batch = writeBatch(db);
+  const debtRef = doc(collection(db, 'drugDebts'));
+  
+  batch.set(debtRef, {
+    customerId,
+    drugId: drug.id,
+    qty,
+    maxPrice: drug.price,
+    isFixed: false,
+    date: new Date().toISOString().split('T')[0]
+  });
+
+  const logRef = doc(collection(db, 'transactions'));
+  batch.set(logRef, createLog(debtRef.id, 'Borç Açıldı', `${fmtQty(qty)} Adet eklendi. (Birim fiyat: ${fmtTL(drug.price)}. Toplam Borç: ${fmtTL(qty * drug.price)})`, 'info'));
+
+  await batch.commit();
+};
+
+export const applyPaymentOperations = async (customer, receivedAmount, distributionArr, currentServiceDebts, currentDrugDebts) => {
+  if (receivedAmount < 0) return;
+  const batch = writeBatch(db);
+  let currentBalance = customer.balance + receivedAmount;
+
+  distributionArr.forEach(item => {
+    if (item.deduct <= 0) return;
+    currentBalance -= item.deduct;
+
+    if (item.type === 'service') {
+      const debt = currentServiceDebts.find(d => d.id === item.id);
+      if (debt) {
+        const newAmount = debt.amount - item.deduct;
+        if (newAmount <= 10) {
+          batch.delete(doc(db, 'serviceDebts', item.id));
+        } else {
+          batch.update(doc(db, 'serviceDebts', item.id), { amount: newAmount });
+        }
+      }
+    } else if (item.type === 'drug') {
+      const debt = currentDrugDebts.find(d => d.id === item.id);
+      if (debt) {
+        const qtyToDeduct = item.deduct / debt.maxPrice;
+        const newQty = debt.qty - qtyToDeduct;
+        const remainingTl = newQty * debt.maxPrice;
+
+        const logRef1 = doc(collection(db, 'transactions'));
+        batch.set(logRef1, createLog(item.id, 'Tahsilat', `${fmtTL(item.deduct)} ödendi. ${fmtQty(qtyToDeduct)} adet borçtan düşüldü. Kalan yeni borç: ${fmtQty(newQty)} adet (${fmtTL(remainingTl)}).`, 'success'));
+
+        if (remainingTl <= 10) {
+          if (remainingTl > 0) {
+            const logRef2 = doc(collection(db, 'transactions'));
+            batch.set(logRef2, createLog(item.id, 'Süpürücü (Kapatıldı)', `Kalan mikro küsurat 10 TL altında olduğu için silindi.`, 'success'));
+          }
+          batch.delete(doc(db, 'drugDebts', item.id));
+        } else {
+          batch.update(doc(db, 'drugDebts', item.id), { qty: newQty });
+        }
+      }
+    }
+  });
+
+  batch.update(doc(db, 'customers', customer.id), { balance: currentBalance });
+
+  await batch.commit();
+};

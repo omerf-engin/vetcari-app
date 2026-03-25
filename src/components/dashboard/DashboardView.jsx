@@ -1,23 +1,27 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { LayoutDashboard, Wallet, CreditCard, Users, ReceiptText, TrendingUp, Pill } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 
 export default function DashboardView({ customers, serviceDebts, drugDebts, drugs, onNavigate }) {
-  // İstatistikleri Hesapla
-  const totalServiceDebt = serviceDebts.reduce((sum, d) => sum + d.amount, 0);
-  const totalDrugDebt = drugDebts.reduce((sum, d) => sum + (d.qty * d.maxPrice), 0);
-  const grossReceivables = totalServiceDebt + totalDrugDebt; // Brüt Alacak
+  // İstatistikleri Hesapla (Optimize Edilmiş Memoization)
+  const { netReceivables, totalAdvances, customerDebts } = useMemo(() => {
+    const tServiceDebt = serviceDebts.reduce((sum, d) => sum + d.amount, 0);
+    const tDrugDebt = drugDebts.reduce((sum, d) => sum + (d.qty * d.maxPrice), 0);
+    const grossReceivables = tServiceDebt + tDrugDebt; // Brüt Alacak
 
-  const totalAdvances = customers.reduce((sum, c) => sum + c.balance, 0); // Müşterilerdeki toplam avans
-  const netReceivables = Math.max(0, grossReceivables - totalAdvances); // Net Alacak
+    const tAdvances = customers.reduce((sum, c) => sum + c.balance, 0); // Müşterilerdeki toplam avans
+    const nReceivables = Math.max(0, grossReceivables - tAdvances); // Net Alacak
 
-  // En borçlu 5 müşteriyi bul
-  const customerDebts = customers.map(c => {
-    const cService = serviceDebts.filter(d => d.customerId === c.id).reduce((sum, d) => sum + d.amount, 0);
-    const cDrug = drugDebts.filter(d => d.customerId === c.id).reduce((sum, d) => sum + (d.qty * d.maxPrice), 0);
-    const net = Math.max(0, (cService + cDrug) - c.balance);
-    return { ...c, netDebt: net };
-  }).filter(c => c.netDebt > 0).sort((a, b) => b.netDebt - a.netDebt).slice(0, 5);
+    // En borçlu 5 müşteriyi bul
+    const cDebts = customers.map(c => {
+      const cService = serviceDebts.filter(d => d.customerId === c.id).reduce((sum, d) => sum + d.amount, 0);
+      const cDrug = drugDebts.filter(d => d.customerId === c.id).reduce((sum, d) => sum + (d.qty * d.maxPrice), 0);
+      const net = Math.max(0, (cService + cDrug) - c.balance);
+      return { ...c, netDebt: net };
+    }).filter(c => c.netDebt > 0).sort((a, b) => b.netDebt - a.netDebt).slice(0, 5);
+
+    return { netReceivables: nReceivables, totalAdvances: tAdvances, customerDebts: cDebts };
+  }, [customers, serviceDebts, drugDebts]);
 
   return (
     <div className="space-y-6">

@@ -1,20 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CreditCard, Check } from 'lucide-react';
 import { fmtTL, fmtQty } from '../../utils/formatters';
 
 export default function PaymentModal({ customer, serviceDebts, extreDDebts, onClose, onConfirm }) {
   const [amountReceived, setAmountReceived] = useState('');
-  const [distribution, setDistribution] = useState([]);
+  const [manualOverrides, setManualOverrides] = useState({});
 
-  useEffect(() => {
+  const handleAmountChange = (e) => {
+    setAmountReceived(e.target.value);
+    setManualOverrides({}); // Miktar değişirse manuel override'ları sıfırla
+  };
+
+  const distribution = useMemo(() => {
     const received = parseFloat(amountReceived) || 0;
     let pool = received + customer.balance;
 
     const newDist = [];
 
     serviceDebts.forEach(sd => {
-      let deduct = Math.max(0, Math.min(pool, sd.amount));
-      deduct = Math.round(deduct * 10) / 10;
+      const override = manualOverrides[sd.id];
+      let deduct = override !== undefined ? override : Math.round(Math.max(0, Math.min(pool, sd.amount)) * 10) / 10;
       newDist.push({ type: 'service', id: sd.id, desc: sd.desc, original: sd.amount, deduct });
       pool -= deduct;
     });
@@ -23,23 +28,25 @@ export default function PaymentModal({ customer, serviceDebts, extreDDebts, onCl
     if (pool > 0 && totalDrugDebt > 0) {
       let drugPool = pool;
       extreDDebts.forEach(dd => {
+        const override = manualOverrides[dd.id];
         const ratio = dd.tlValue / totalDrugDebt;
-        let deduct = Math.min(drugPool * ratio, dd.tlValue);
-        deduct = Math.round(deduct * 10) / 10;
+        let deduct = override !== undefined ? override : Math.round(Math.min(drugPool * ratio, dd.tlValue) * 10) / 10;
         newDist.push({ type: 'drug', id: dd.id, desc: dd.drugName, original: dd.tlValue, deduct, maxPrice: dd.maxPrice, qty: dd.qty });
       });
     } else {
       extreDDebts.forEach(dd => {
-        newDist.push({ type: 'drug', id: dd.id, desc: dd.drugName, original: dd.tlValue, deduct: 0, maxPrice: dd.maxPrice, qty: dd.qty });
+        const override = manualOverrides[dd.id];
+        let deduct = override !== undefined ? override : 0;
+        newDist.push({ type: 'drug', id: dd.id, desc: dd.drugName, original: dd.tlValue, deduct, maxPrice: dd.maxPrice, qty: dd.qty });
       });
     }
 
-    setDistribution(newDist);
-  }, [amountReceived, customer.balance, serviceDebts, extreDDebts]);
+    return newDist;
+  }, [amountReceived, customer.balance, serviceDebts, extreDDebts, manualOverrides]);
 
   const handleOverride = (id, val) => {
     const num = parseFloat(val) || 0;
-    setDistribution(prev => prev.map(item => item.id === id ? { ...item, deduct: num } : item));
+    setManualOverrides(prev => ({ ...prev, [id]: num }));
   };
 
   const received = parseFloat(amountReceived) || 0;
@@ -63,7 +70,7 @@ export default function PaymentModal({ customer, serviceDebts, extreDDebts, onCl
           <div className="flex flex-col sm:flex-row gap-4 mb-8">
             <div className="flex-1">
               <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Kasaya Giren Tutar (₺)</label>
-              <input type="number" step="0.1" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder="Örn: 1500" className="w-full text-3xl font-bold border-2 border-indigo-200 rounded-xl px-4 py-4 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 focus:outline-none transition-all text-slate-800" autoFocus />
+              <input type="number" step="0.1" min="0" value={amountReceived} onChange={handleAmountChange} placeholder="Örn: 1500" className="w-full text-3xl font-bold border-2 border-indigo-200 rounded-xl px-4 py-4 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 focus:outline-none transition-all text-slate-800" autoFocus />
             </div>
             <div className="sm:w-1/3 bg-emerald-50 rounded-xl p-5 border border-emerald-100 flex flex-col justify-center items-center sm:items-start text-center sm:text-left">
               <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Mevcut Avans</span>
@@ -97,7 +104,7 @@ export default function PaymentModal({ customer, serviceDebts, extreDDebts, onCl
                       </td>
                       <td className="px-5 py-4 text-right font-bold text-slate-600 text-base">{fmtTL(item.original)}</td>
                       <td className="px-5 py-3">
-                        <input type="number" step="0.1" value={item.deduct === 0 ? '' : item.deduct} onChange={(e) => handleOverride(item.id, e.target.value)} placeholder="0.0" className={`w-full border-2 rounded-lg px-3 py-2 text-right font-bold text-lg focus:outline-none transition-colors ${item.deduct > 0 ? 'border-indigo-400 text-indigo-700 bg-white focus:ring-4 focus:ring-indigo-500/20' : 'border-slate-200 text-slate-500 bg-slate-50 focus:border-indigo-400 focus:bg-white'}`} />
+                        <input type="number" step="0.1" min="0" value={item.deduct === 0 ? '' : item.deduct} onChange={(e) => handleOverride(item.id, e.target.value)} placeholder="0.0" className={`w-full border-2 rounded-lg px-3 py-2 text-right font-bold text-lg focus:outline-none transition-colors ${item.deduct > 0 ? 'border-indigo-400 text-indigo-700 bg-white focus:ring-4 focus:ring-indigo-500/20' : 'border-slate-200 text-slate-500 bg-slate-50 focus:border-indigo-400 focus:bg-white'}`} />
                       </td>
                     </tr>
                   ))}

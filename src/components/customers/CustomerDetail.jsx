@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus } from 'lucide-react';
-import { fmtTL, fmtQty } from '../../utils/formatters';
+import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2 } from 'lucide-react';
+import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
 
-export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebts, transactions, onBack, onToggleLock, onReturnDrug, onAddServiceDebt, onAddDrugDebt, onApplyPayment }) {
+export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebts, transactions, onBack, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment }) {
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [returnModalDebt, setReturnModalDebt] = useState(null);
@@ -39,7 +39,7 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
       setDesc(''); setAmount('');
     } else {
       if (!selDrugId || !qty) return;
-      onAddDrugDebt(parseInt(selDrugId), parseFloat(qty));
+      onAddDrugDebt(selDrugId, parseFloat(qty));
       setQty('1');
     }
   };
@@ -81,9 +81,12 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
                   <li key={d.id} className="p-4 flex justify-between items-center hover:bg-slate-50/80 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-800">{d.desc}</p>
-                      <p className="text-xs text-slate-400 mt-1">{d.date}</p>
+                      <p className="text-xs text-slate-400 mt-1">{fmtDate(d.date)}</p>
                     </div>
-                    <span className="font-bold text-slate-700 text-lg">{fmtTL(d.amount)}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-slate-700 text-lg">{fmtTL(d.amount)}</span>
+                      <button onClick={() => onDeleteServiceDebt(d.id)} title="Borcu Sil / İptal Et" className="text-slate-300 hover:text-rose-500 transition-colors bg-white hover:bg-rose-50 p-1.5 rounded-md border border-transparent hover:border-rose-100"><Trash2 className="w-4 h-4" /></button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -158,7 +161,7 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Tutar (₺)</label>
-                  <input type="number" step="0.1" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="0.0" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold text-lg" />
+                  <input type="number" step="0.1" min="0" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="0.0" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold text-lg" />
                 </div>
               </>
             ) : (

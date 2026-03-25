@@ -6,32 +6,32 @@
 - [x] Enflasyon korumalı borç mantığı
 - [x] Tahsilat dağıtım sistemi
 - [x] ARCHITECTURE.md dokümantasyonu
-- [ ] Component bazlı dosya yapısına refactor
+- [x] Component bazlı dosya yapısına refactor
 
 ## Faz 2: Firebase Entegrasyonu + Validasyon
-- [ ] Firebase projesi oluşturma
-- [ ] Firebase Auth + Login ekranı
-- [ ] Firestore veri modeli implementasyonu
-- [ ] Offline persistence aktifleştirme
-- [ ] Security Rules tanımlama
-- [ ] Negatif fiyat/adet girişine JS tarafında tam koruma (client-side validasyon)
-- [ ] Müşteri ve ilaç ekleme sırasında duplicate isim kontrolü
+- [x] Firebase projesi oluşturma
+- [x] Firebase Auth + Login ekranı
+- [x] Firestore veri modeli implementasyonu
+- [x] Offline persistence aktifleştirme
+- [x] Security Rules tanımlama
+- [x] Negatif fiyat/adet girişine JS tarafında tam koruma (client-side validasyon)
+- [x] Müşteri ve ilaç ekleme sırasında duplicate isim kontrolü
 
 ## Faz 3: Eksik Özellikler
-- [ ] Müşteri silme / düzenleme
-- [ ] Hizmet borcu iptal / düzeltme (hatalı giriş senaryosu)
-- [ ] İlaç silme (aktif borcu olan ilaç silinemez — uyarı göster)
-- [ ] Arama ve filtreleme
-- [ ] Tarih formatlarını düzeltme (ISO → TR format)
+- [x] Müşteri silme / düzenleme
+- [x] Hizmet borcu iptal / düzeltme (hatalı giriş senaryosu)
+- [x] İlaç silme (aktif borcu olan ilaç silinemez — uyarı göster)
+- [x] Arama ve filtreleme
+- [x] Tarih formatlarını düzeltme (ISO → TR format)
 
 ## Faz 4: Deploy & Polish
-- [ ] GitHub repo oluşturma
+- [x] Git repo oluşturma (Local Repository eklendi)
 - [ ] Vercel deployment bağlantısı
-- [ ] SEO & meta tag düzeltmeleri (`lang="tr"`, title, description)
-- [ ] Kullanılmayan `App.css` temizliği
+- [x] SEO & meta tag düzeltmeleri (`lang="tr"`, title, description)
+- [x] Kullanılmayan `App.css` temizliği
 - [ ] Responsive ince ayarlar (mobil test)
-- [ ] Dashboard `customerDebts` hesaplamasına `useMemo` eklemek
-- [ ] `PaymentModal` dağıtım hesaplamasına debounce/memoization
+- [x] Dashboard `customerDebts` hesaplamasına `useMemo` eklemek
+- [x] `PaymentModal` dağıtım hesaplamasına debounce/memoization
 
 ## Faz 5: Gelecek (Nice-to-Have)
 - [ ] Dışa aktarma (CSV / PDF ekstre)
