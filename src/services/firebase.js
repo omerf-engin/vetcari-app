@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -14,18 +14,12 @@ const firebaseConfig = {
 // Firebase'i Başlat
 const app = initializeApp(firebaseConfig);
 
-// Auth ve Veritabanı referanslarını al
+// Auth referansını al
 export const auth = getAuth(app);
-export const db = getFirestore(app);
 
-// Offline Desteğini (IndexedDB Persistence) Aktifleştir
-enableIndexedDbPersistence(db)
-  .catch((err) => {
-    if (err.code == 'failed-precondition') {
-      console.warn("Birden fazla sekme açık: Offline veri kalıcılığı sadece bir sekmede çalışır.");
-    } else if (err.code == 'unimplemented') {
-      console.warn("Mevcut tarayıcı offline veri kalıcılığını desteklemiyor.");
-    }
-  });
+// Firestore — Offline persistence (IndexedDB) dahil
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache()
+});
 
 export default app;

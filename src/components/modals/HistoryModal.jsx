@@ -1,8 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { History } from 'lucide-react';
 import { fmtDate } from '../../utils/formatters';
 
 export default function HistoryModal({ debtInfo, logs, onClose }) {
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
 
   const getBadgeColor = (type) => {
     switch (type) {
@@ -15,15 +21,15 @@ export default function HistoryModal({ debtInfo, logs, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
 
         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-indigo-50">
           <div>
             <h2 className="text-xl font-bold text-indigo-900 flex items-center gap-2"><History className="w-5 h-5" /> Borç Ekstresi (Log)</h2>
             <p className="text-sm text-indigo-700/80 mt-1 font-medium">{debtInfo?.drugName || 'İlaç Borcu'}</p>
           </div>
-          <button onClick={onClose} className="text-indigo-400 hover:text-indigo-900 bg-indigo-200/50 hover:bg-indigo-200 p-2 rounded-full transition-colors">✕</button>
+          <button onClick={onClose} className="text-indigo-400 hover:text-indigo-900 bg-indigo-200/50 hover:bg-indigo-200 p-2 rounded-full transition-colors">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">

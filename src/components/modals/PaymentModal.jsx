@@ -1,10 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CreditCard, Check } from 'lucide-react';
 import { fmtTL, fmtQty } from '../../utils/formatters';
 
 export default function PaymentModal({ customer, serviceDebts, extreDDebts, onClose, onConfirm }) {
   const [amountReceived, setAmountReceived] = useState('');
   const [manualOverrides, setManualOverrides] = useState({});
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
 
   const handleAmountChange = (e) => {
     setAmountReceived(e.target.value);
@@ -56,14 +62,14 @@ export default function PaymentModal({ customer, serviceDebts, extreDDebts, onCl
   const isValid = newBalance >= -0.1;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
           <div>
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><CreditCard className="text-emerald-600" /> Tahsilat & Dağıtım</h2>
             <p className="text-sm text-slate-500 mt-1">Müşteri: <strong className="text-slate-700">{customer.name}</strong></p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">✕</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 bg-white">

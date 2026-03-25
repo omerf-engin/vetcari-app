@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2 } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import PaymentModal from '../modals/PaymentModal';
@@ -9,6 +9,15 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [returnModalDebt, setReturnModalDebt] = useState(null);
   const [returnInputQty, setReturnInputQty] = useState('');
+
+  const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
+
+  useEffect(() => {
+    if (!returnModalDebt) return;
+    const handleKey = (e) => { if (e.key === 'Escape') closeReturnModal(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [returnModalDebt, closeReturnModal]);
 
   const extreDDebts = drugDebts.map(d => ({
     ...d,
@@ -27,9 +36,7 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
   const [selDrugId, setSelDrugId] = useState(drugs[0]?.id || '');
   const [qty, setQty] = useState('1');
 
-  useEffect(() => {
-    if (drugs.length > 0 && !selDrugId) setSelDrugId(drugs[0].id);
-  }, [drugs, selDrugId]);
+  const effectiveDrugId = selDrugId || (drugs.length > 0 ? drugs[0].id : '');
 
   const handleAddDebt = (e) => {
     e.preventDefault();
@@ -38,8 +45,8 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
       onAddServiceDebt(desc, parseFloat(amount));
       setDesc(''); setAmount('');
     } else {
-      if (!selDrugId || !qty) return;
-      onAddDrugDebt(selDrugId, parseFloat(qty));
+      if (!effectiveDrugId || !qty) return;
+      onAddDrugDebt(effectiveDrugId, parseFloat(qty));
       setQty('1');
     }
   };
@@ -171,7 +178,7 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
                   {drugs.length === 0 ? (
                     <div className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100">Önce sisteme ilaç eklemelisiniz.</div>
                   ) : (
-                    <select value={selDrugId} onChange={e => setSelDrugId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+                    <select value={effectiveDrugId} onChange={e => setSelDrugId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
                       {drugs.map(d => <option key={d.id} value={d.id}>{d.name} ({fmtTL(d.price)})</option>)}
                     </select>
                   )}
@@ -206,8 +213,8 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
       )}
 
       {returnModalDebt && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col p-6 border-t-4 border-t-rose-500">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closeReturnModal}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col p-6 border-t-4 border-t-rose-500" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-xl text-slate-800 mb-2">İade Alınacak Adet</h3>
             <p className="text-sm text-slate-500 mb-5">
               <strong className="text-slate-700">{returnModalDebt.drugName}</strong> için iade edilecek miktarı girin.
@@ -217,8 +224,8 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
             <input type="number" step="0.1" min="0.1" value={returnInputQty} onChange={(e) => setReturnInputQty(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg px-4 py-3 focus:border-rose-500 focus:outline-none text-xl font-bold mb-6 text-center text-slate-700" autoFocus />
 
             <div className="flex gap-3">
-              <button onClick={() => setReturnModalDebt(null)} className="flex-1 py-2.5 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">İptal</button>
-              <button onClick={() => { const qty = parseFloat(returnInputQty); if (qty > 0) { onReturnDrug(returnModalDebt, qty); setReturnModalDebt(null); } }} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors">İadeyi Onayla</button>
+              <button onClick={closeReturnModal} className="flex-1 py-2.5 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">İptal</button>
+              <button onClick={() => { const qty = parseFloat(returnInputQty); if (qty > 0) { onReturnDrug(returnModalDebt, qty); closeReturnModal(); } }} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors">İadeyi Onayla</button>
             </div>
           </div>
         </div>

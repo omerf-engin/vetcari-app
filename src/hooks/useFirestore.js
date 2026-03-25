@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-export function useFirestore() {
+export function useFirestore(currentUser) {
   const [customers, setCustomers] = useState([]);
   const [drugs, setDrugs] = useState([]);
   const [serviceDebts, setServiceDebts] = useState([]);
@@ -11,6 +11,17 @@ export function useFirestore() {
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
+    if (!currentUser) {
+      setCustomers([]);
+      setDrugs([]);
+      setServiceDebts([]);
+      setDrugDebts([]);
+      setTransactions([]);
+      setDataLoading(false);
+      return;
+    }
+
+    setDataLoading(true);
     let unsubs = [];
     let loadedCount = 0;
 
@@ -31,7 +42,7 @@ export function useFirestore() {
     unsubs.push(onSnapshot(collection(db, 'drugs'), handleSnapshot(setDrugs)));
     unsubs.push(onSnapshot(collection(db, 'serviceDebts'), handleSnapshot(setServiceDebts)));
     unsubs.push(onSnapshot(collection(db, 'drugDebts'), handleSnapshot(setDrugDebts)));
-    
+
     // Transactions generally ordered by timestamp descending
     const qTrans = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'));
     unsubs.push(onSnapshot(qTrans, handleSnapshot(setTransactions)));
@@ -39,7 +50,7 @@ export function useFirestore() {
     return () => {
       unsubs.forEach(unsub => unsub());
     };
-  }, []);
+  }, [currentUser]);
 
   return { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading };
 }

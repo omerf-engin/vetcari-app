@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { LayoutDashboard, Wallet, CreditCard, Users, ReceiptText, TrendingUp, Pill } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 
-export default function DashboardView({ customers, serviceDebts, drugDebts, drugs, onNavigate }) {
+export default function DashboardView({ customers, serviceDebts, drugDebts, onNavigate }) {
   // İstatistikleri Hesapla (Optimize Edilmiş Memoization)
   const { netReceivables, totalAdvances, customerDebts } = useMemo(() => {
     const tServiceDebt = serviceDebts.reduce((sum, d) => sum + d.amount, 0);
@@ -12,10 +12,21 @@ export default function DashboardView({ customers, serviceDebts, drugDebts, drug
     const tAdvances = customers.reduce((sum, c) => sum + c.balance, 0); // Müşterilerdeki toplam avans
     const nReceivables = Math.max(0, grossReceivables - tAdvances); // Net Alacak
 
+    // Borçları müşteri bazında indexle (O(n+m) yerine O(n*m))
+    const serviceByCustomer = new Map();
+    serviceDebts.forEach(d => {
+      serviceByCustomer.set(d.customerId, (serviceByCustomer.get(d.customerId) || 0) + d.amount);
+    });
+
+    const drugByCustomer = new Map();
+    drugDebts.forEach(d => {
+      drugByCustomer.set(d.customerId, (drugByCustomer.get(d.customerId) || 0) + (d.qty * d.maxPrice));
+    });
+
     // En borçlu 5 müşteriyi bul
     const cDebts = customers.map(c => {
-      const cService = serviceDebts.filter(d => d.customerId === c.id).reduce((sum, d) => sum + d.amount, 0);
-      const cDrug = drugDebts.filter(d => d.customerId === c.id).reduce((sum, d) => sum + (d.qty * d.maxPrice), 0);
+      const cService = serviceByCustomer.get(c.id) || 0;
+      const cDrug = drugByCustomer.get(c.id) || 0;
       const net = Math.max(0, (cService + cDrug) - c.balance);
       return { ...c, netDebt: net };
     }).filter(c => c.netDebt > 0).sort((a, b) => b.netDebt - a.netDebt).slice(0, 5);

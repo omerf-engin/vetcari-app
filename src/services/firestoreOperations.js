@@ -5,7 +5,7 @@ import { fmtTL, fmtQty } from '../utils/formatters';
 // Yardımcı: Log objesi oluşturucu
 const createLog = (debtId, title, message, type = 'neutral') => ({
   debtId,
-  date: new Date().toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }),
+  date: new Date().toISOString().split('T')[0],
   timestamp: Date.now(),
   title,
   message,
@@ -27,8 +27,9 @@ export const updateCustomerName = async (customerId, newName) => {
 };
 
 export const addDrug = async (name, price) => {
-  if (!name.trim() || price <= 0) return;
-  await addDoc(collection(db, 'drugs'), { name: name.trim(), price: parseFloat(price) });
+  const numPrice = parseFloat(price);
+  if (!name.trim() || isNaN(numPrice) || numPrice <= 0) return;
+  await addDoc(collection(db, 'drugs'), { name: name.trim(), price: numPrice });
 };
 
 export const deleteDrug = async (drugId) => {
@@ -38,7 +39,7 @@ export const deleteDrug = async (drugId) => {
 export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts) => {
   if (newPrice <= 0) return;
   const batch = writeBatch(db);
-  
+
   batch.update(doc(db, 'drugs', drugId), { price: newPrice });
 
   currentDrugDebts.forEach(debt => {
@@ -65,15 +66,15 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts) => {
 export const toggleDebtLock = async (debt) => {
   const batch = writeBatch(db);
   batch.update(doc(db, 'drugDebts', debt.id), { isFixed: !debt.isFixed });
-  
+
   const logRef = doc(collection(db, 'transactions'));
   batch.set(logRef, createLog(
-    debt.id, 
-    debt.isFixed ? 'Sabitleme Kaldırıldı' : 'Fiyat Sabitlendi', 
-    debt.isFixed ? 'Borç tekrar zamlara açık hale geldi.' : 'Borç donduruldu, zamlardan etkilenmeyecek.', 
+    debt.id,
+    debt.isFixed ? 'Sabitleme Kaldırıldı' : 'Fiyat Sabitlendi',
+    debt.isFixed ? 'Borç tekrar zamlara açık hale geldi.' : 'Borç donduruldu, zamlardan etkilenmeyecek.',
     'neutral'
   ));
-  
+
   await batch.commit();
 };
 
@@ -82,7 +83,7 @@ export const returnDrug = async (debt, returnQty, customerBalance) => {
   const batch = writeBatch(db);
 
   if (returnQty <= debt.qty) {
-    let finalQty = debt.qty - returnQty;
+    let finalQty = Math.round((debt.qty - returnQty) * 100) / 100;
     const remainingTl = finalQty * debt.maxPrice;
     let isSwept = false;
 
@@ -104,7 +105,7 @@ export const returnDrug = async (debt, returnQty, customerBalance) => {
 
   } else {
     const excessQty = returnQty - debt.qty;
-    const refundTl = excessQty * debt.maxPrice;
+    const refundTl = Math.round(excessQty * debt.maxPrice * 100) / 100;
 
     batch.delete(doc(db, 'drugDebts', debt.id));
     batch.update(doc(db, 'customers', debt.customerId), { balance: customerBalance + refundTl });
@@ -134,7 +135,7 @@ export const addDrugDebtOperations = async (customerId, drug, qty) => {
   if (qty <= 0) return;
   const batch = writeBatch(db);
   const debtRef = doc(collection(db, 'drugDebts'));
-  
+
   batch.set(debtRef, {
     customerId,
     drugId: drug.id,
@@ -162,7 +163,7 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
     if (item.type === 'service') {
       const debt = currentServiceDebts.find(d => d.id === item.id);
       if (debt) {
-        const newAmount = debt.amount - item.deduct;
+        const newAmount = Math.round((debt.amount - item.deduct) * 100) / 100;
         if (newAmount <= 10) {
           batch.delete(doc(db, 'serviceDebts', item.id));
         } else {
@@ -172,9 +173,9 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
     } else if (item.type === 'drug') {
       const debt = currentDrugDebts.find(d => d.id === item.id);
       if (debt) {
-        const qtyToDeduct = item.deduct / debt.maxPrice;
-        const newQty = debt.qty - qtyToDeduct;
-        const remainingTl = newQty * debt.maxPrice;
+        const qtyToDeduct = Math.round((item.deduct / debt.maxPrice) * 100) / 100;
+        const newQty = Math.round((debt.qty - qtyToDeduct) * 100) / 100;
+        const remainingTl = Math.round(newQty * debt.maxPrice * 100) / 100;
 
         const logRef1 = doc(collection(db, 'transactions'));
         batch.set(logRef1, createLog(item.id, 'Tahsilat', `${fmtTL(item.deduct)} ödendi. ${fmtQty(qtyToDeduct)} adet borçtan düşüldü. Kalan yeni borç: ${fmtQty(newQty)} adet (${fmtTL(remainingTl)}).`, 'success'));
@@ -192,6 +193,7 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
     }
   });
 
+  currentBalance = Math.round(currentBalance * 100) / 100;
   batch.update(doc(db, 'customers', customer.id), { balance: currentBalance });
 
   await batch.commit();

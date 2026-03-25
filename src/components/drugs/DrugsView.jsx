@@ -20,7 +20,9 @@ export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDru
 
   const handleAddSubmit = (e) => {
     e.preventDefault();
-    onAddDrug(newDrugName, newDrugPrice);
+    const p = parseFloat(newDrugPrice);
+    if (isNaN(p) || p <= 0) return;
+    onAddDrug(newDrugName, p);
     setNewDrugName(''); setNewDrugPrice(''); setIsAdding(false);
   };
 

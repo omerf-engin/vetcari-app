@@ -1,32 +1,37 @@
 import React, { useState } from 'react';
-import { fmtTL, fmtQty } from './utils/formatters';
 import Header from './components/layout/Header';
 import DashboardView from './components/dashboard/DashboardView';
 import CustomersView from './components/customers/CustomersView';
 import CustomerDetail from './components/customers/CustomerDetail';
+import DrugsView from './components/drugs/DrugsView';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/auth/Login';
 import { useFirestore } from './hooks/useFirestore';
-import { 
-  addCustomer, 
+import {
+  addCustomer,
   deleteCustomer,
   updateCustomerName,
-  addDrug, 
+  addDrug,
   deleteDrug,
-  updateDrugPrice, 
-  toggleDebtLock, 
-  returnDrug, 
-  addServiceDebtOperations, 
+  updateDrugPrice,
+  toggleDebtLock,
+  returnDrug,
+  addServiceDebtOperations,
   deleteServiceDebtOperations,
-  addDrugDebtOperations, 
-  applyPaymentOperations 
+  addDrugDebtOperations,
+  applyPaymentOperations
 } from './services/firestoreOperations';
 
 export default function App() {
   const { currentUser, loading } = useAuth();
-  const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore();
+  const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(currentUser);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+
+  const handleError = (err, context) => {
+    console.error(`[${context}]`, err);
+    alert(`İşlem sırasında bir hata oluştu.\n\n${err.message || 'Bilinmeyen hata'}`);
+  };
 
   const handleAddCustomer = async (name) => {
     const trimmedInfo = name.trim().toLowerCase();
@@ -35,7 +40,8 @@ export default function App() {
       alert(`"${name}" adında bir müşteri zaten kayıtlı!\n\nLütfen (Köpek/Kedi ismi) veya başka bir ayırt edici ek belirterek isimleri farklı yapmaya çalışın.`);
       return;
     }
-    await addCustomer(name);
+    try { await addCustomer(name); }
+    catch (err) { handleError(err, 'Müşteri Ekleme'); }
   };
 
   const handleUpdateCustomerName = async (customerId, newName) => {
@@ -45,7 +51,8 @@ export default function App() {
       alert(`"${newName}" adında bir müşteri zaten kayıtlı!`);
       return;
     }
-    await updateCustomerName(customerId, newName);
+    try { await updateCustomerName(customerId, newName); }
+    catch (err) { handleError(err, 'İsim Güncelleme'); }
   };
 
   const handleDeleteCustomer = async (customerId, totalDebt, balance) => {
@@ -54,8 +61,10 @@ export default function App() {
       return;
     }
     if (window.confirm("Bu müşteriyi sistemden kalıcı olarak silmek istediğinize emin misiniz?")) {
-      await deleteCustomer(customerId);
-      setSelectedCustomerId(null);
+      try {
+        await deleteCustomer(customerId);
+        setSelectedCustomerId(null);
+      } catch (err) { handleError(err, 'Müşteri Silme'); }
     }
   };
 
@@ -66,7 +75,8 @@ export default function App() {
       alert(`"${name}" adında bir ilaç sistemde zaten mevcut!\n\nEğer fiyatını değiştirmek istiyorsanız "İlaçlar & Fiyatlar" sekmesindeki "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
-    await addDrug(name, price);
+    try { await addDrug(name, price); }
+    catch (err) { handleError(err, 'İlaç Ekleme'); }
   };
 
   const handleDeleteDrug = async (drugId) => {
@@ -75,47 +85,56 @@ export default function App() {
       alert("UYARI: Bu ilacın ödenmemiş aktif müşteri borçları bulunduğu için sistemden silinmesine izin verilmez!");
       return;
     }
-    
+
     if (window.confirm("Bu ilacı kalıcı olarak silmek istediğinize emin misiniz?\nMüşterilerin geçmiş (ödenmiş) ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir.")) {
-      await deleteDrug(drugId);
+      try { await deleteDrug(drugId); }
+      catch (err) { handleError(err, 'İlaç Silme'); }
     }
   };
 
   const handleUpdateDrugPrice = async (drugId, newPrice) => {
-    await updateDrugPrice(drugId, newPrice, drugDebts);
+    try { await updateDrugPrice(drugId, newPrice, drugDebts); }
+    catch (err) { handleError(err, 'Fiyat Güncelleme'); }
   };
 
   const toggleDebtLockHandler = async (debtId) => {
     const debt = drugDebts.find(d => d.id === debtId);
-    if (debt) await toggleDebtLock(debt);
+    if (!debt) return;
+    try { await toggleDebtLock(debt); }
+    catch (err) { handleError(err, 'Kilit Değiştirme'); }
   };
 
   const handleDrugReturn = async (debt, returnQty) => {
     const customer = customers.find(c => c.id === debt.customerId);
     if (!customer) return;
-    await returnDrug(debt, returnQty, customer.balance);
+    try { await returnDrug(debt, returnQty, customer.balance); }
+    catch (err) { handleError(err, 'İade İşlemi'); }
   };
 
   const addServiceDebt = async (customerId, desc, amount) => {
-    await addServiceDebtOperations(customerId, desc, amount);
+    try { await addServiceDebtOperations(customerId, desc, amount); }
+    catch (err) { handleError(err, 'Hizmet Borcu Ekleme'); }
   };
 
   const deleteServiceDebt = async (debtId) => {
     if (window.confirm("Hatalı işlemleri düzeltmek için: Bu hizmet kaydını iptal etmek istediğinize emin misiniz? (Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir)")) {
-      await deleteServiceDebtOperations(debtId);
+      try { await deleteServiceDebtOperations(debtId); }
+      catch (err) { handleError(err, 'Hizmet Borcu Silme'); }
     }
   };
 
   const addDrugDebt = async (customerId, drugId, qty) => {
     const drug = drugs.find(d => String(d.id) === String(drugId));
     if (!drug) return;
-    await addDrugDebtOperations(customerId, drug, qty);
+    try { await addDrugDebtOperations(customerId, drug, qty); }
+    catch (err) { handleError(err, 'İlaç Borcu Ekleme'); }
   };
 
   const applyPayment = async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
-    await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts);
+    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts); }
+    catch (err) { handleError(err, 'Tahsilat'); }
   };
 
   if (loading) {
@@ -151,7 +170,6 @@ export default function App() {
             customers={customers}
             serviceDebts={serviceDebts}
             drugDebts={drugDebts}
-            drugs={drugs}
             onNavigate={(tab) => setActiveTab(tab)}
           />
         )}
