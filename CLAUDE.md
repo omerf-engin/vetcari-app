@@ -13,9 +13,9 @@ npm run dev        # Start Vite dev server with HMR
 npm run build      # Production build
 npm run lint       # ESLint (flat config, eslint 9+)
 npm run preview    # Preview production build locally
+npm run test       # Run all tests once (Vitest)
+npm run test:watch # Run tests in watch mode
 ```
-
-No test framework is configured.
 
 ## Architecture
 

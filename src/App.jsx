@@ -7,6 +7,7 @@ import DrugsView from './components/drugs/DrugsView';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/auth/Login';
 import { useFirestore } from './hooks/useFirestore';
+import { useToast } from './hooks/useToast';
 import {
   addCustomer,
   deleteCustomer,
@@ -25,19 +26,20 @@ import {
 export default function App() {
   const { currentUser, loading } = useAuth();
   const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(currentUser);
+  const { toast, confirm } = useToast();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
 
   const handleError = (err, context) => {
     console.error(`[${context}]`, err);
-    alert(`İşlem sırasında bir hata oluştu.\n\n${err.message || 'Bilinmeyen hata'}`);
+    toast.error(`İşlem sırasında bir hata oluştu: ${err.message || 'Bilinmeyen hata'}`);
   };
 
   const handleAddCustomer = async (name) => {
     const trimmedInfo = name.trim().toLowerCase();
     const exists = customers.some(c => c.name.trim().toLowerCase() === trimmedInfo);
     if (exists) {
-      alert(`"${name}" adında bir müşteri zaten kayıtlı!\n\nLütfen (Köpek/Kedi ismi) veya başka bir ayırt edici ek belirterek isimleri farklı yapmaya çalışın.`);
+      toast.warning(`"${name}" adında bir müşteri zaten kayıtlı! Lütfen ayırt edici bir ek belirterek farklı bir isim girin.`);
       return;
     }
     try { await addCustomer(name); }
@@ -48,7 +50,7 @@ export default function App() {
     const trimmedInfo = newName.trim().toLowerCase();
     const exists = customers.some(c => c.id !== customerId && c.name.trim().toLowerCase() === trimmedInfo);
     if (exists) {
-      alert(`"${newName}" adında bir müşteri zaten kayıtlı!`);
+      toast.warning(`"${newName}" adında bir müşteri zaten kayıtlı!`);
       return;
     }
     try { await updateCustomerName(customerId, newName); }
@@ -57,10 +59,14 @@ export default function App() {
 
   const handleDeleteCustomer = async (customerId, totalDebt, balance) => {
     if (totalDebt > 0 || balance > 0) {
-      alert("UYARI: Bu müşterinin aktif finansal bakiyesi (borç veya avans) bulunduğu için silinemez. Lütfen önce hesapları sıfırlayın.");
+      toast.error("Bu müşterinin aktif finansal bakiyesi bulunduğu için silinemez. Lütfen önce hesapları sıfırlayın.");
       return;
     }
-    if (window.confirm("Bu müşteriyi sistemden kalıcı olarak silmek istediğinize emin misiniz?")) {
+    const ok = await confirm(
+      "Müşteri Silme",
+      "Bu müşteriyi sistemden kalıcı olarak silmek istediğinize emin misiniz?"
+    );
+    if (ok) {
       try {
         await deleteCustomer(customerId);
         setSelectedCustomerId(null);
@@ -72,7 +78,7 @@ export default function App() {
     const trimmedInfo = name.trim().toLowerCase();
     const exists = drugs.some(d => d.name.trim().toLowerCase() === trimmedInfo);
     if (exists) {
-      alert(`"${name}" adında bir ilaç sistemde zaten mevcut!\n\nEğer fiyatını değiştirmek istiyorsanız "İlaçlar & Fiyatlar" sekmesindeki "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
+      toast.warning(`"${name}" adında bir ilaç sistemde zaten mevcut! Fiyatını değiştirmek için "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
     try { await addDrug(name, price); }
@@ -82,11 +88,14 @@ export default function App() {
   const handleDeleteDrug = async (drugId) => {
     const hasActiveDebt = drugDebts.some(d => d.drugId === drugId && d.qty > 0);
     if (hasActiveDebt) {
-      alert("UYARI: Bu ilacın ödenmemiş aktif müşteri borçları bulunduğu için sistemden silinmesine izin verilmez!");
+      toast.error("Bu ilacın ödenmemiş aktif müşteri borçları bulunduğu için sistemden silinemez!");
       return;
     }
-
-    if (window.confirm("Bu ilacı kalıcı olarak silmek istediğinize emin misiniz?\nMüşterilerin geçmiş (ödenmiş) ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir.")) {
+    const ok = await confirm(
+      "İlaç Silme",
+      "Bu ilacı kalıcı olarak silmek istediğinize emin misiniz? Müşterilerin geçmiş ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir."
+    );
+    if (ok) {
       try { await deleteDrug(drugId); }
       catch (err) { handleError(err, 'İlaç Silme'); }
     }
@@ -117,7 +126,11 @@ export default function App() {
   };
 
   const deleteServiceDebt = async (debtId) => {
-    if (window.confirm("Hatalı işlemleri düzeltmek için: Bu hizmet kaydını iptal etmek istediğinize emin misiniz? (Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir)")) {
+    const ok = await confirm(
+      "Hizmet Kaydı İptali",
+      "Bu hizmet kaydını iptal etmek istediğinize emin misiniz? Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir."
+    );
+    if (ok) {
       try { await deleteServiceDebtOperations(debtId); }
       catch (err) { handleError(err, 'Hizmet Borcu Silme'); }
     }
