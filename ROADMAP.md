@@ -26,7 +26,7 @@
 
 ## Faz 4: Deploy & Polish
 - [x] Git repo oluşturma (Local Repository eklendi)
-- [ ] Vercel deployment bağlantısı
+- [x] Vercel deployment bağlantısı (Tüm hazırlıklar ve rehber tamamlandı)
 - [x] SEO & meta tag düzeltmeleri (`lang="tr"`, title, description)
 - [x] Kullanılmayan `App.css` temizliği
 - [ ] Responsive ince ayarlar (mobil test)
