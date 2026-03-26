@@ -38,6 +38,18 @@ export const mockDeleteDoc = vi.fn(() => Promise.resolve());
 // updateDoc mock
 export const mockUpdateDoc = vi.fn(() => Promise.resolve());
 
+/** deleteServiceDebtOperations vb. icin */
+export const mockGetDoc = vi.fn(() =>
+  Promise.resolve({
+    exists() {
+      return true;
+    },
+    data() {
+      return { desc: 'Muayene', amount: 80, customerId: 'cust1' };
+    }
+  })
+);
+
 // Her test oncesi counter sifirla
 export function resetMocks() {
   docCounter = 0;
@@ -46,4 +58,15 @@ export function resetMocks() {
   mockAddDoc.mockClear();
   mockDeleteDoc.mockClear();
   mockUpdateDoc.mockClear();
+  mockGetDoc.mockClear();
+  mockGetDoc.mockImplementation(() =>
+    Promise.resolve({
+      exists() {
+        return true;
+      },
+      data() {
+        return { desc: 'Muayene', amount: 80, customerId: 'cust1' };
+      }
+    })
+  );
 }

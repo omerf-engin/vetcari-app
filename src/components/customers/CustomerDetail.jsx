@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2 } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import PaymentModal from '../modals/PaymentModal';
@@ -7,6 +7,7 @@ import HistoryModal from '../modals/HistoryModal';
 export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebts, transactions, onBack, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment }) {
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
+  const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [returnModalDebt, setReturnModalDebt] = useState(null);
   const [returnInputQty, setReturnInputQty] = useState('');
 
@@ -29,6 +30,36 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
   const totalDrugDebt = extreDDebts.reduce((sum, d) => sum + d.tlValue, 0);
   const grossDebt = totalServiceDebt + totalDrugDebt;
   const netDebt = Math.max(0, grossDebt - customer.balance);
+
+  const customerAggregateLogs = useMemo(() => {
+    const debtIds = new Set([
+      ...serviceDebts.map((d) => d.id),
+      ...drugDebts.map((d) => d.id)
+    ]);
+    const resolveSourceLabel = (log) => {
+      const debtId = log.debtId;
+      const svc = serviceDebts.find((d) => d.id === debtId);
+      if (svc) return `Hizmet: ${svc.desc}`;
+      const drugDebt = drugDebts.find((d) => d.id === debtId);
+      if (drugDebt) {
+        const name = drugs.find((x) => x.id === drugDebt.drugId)?.name || 'Bilinmeyen İlaç';
+        return `İlaç: ${name}`;
+      }
+      if (log.drugId) {
+        const name = drugs.find((x) => x.id === log.drugId)?.name || 'Bilinmeyen İlaç';
+        return `İlaç: ${name} / silinmiş borç`;
+      }
+      return 'Kapalı / silinmiş borç';
+    };
+    return transactions
+      .filter(
+        (t) =>
+          t.customerId === customer.id ||
+          (!t.customerId && debtIds.has(t.debtId))
+      )
+      .map((t) => ({ ...t, sourceLabel: resolveSourceLabel(t) }))
+      .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+  }, [transactions, serviceDebts, drugDebts, drugs, customer.id]);
 
   const [newDebtType, setNewDebtType] = useState('service');
   const [desc, setDesc] = useState('');
@@ -53,9 +84,18 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-medium transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm"><ArrowLeft className="w-4 h-4" /> Listeye Dön</button>
-        <button onClick={() => setPaymentModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 transition-transform transform active:scale-95"><CreditCard className="w-5 h-5" /> Tahsilat Yap</button>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <button onClick={onBack} className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-medium transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-fit"><ArrowLeft className="w-4 h-4" /> Listeye Dön</button>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setShowCustomerHistory(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 transition-transform transform active:scale-95"
+          >
+            <History className="w-5 h-5" /> Genel ekstre
+          </button>
+          <button onClick={() => setPaymentModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 transition-transform transform active:scale-95"><CreditCard className="w-5 h-5" /> Tahsilat Yap</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-l-4 border-l-indigo-500">
@@ -206,9 +246,19 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
 
       {historyDebtId && (
         <HistoryModal
+          variant="debt"
           debtInfo={extreDDebts.find(d => d.id === historyDebtId)}
           logs={transactions.filter(t => t.debtId === historyDebtId)}
           onClose={() => setHistoryDebtId(null)}
+        />
+      )}
+
+      {showCustomerHistory && (
+        <HistoryModal
+          variant="customer"
+          customerName={customer.name}
+          logs={customerAggregateLogs}
+          onClose={() => setShowCustomerHistory(false)}
         />
       )}
 

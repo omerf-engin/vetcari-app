@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createMockBatch, mockDoc, mockCollection, mockAddDoc, mockDeleteDoc, mockUpdateDoc, resetMocks } from '../test/firebaseMock';
+import { createMockBatch, mockDoc, mockCollection, mockAddDoc, mockDeleteDoc, mockUpdateDoc, mockGetDoc, resetMocks } from '../test/firebaseMock';
 
 // Firebase modulunu mock'la
 const mockBatch = createMockBatch();
@@ -10,6 +10,10 @@ vi.mock('firebase/firestore', () => ({
   addDoc: (...args) => mockAddDoc(...args),
   deleteDoc: (...args) => mockDeleteDoc(...args),
   updateDoc: (...args) => mockUpdateDoc(...args),
+  getDoc: (...args) => mockGetDoc(...args),
+  getDocs: vi.fn(() => Promise.resolve({ docs: [], forEach() {} })),
+  query: vi.fn((...args) => args),
+  where: vi.fn(() => ({})),
   writeBatch: () => mockBatch,
 }));
 
@@ -36,6 +40,7 @@ const {
   applyPaymentOperations,
   addServiceDebtOperations,
   addDrugDebtOperations,
+  deleteServiceDebtOperations,
 } = await import('./firestoreOperations');
 
 // =============================================
@@ -63,7 +68,32 @@ describe('Validasyon', () => {
 
   it('negatif miktarla hizmet borcu eklemez', async () => {
     await addServiceDebtOperations('cust1', 'Muayene', -100);
-    expect(mockAddDoc).not.toHaveBeenCalled();
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+
+  it('bos veya sadece bosluk aciklamayla hizmet borcu eklemez', async () => {
+    await addServiceDebtOperations('cust1', '   ', 100);
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+
+  it('hizmet borcu writeBatch ile ekler ve transaction logu yazar', async () => {
+    await addServiceDebtOperations('cust1', 'Muayene', 150);
+    expect(mockBatch.commit).toHaveBeenCalled();
+    const sets = mockBatch.operations.filter((op) => op.type === 'set');
+    expect(sets.length).toBe(2);
+    const log = sets.find((op) => op.data?.title === 'Hizmet Borcu');
+    expect(log).toBeDefined();
+    expect(log.data.message).toMatch(/Muayene/);
+    expect(log.data.customerId).toBe('cust1');
+  });
+
+  it('hizmet borcu silinirken iptal logu yazar', async () => {
+    await deleteServiceDebtOperations('sd1');
+    expect(mockGetDoc).toHaveBeenCalled();
+    expect(mockBatch.commit).toHaveBeenCalled();
+    const sets = mockBatch.operations.filter((op) => op.type === 'set');
+    expect(sets.some((op) => op.data?.title === 'Hizmet Borcu İptali')).toBe(true);
+    expect(mockBatch.operations.some((op) => op.type === 'delete')).toBe(true);
   });
 
   it('negatif miktarla ilac borcu eklemez', async () => {

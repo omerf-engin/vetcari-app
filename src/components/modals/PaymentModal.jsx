@@ -25,34 +25,75 @@ export default function PaymentModal({ customer, serviceDebts, extreDDebts, onCl
 
     serviceDebts.forEach(sd => {
       const override = manualOverrides[sd.id];
-      let deduct = override !== undefined ? override : Math.round(Math.max(0, Math.min(pool, sd.amount)) * 10) / 10;
+      const cap = Math.min(sd.amount, pool);
+      let deduct =
+        override !== undefined
+          ? Math.round(Math.min(Math.max(0, override), sd.amount, pool) * 10) / 10
+          : Math.round(Math.max(0, cap) * 10) / 10;
       newDist.push({ type: 'service', id: sd.id, desc: sd.desc, original: sd.amount, deduct });
       pool -= deduct;
     });
 
-    const totalDrugDebt = extreDDebts.reduce((sum, dd) => sum + dd.tlValue, 0);
-    if (pool > 0 && totalDrugDebt > 0) {
-      let drugPool = pool;
-      extreDDebts.forEach(dd => {
-        const override = manualOverrides[dd.id];
-        const ratio = dd.tlValue / totalDrugDebt;
-        let deduct = override !== undefined ? override : Math.round(Math.min(drugPool * ratio, dd.tlValue) * 10) / 10;
-        newDist.push({ type: 'drug', id: dd.id, desc: dd.drugName, original: dd.tlValue, deduct, maxPrice: dd.maxPrice, qty: dd.qty });
-      });
-    } else {
-      extreDDebts.forEach(dd => {
-        const override = manualOverrides[dd.id];
-        let deduct = override !== undefined ? override : 0;
-        newDist.push({ type: 'drug', id: dd.id, desc: dd.drugName, original: dd.tlValue, deduct, maxPrice: dd.maxPrice, qty: dd.qty });
+    const drugPool = pool;
+
+    const manualDrugDeduct = {};
+    let manualDrugSum = 0;
+    extreDDebts.forEach((dd) => {
+      if (manualOverrides[dd.id] === undefined) return;
+      const v = Math.round(
+        Math.min(Math.max(0, manualOverrides[dd.id]), dd.tlValue) * 10
+      ) / 10;
+      manualDrugDeduct[dd.id] = v;
+      manualDrugSum += v;
+    });
+
+    let remainingForAuto = drugPool - manualDrugSum;
+    const autoDrugRows = extreDDebts.filter((dd) => manualOverrides[dd.id] === undefined);
+    const autoDrugTlTotal = autoDrugRows.reduce((s, d) => s + d.tlValue, 0);
+
+    const autoDrugDeduct = {};
+    let left = Math.max(0, remainingForAuto);
+    if (left > 0 && autoDrugTlTotal > 0) {
+      autoDrugRows.forEach((dd, idx) => {
+        const restTl = autoDrugRows.slice(idx).reduce((s, d) => s + d.tlValue, 0);
+        const ratio = restTl > 0 ? dd.tlValue / restTl : 0;
+        const share = Math.round(Math.min(left * ratio, dd.tlValue) * 10) / 10;
+        autoDrugDeduct[dd.id] = share;
+        left -= share;
       });
     }
+
+    extreDDebts.forEach((dd) => {
+      const deduct =
+        manualOverrides[dd.id] !== undefined
+          ? manualDrugDeduct[dd.id]
+          : (autoDrugDeduct[dd.id] ?? 0);
+      newDist.push({
+        type: 'drug',
+        id: dd.id,
+        desc: dd.drugName,
+        original: dd.tlValue,
+        deduct,
+        maxPrice: dd.maxPrice,
+        qty: dd.qty
+      });
+    });
 
     return newDist;
   }, [amountReceived, customer.balance, serviceDebts, extreDDebts, manualOverrides]);
 
   const handleOverride = (id, val) => {
-    const num = parseFloat(val) || 0;
-    setManualOverrides(prev => ({ ...prev, [id]: num }));
+    if (val === '' || val === null || val === undefined) {
+      setManualOverrides((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      return;
+    }
+    const num = parseFloat(val);
+    if (Number.isNaN(num)) return;
+    setManualOverrides((prev) => ({ ...prev, [id]: num }));
   };
 
   const received = parseFloat(amountReceived) || 0;
