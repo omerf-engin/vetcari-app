@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 26 Mart 2026
+> Son guncelleme: 26 Mart 2026 (Task #12, #13 tamamlandi)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -52,13 +52,37 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] SEO & meta tag duzeltmeleri (`lang="tr"`, title, description)
 - [x] Dashboard `customerDebts` hesaplamasina `useMemo`
 - [x] `PaymentModal` dagitim hesaplamasina memoization
-- [ ] Responsive ince ayarlar (mobil test)
 
 > Ilgili tasklar: TASK-010, TASK-011
 
 ---
 
-## Faz 5: Gelecek (Nice-to-Have)
+## Faz 5: Code Quality & Testing — TAMAMLANDI
+
+- [x] window.alert/confirm → Toast notification sistemi (non-blocking)
+  - ToastContext, Toast, ToastContainer, ConfirmModal, useToast hook
+  - App.jsx'te 6x alert + 3x confirm kullanimlari guncellendi
+- [x] Unit test altyapisi (Vitest + @testing-library/react)
+  - firebaseMock.js ile Firestore mock'lama
+  - formatters.test.js (8 test)
+  - firestoreOperations.test.js (22 test — enflasyon koruması, waterfall, sweeper)
+  - 30/30 test passing
+
+> Ilgili tasklar: TASK-012, TASK-013
+
+---
+
+## Faz 6: Prop Drilling Optimizasyonu — PLANLANMAŞ
+
+- [ ] Context API ile deeply nested prop drilling'in azaltilmasi
+  - CustomerDetail, PaymentModal, HistoryModal'da prop chain'i kısaltma
+  - Toast Context şablonu örnek
+
+> Ilgili tasklar: TASK-011 (Prop Drilling)
+
+---
+
+## Faz 7: Gelecek (Nice-to-Have)
 
 - [ ] Disa aktarma (CSV / PDF ekstre)
 - [ ] Tarih bazli raporlama

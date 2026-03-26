@@ -224,3 +224,75 @@ Uygulama sorunsuz production build alarak bulut hosting uzerinde online olabilme
 
 **Notes:**
 `VITE_FIREBASE_*` cevre degiskenleri Vercel panele dikkatlice girilmelidir.
+
+---
+
+## TASK-012: Toast Notification Sistemi (window.alert/confirm Yerine)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-001 |
+
+**Deliverables:**
+- `ToastContext.jsx` — Provider ile toast state yönetimi ve Promise-based confirm
+- `Toast.jsx` + `ToastContainer.jsx` — Animasyonlu toast UI (error/warning/success/info)
+- `ConfirmModal.jsx` — Async modal (Escape + backdrop dismiss)
+- `useToast.js` hook — toast.error/warning/success/info ve confirm() metodları
+- Tailwind `toast-slide-in` animasyonu
+- App.jsx'te 6x alert() → toast.* ve 3x confirm() → await confirm()
+
+**Acceptance Criteria:**
+- Blocking dialog'lar kaldırılmış, non-blocking notifikasyonlar kullanılıyor
+- Test yazılması kolaylaşmış
+- npm lint ve build hata vermiyor
+
+**Notes:**
+eddc1f6 ve b6c4ace commitleriyle birlikte tamamlandı. Harici kütüphane kullanılmadı.
+
+---
+
+## TASK-013: Unit Test Altyapisi ve Business Logic Testleri
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-001 |
+
+**Deliverables:**
+- Vitest + @testing-library/react setup (vite.config.js, setup.js)
+- `firebaseMock.js` — Mock Firestore functions ve writeBatch
+- `formatters.test.js` — 8 test (fmtTL, fmtQty, fmtDate)
+- `firestoreOperations.test.js` — 22 test (validation, price updates, enflasyon koruması, waterfall, sweeper)
+- npm run test ve npm run test:watch komutlari
+
+**Acceptance Criteria:**
+- Tüm kritik business logic testlenmiş
+- Floating-point precision korunmuş
+- Mock Firebase operasyonları çalışıyor
+
+**Notes:**
+b6c4ace'de firebaseMock ve test güncellemeleriyle tamamlandı. 30/30 test passing.
+
+---
+
+## TASK-011 (Prop Drilling): Context API ile Prop Drilling Azaltilmasi
+
+| Alan | Deger |
+|------|-------|
+| **Status** | PENDING |
+| **Priority** | P2 |
+| **Depends on** | TASK-001 |
+
+**Deliverables:**
+- App.jsx'teki event handler'ları Context'e alarak prop chain'i kısaltma
+- CustomerDetail, PaymentModal, HistoryModal gibi derin komponentlerde prop passing azaltma
+
+**Acceptance Criteria:**
+- 3+ seviye prop drilling'i Context API'ye taşınmış
+- Komponent imzaları sadeleşmiş
+
+**Notes:**
+Şu anda henüz başlanmadı. Toast Context örneği şablon olarak kullanılabilir.
