@@ -23,9 +23,10 @@ npm run test:watch # Run tests in watch mode
 
 **Routing:** State-based tab navigation in `App.jsx` via `activeTab` state (not a router library). Tabs: `dashboard`, `customers`, `customerDetail`, `drugs`. Unauthenticated users see `Login`.
 
-**State management:** No Redux/Context. `App.jsx` holds navigation state. Two custom hooks provide all data:
+**State management:** `App.jsx` holds navigation state. No Redux. Context used only for UI-layer toast/confirm system (`ToastContext`). Two custom hooks provide all data:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections, returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
+- `useToast()` — returns `{ toast, confirm }` from `ToastContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
 
@@ -49,9 +50,12 @@ src/
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
 │   ├── drugs/DrugsView          # Drug inventory & price management
-│   └── modals/                  # PaymentModal, HistoryModal
-├── hooks/                       # useAuth, useFirestore
+│   ├── modals/                  # PaymentModal, HistoryModal
+│   └── ui/                      # Toast, ToastContainer, ConfirmModal
+├── contexts/ToastContext.jsx    # Toast + async confirm (Promise-based)
+├── hooks/                       # useAuth, useFirestore, useToast
 ├── services/                    # firebase.js (init), firestoreOperations.js (all DB ops)
+├── test/                        # Vitest helpers: setup.js, firebaseMock.js
 └── utils/formatters.js          # Turkish number/currency formatting
 ```
 

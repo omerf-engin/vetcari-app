@@ -272,35 +272,28 @@ sequenceDiagram
 
 ### Güvenlik Kuralları (Security Rules)
 
+Mevcut `firestore.rules` dosyası: Firebase Console'dan eklenmiş her kimlik doğrulanmış kullanıcı tüm veriye erişebilir. Uygulama içinde kayıt ekranı olmadığından yalnızca manuel eklenen kullanıcılar giriş yapabilir.
+
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Yalnızca tanımlı veteriner e-postası erişebilir
-    function isOwner() {
-      return request.auth != null 
-        && request.auth.token.email == 'veteriner@email.com';
+    // Giriş yapmış her kullanıcı okuma/yazma yapabilir.
+    // "Kayıt Ol" butonu olmadığı için yalnızca Firebase Console'dan
+    // eklenen kullanıcılar sisteme girebilir.
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    match /customers/{docId} {
-      allow read, write: if isOwner();
-    }
-    match /drugs/{docId} {
-      allow read, write: if isOwner();
-    }
-    match /serviceDebts/{docId} {
-      allow read, write: if isOwner();
-    }
-    match /drugDebts/{docId} {
-      allow read, write: if isOwner();
-    }
-    match /transactions/{docId} {
-      allow read, write: if isOwner();
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
     }
   }
 }
 ```
+
+> **Not:** Şu anda veritabanı tüm kullanıcılar arasında **ortaktır** — kullanıcıya özel izolasyon yoktur. TASK-014 bu sorunu çözmeyi planlamaktadır.
 
 ---
 

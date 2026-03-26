@@ -72,18 +72,32 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 6: Prop Drilling Optimizasyonu — PLANLANMAŞ
+## Faz 6: Prop Drilling Optimizasyonu — PLANLANMIŞ
 
 - [ ] Context API ile deeply nested prop drilling'in azaltilmasi
   - CustomerDetail, PaymentModal, HistoryModal'da prop chain'i kısaltma
   - Toast Context şablonu örnek
 
-> Ilgili tasklar: TASK-011 (Prop Drilling)
+> Ilgili tasklar: TASK-015
 
 ---
 
-## Faz 7: Gelecek (Nice-to-Have)
+## Faz 7: Çok Kullanıcı Desteği — PLANLANMIŞ
 
+- [ ] Tüm Firestore collection'larına `userId` alanı ekle
+- [ ] Firestore Security Rules güncelle (her kullanıcı sadece kendi verisini görsün)
+- [ ] `useFirestore` hook'unu güncelle (`where('userId', '==', uid)` ile filtrele)
+- [ ] `firestoreOperations.js`'i güncelle (tüm yazmalara `userId` ekle)
+- [ ] Mevcut veriler için migration script yaz
+- [ ] ARCHITECTURE.md Firestore yapısını güncelle
+
+> Ilgili tasklar: TASK-014 (Multi-user support)
+
+---
+
+## Faz 8: Gelecek (Nice-to-Have)
+
+- [ ] Responsive ince ayarlar (mobil test)
 - [ ] Disa aktarma (CSV / PDF ekstre)
 - [ ] Tarih bazli raporlama
 - [ ] PWA destegi (telefona kurulabilir uygulama)

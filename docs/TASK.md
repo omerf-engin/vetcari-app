@@ -278,7 +278,35 @@ b6c4ace'de firebaseMock ve test güncellemeleriyle tamamlandı. 30/30 test passi
 
 ---
 
-## TASK-011 (Prop Drilling): Context API ile Prop Drilling Azaltilmasi
+## TASK-014: Cok Kullanici Destegi (Multi-user / Per-user Database)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | PENDING |
+| **Priority** | P1 |
+| **Depends on** | — |
+
+**Problem:**
+Su an Firestore veritabani tum kimlik dogrulayici kullanicilara **ortaktir**. Yeni bir kullanici giris yaptiginda mevcut musteri/ilac listesini gorur.
+
+**Deliverables:**
+- Tum collection'lara (`customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`) `userId` alani ekle
+- Firestore Security Rules: `request.auth.uid == resource.data.userId` seklinde kullaniciya ozel erisim
+- `useFirestore` hook: her sorguya `where('userId', '==', currentUser.uid)` filtresi ekle
+- `firestoreOperations.js`: tum `addDoc` / `batch.set` cagrilarinda `userId` alani yaz
+- Mevcut veriler icin **migration script** (tek seferlik calistirma, `omerf.ngin@gmail.com` uid'si ile)
+
+**Acceptance Criteria:**
+- A kullanicisi giris yaptiginda sadece kendi musteri/ilac listesini gorur
+- B kullanicisi giris yaptiginda bos (temiz) bir veritabanina sahip olur
+- Mevcut `omerf.ngin@gmail.com` kullanicisinin verileri migration sonrasi kaybolmaz
+
+**Notes:**
+Buyuk refactor — tum okuma/yazma islemlerine userId eklenmeli. Migration script once test ortaminda calistirilmali.
+
+---
+
+## TASK-015: Context API ile Prop Drilling Azaltilmasi
 
 | Alan | Deger |
 |------|-------|
