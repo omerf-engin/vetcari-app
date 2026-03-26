@@ -1,6 +1,37 @@
-import { collection, doc, addDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  getDocs,
+  query,
+  where
+} from 'firebase/firestore';
 import { db } from './firebase';
 import { fmtTL, fmtQty } from '../utils/formatters';
+
+const chunkIds = (ids, size) => {
+  const out = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
+};
+
+const commitDeletesInBatches = async (refs) => {
+  let batch = writeBatch(db);
+  let n = 0;
+  for (const ref of refs) {
+    batch.delete(ref);
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+};
 
 // Yardımcı: Log objesi oluşturucu
 const createLog = (debtId, title, message, type = 'neutral') => ({
@@ -17,8 +48,32 @@ export const addCustomer = async (name) => {
   await addDoc(collection(db, 'customers'), { name: name.trim(), balance: 0 });
 };
 
+/** Müşteriyi ve ona bağlı tüm hizmet/ilaç borçları ile ilgili ekstre satırlarını siler. */
 export const deleteCustomer = async (customerId) => {
-  await deleteDoc(doc(db, 'customers', customerId));
+  const svcSnap = await getDocs(
+    query(collection(db, 'serviceDebts'), where('customerId', '==', customerId))
+  );
+  const drugSnap = await getDocs(
+    query(collection(db, 'drugDebts'), where('customerId', '==', customerId))
+  );
+
+  const debtIds = [...svcSnap.docs.map((d) => d.id), ...drugSnap.docs.map((d) => d.id)];
+
+  const transactionRefs = [];
+  for (const group of chunkIds(debtIds, 10)) {
+    if (group.length === 0) continue;
+    const tSnap = await getDocs(query(collection(db, 'transactions'), where('debtId', 'in', group)));
+    tSnap.forEach((td) => transactionRefs.push(td.ref));
+  }
+
+  const toDelete = [
+    ...transactionRefs,
+    ...svcSnap.docs.map((d) => d.ref),
+    ...drugSnap.docs.map((d) => d.ref),
+    doc(db, 'customers', customerId)
+  ];
+
+  await commitDeletesInBatches(toDelete);
 };
 
 export const updateCustomerName = async (customerId, newName) => {

@@ -117,51 +117,60 @@ graph TB
 
 ---
 
-## 5. Hedef Dosya Yapısı
+## 5. Mevcut Dosya Yapısı
 
-Mevcut tek dosya yapısından aşağıdaki modüler yapıya geçiş planlanmaktadır:
+Aşağıdaki yapı depodaki gerçek düzenle uyumludur (giriş `Login.jsx` / `useAuth`; tüm Firestore yazımları `firestoreOperations.js`).
 
 ```
 vetcari-app/
 ├── public/
 │   └── favicon.svg
 ├── src/
-│   ├── components/                  # UI Bileşenleri
+│   ├── components/
+│   │   ├── auth/
+│   │   │   └── Login.jsx            # E-posta/şifre girişi
 │   │   ├── layout/
-│   │   │   ├── Header.jsx           # Navigasyon çubuğu
-│   │   │   └── Layout.jsx           # Ana sayfa düzeni
+│   │   │   └── Header.jsx           # Sekme navigasyonu
 │   │   ├── dashboard/
-│   │   │   └── DashboardView.jsx    # Ana sayfa / sistem özeti
+│   │   │   └── DashboardView.jsx    # Özet ve top borçlular
 │   │   ├── customers/
-│   │   │   ├── CustomersView.jsx    # Müşteri listesi
-│   │   │   └── CustomerDetail.jsx   # Müşteri detay (ekstre)
+│   │   │   ├── CustomersView.jsx    # Müşteri listesi + CRUD
+│   │   │   └── CustomerDetail.jsx   # Ekstre; ilaç iadesi (inline modal)
 │   │   ├── drugs/
-│   │   │   └── DrugsView.jsx        # İlaç & fiyat listesi
-│   │   └── modals/
-│   │       ├── PaymentModal.jsx     # Tahsilat dağıtım ekranı
-│   │       ├── HistoryModal.jsx     # Borç geçmişi (ekstre)
-│   │       └── ReturnModal.jsx      # İade alma
+│   │   │   └── DrugsView.jsx        # İlaç envanter / fiyat
+│   │   ├── modals/
+│   │   │   ├── PaymentModal.jsx     # Tahsilat (waterfall)
+│   │   │   └── HistoryModal.jsx     # Borç işlem geçmişi
+│   │   └── ui/
+│   │       ├── ConfirmModal.jsx
+│   │       ├── Toast.jsx
+│   │       └── ToastContainer.jsx
 │   │
-│   ├── hooks/                       # Özel React Hooks
-│   │   ├── useAuth.js               # Firebase auth yönetimi
-│   │   └── useFirestore.js          # Firestore CRUD operasyonları
+│   ├── contexts/
+│   │   └── ToastContext.jsx
 │   │
-│   ├── services/                    # Firebase Servisleri
-│   │   ├── firebase.js              # Firebase başlatma (config)
-│   │   ├── auth.js                  # Giriş/çıkış fonksiyonları
-│   │   └── db.js                    # Firestore okuma/yazma
+│   ├── hooks/
+│   │   ├── useAuth.js
+│   │   ├── useFirestore.js
+│   │   └── useToast.js
 │   │
-│   ├── utils/                       # Yardımcı Fonksiyonlar
-│   │   └── formatters.js            # fmtTL(), fmtQty() vb.
+│   ├── services/
+│   │   ├── firebase.js              # Firebase init, offline cache
+│   │   └── firestoreOperations.js   # Tüm Firestore CRUD + batch
 │   │
-│   ├── App.jsx                      # Router + Layout (sadece iskelet)
-│   ├── main.jsx                     # React root
-│   └── index.css                    # Tailwind direktifleri
+│   ├── test/                        # Vitest yardımcıları
+│   ├── utils/
+│   │   └── formatters.js
+│   │
+│   ├── App.jsx                      # activeTab ile sekme yönetimi
+│   ├── main.jsx
+│   └── index.css
 │
-├── docs/ARCHITECTURE.md             # Bu dosya
+├── docs/
 ├── index.html
 ├── tailwind.config.js
 ├── vite.config.js
+├── eslint.config.js
 └── package.json
 ```
 

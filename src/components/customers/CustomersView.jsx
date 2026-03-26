@@ -12,9 +12,13 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
   const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const calculateTotalDebt = (customerId) => {
-    const sDebt = serviceDebts.filter(d => d.customerId === customerId).reduce((sum, d) => sum + d.amount, 0);
-    const dDebt = drugDebts.filter(d => d.customerId === customerId).reduce((sum, d) => sum + (d.qty * d.maxPrice), 0);
-    return Math.max(0, sDebt + dDebt);
+    const sDebt = serviceDebts
+      .filter((d) => d.customerId === customerId)
+      .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    const dDebt = drugDebts
+      .filter((d) => d.customerId === customerId)
+      .reduce((sum, d) => sum + Number(d.qty || 0) * Number(d.maxPrice || 0), 0);
+    return Math.max(0, Math.round((sDebt + dDebt) * 100) / 100);
   };
 
   const handleAddSubmit = (e) => {
@@ -34,7 +38,7 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
           <button onClick={() => setIsAdding(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"><UserPlus className="w-4 h-4" /> Yeni Müşteri Ekle</button>
         ) : (
           <form onSubmit={handleAddSubmit} className="flex gap-2 w-full sm:w-auto">
-            <input type="text" placeholder="Ad Soyad (Hayvan Adı)" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-64" autoFocus required />
+            <input type="text" placeholder="Ad Soyad" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-64" autoFocus required />
             <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Kaydet</button>
             <button type="button" onClick={() => setIsAdding(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold transition-colors">İptal</button>
           </form>

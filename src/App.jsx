@@ -57,14 +57,29 @@ export default function App() {
     catch (err) { handleError(err, 'İsim Güncelleme'); }
   };
 
-  const handleDeleteCustomer = async (customerId, totalDebt, balance) => {
-    if (totalDebt > 0 || balance > 0) {
-      toast.error("Bu müşterinin aktif finansal bakiyesi bulunduğu için silinemez. Lütfen önce hesapları sıfırlayın.");
+  const handleDeleteCustomer = async (customerId, grossDebt, balance) => {
+    const g = Math.round(Number(grossDebt) * 100) / 100;
+    const b = Math.round(Number(balance) * 100) / 100;
+    const netReceivable = Math.max(0, Math.round((g - b) * 100) / 100);
+
+    if (netReceivable > 0.01) {
+      toast.error(
+        "Bu müşterinin ödenmemiş net borcu bulunduğu için silinemez. Önce tahsilat yapın veya borçları kapatın."
+      );
       return;
     }
+
+    const extra = [];
+    if (g > 0.01) extra.push("borç kayıtları");
+    if (b > 0.01) extra.push("avans bakiyesi");
+    const detail =
+      extra.length > 0
+        ? ` İlişikteki ${extra.join(" ve ")} de kalıcı olarak silinecek.`
+        : "";
+
     const ok = await confirm(
       "Müşteri Silme",
-      "Bu müşteriyi sistemden kalıcı olarak silmek istediğinize emin misiniz?"
+      `Bu müşteriyi sistemden kalıcı olarak silmek istediğinize emin misiniz?${detail}`
     );
     if (ok) {
       try {
