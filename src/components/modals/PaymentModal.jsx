@@ -1,8 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { CreditCard, Check } from 'lucide-react';
 import { fmtTL, fmtQty } from '../../utils/formatters';
+import { useCustomer } from '../../hooks/useCustomer';
 
-export default function PaymentModal({ customer, serviceDebts, extreDDebts, onClose, onConfirm }) {
+export default function PaymentModal({ onClose }) {
+  const { customer, serviceDebts, drugDebts, drugs, onApplyPayment } = useCustomer();
+
+  const extreDDebts = useMemo(() => drugDebts.map(d => ({
+    ...d,
+    tlValue: d.qty * d.maxPrice,
+    drugName: drugs.find(x => x.id === d.drugId)?.name || 'Bilinmeyen İlaç'
+  })), [drugDebts, drugs]);
   const [amountReceived, setAmountReceived] = useState('');
   const [manualOverrides, setManualOverrides] = useState({});
 
@@ -176,7 +184,7 @@ export default function PaymentModal({ customer, serviceDebts, extreDDebts, onCl
 
         <div className="p-5 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 rounded-b-2xl">
           <button onClick={onClose} className="px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-200 transition-colors">İptal</button>
-          <button disabled={!isValid || (received === 0 && customer.balance === 0)} onClick={() => onConfirm(received, distribution)} className="px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md disabled:opacity-50 flex items-center gap-2 text-lg"><Check className="w-6 h-6" /> Tahsilatı Onayla</button>
+          <button disabled={!isValid || (received === 0 && customer.balance === 0)} onClick={() => { onApplyPayment(received, distribution); onClose(); }} className="px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md disabled:opacity-50 flex items-center gap-2 text-lg"><Check className="w-6 h-6" /> Tahsilatı Onayla</button>
         </div>
       </div>
     </div>

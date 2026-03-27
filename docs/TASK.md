@@ -290,19 +290,37 @@ b6c4ace'de firebaseMock ve test güncellemeleriyle tamamlandı. 30/30 test passi
 Su an Firestore veritabani tum kimlik dogrulayici kullanicilara **ortaktir**. Yeni bir kullanici giris yaptiginda mevcut musteri/ilac listesini gorur.
 
 **Deliverables:**
-- Tum collection'lara (`customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`) `userId` alani ekle
-- Firestore Security Rules: `request.auth.uid == resource.data.userId` seklinde kullaniciya ozel erisim
-- `useFirestore` hook: her sorguya `where('userId', '==', currentUser.uid)` filtresi ekle
-- `firestoreOperations.js`: tum `addDoc` / `batch.set` cagrilarinda `userId` alani yaz
-- Mevcut veriler icin **migration script** (tek seferlik calistirma, `omerf.ngin@gmail.com` uid'si ile)
 
-**Acceptance Criteria:**
-- A kullanicisi giris yaptiginda sadece kendi musteri/ilac listesini gorur
-- B kullanicisi giris yaptiginda bos (temiz) bir veritabanina sahip olur
-- Mevcut `omerf.ngin@gmail.com` kullanicisinin verileri migration sonrasi kaybolmaz
+_Adim 1 — Migration Script (onceden calistirilmali):_
+- `scripts/migrateUserId.js` — Node.js + Firebase Admin SDK scripti
+- Firebase Console → Project Settings → Service Accounts'tan indirilen service account JSON ile calisir
+- `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` collection'larindaki tum dokumanlarini okur, `userId` alani eksikse `omerf.ngin@gmail.com`'un UID'sini yazar
+- Batch yazma (max 500/batch), hata durumunda islenmemis dokumanlari loglar — yarida kalmaya karsi idempotent tasarim
+- Firebase Console → Firestore'dan export alindiktan SONRA calistirilmali (rollback icin)
+
+_Adim 2 — Yeni yazmalara userId ekle:_
+- `firestoreOperations.js`: tum `addDoc` / `batch.set` cagrilarinda `userId: currentUser.uid` alani yaz
+- `firestoreOperations.js`'teki tum fonksiyonlara `userId` parametresi ekle
+
+_Adim 3 — Sorgulara filtre ekle:_
+- `useFirestore` hook: her `onSnapshot` sorgusuna `where('userId', '==', currentUser.uid)` filtresi ekle
+- `transactions` collection icin: transactions'in parent borcu (`serviceDebts` / `drugDebts`) zaten userId'ye gore filtrelendiginden, transactions'a ayri filtre eklemeye gerek yok — parent collection uzerinden erisim yeterli
+
+_Adim 4 — Security Rules'u sikilaistir:_
+- `firestore.rules`: okuma/yazma kurallarini `request.auth.uid == resource.data.userId` seklinde guncelle
+- Bu adim **migration ve sorgu filtresi tamamlandiktan sonra** yapilmali; aksi halde mevcut veriler erisim disi kalir
+
+**Kabul Kriterleri:**
+- `omerf.ngin@gmail.com` giris yaptiginda tum mevcut musteri/ilac listesi gorulur (migration basarili)
+- Yeni olusturulan ikinci kullanici giris yaptiginda bos bir veritabanina sahip olur
+- Yeni eklenen musteri/ilac/borc kayitlari otomatik olarak o kullaniciya ait olur
+- Migration script idempotent calisir: iki kez calistirildiginda veri bozulmaz
+
+**Rollback Plani:**
+Migration script oncesinde Firebase Console → Firestore → Export ile tam yedek alinir. Sorun cikarsa Firebase Console uzerinden import ile eski hale donus yapilir.
 
 **Notes:**
-Buyuk refactor — tum okuma/yazma islemlerine userId eklenmeli. Migration script once test ortaminda calistirilmali.
+Uygulama sirasi kritik: Script → Yeni yazma → Sorgu filtresi → Rules. Siralama bozulursa mevcut veriler gorunmez hale gelir (silinmez, ama erisim engellenir).
 
 ---
 
@@ -310,17 +328,34 @@ Buyuk refactor — tum okuma/yazma islemlerine userId eklenmeli. Migration scrip
 
 | Alan | Deger |
 |------|-------|
-| **Status** | PENDING |
+| **Status** | DONE |
 | **Priority** | P2 |
 | **Depends on** | TASK-001 |
 
-**Deliverables:**
-- App.jsx'teki event handler'ları Context'e alarak prop chain'i kısaltma
-- CustomerDetail, PaymentModal, HistoryModal gibi derin komponentlerde prop passing azaltma
+**Problem:**
+`App.jsx` → `CustomerDetail` prop zinciri 10 prop tasimaktadir. Bu prop'larin bir kismi `CustomerDetail` icerisinden `PaymentModal`'a aktarilmaktadir (2 seviye):
 
-**Acceptance Criteria:**
-- 3+ seviye prop drilling'i Context API'ye taşınmış
-- Komponent imzaları sadeleşmiş
+```
+App.jsx
+  └── CustomerDetail  ← customer, drugs, serviceDebts, drugDebts, transactions,
+  │                      onToggleLock, onReturnDrug, onAddServiceDebt,
+  │                      onDeleteServiceDebt, onAddDrugDebt, onApplyPayment
+  └── PaymentModal    ← customer, serviceDebts, extreDDebts, onConfirm (=onApplyPayment)
+```
+
+**Deliverables:**
+- `src/contexts/CustomerContext.jsx` olustur — secili musteri, ilac/borc verileri ve action handler'lari saglar
+- Context icerigi: `customer`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` + tum action handler'lar (`onToggleLock`, `onReturnDrug`, `onAddServiceDebt`, `onDeleteServiceDebt`, `onAddDrugDebt`, `onApplyPayment`)
+- `src/hooks/useCustomer.js` — `useContext(CustomerContext)` sarmalayici
+- `App.jsx`: `CustomerDetail`'i `<CustomerProvider>` ile sar, prop'lari context'e tasiyarak arayuzu temizle
+- `CustomerDetail.jsx`: prop imzasindan data ve handler prop'lari cikar, `useCustomer()` ile tuket
+- `PaymentModal.jsx`: `customer`, `serviceDebts`, `extreDDebts`, `onConfirm` prop'larini cikar, `useCustomer()` ile tuket
+
+**Kabul Kriterleri:**
+- `CustomerDetail` imzasi: `{ onBack }` — sadece navigasyon prop'u kalir
+- `PaymentModal` imzasi: `{ onClose }` — sadece kapat prop'u kalir
+- `HistoryModal` imzasi degismez (zaten sadece `logs`, `onClose` + minimal meta alir)
+- Hicbir mevcut islevsellik bozulmaz; 30/30 test gecmeye devam eder
 
 **Notes:**
-Şu anda henüz başlanmadı. Toast Context örneği şablon olarak kullanılabilir.
+`ToastContext.jsx` yapi sablonu olarak kullanilabilir. `CustomerContext` yalnizca `customerDetail` tab'i aktifken anlamlidir; `<CustomerProvider>` sargi `App.jsx`'in `customerDetail` render bloguna alinmali, uygulama geneline yayilmamali.

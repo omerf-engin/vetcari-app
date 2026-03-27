@@ -23,10 +23,15 @@ npm run test:watch # Run tests in watch mode
 
 **Routing:** State-based tab navigation in `App.jsx` via `activeTab` state (not a router library). Tabs: `dashboard`, `customers`, `customerDetail`, `drugs`. Unauthenticated users see `Login`.
 
-**State management:** `App.jsx` holds navigation state. No Redux. Context used only for UI-layer toast/confirm system (`ToastContext`). Two custom hooks provide all data:
+**State management:** `App.jsx` holds navigation state. No Redux. Two Context providers:
+- `ToastContext` — UI-layer toast/confirm system (app-wide, wraps entire app)
+- `CustomerContext` — selected customer data + action handlers (scoped to `customerDetail` tab only)
+
+Custom hooks:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections, returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
+- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment }` from `CustomerContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
 
@@ -52,8 +57,10 @@ src/
 │   ├── drugs/DrugsView          # Drug inventory & price management
 │   ├── modals/                  # PaymentModal, HistoryModal
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
-├── contexts/ToastContext.jsx    # Toast + async confirm (Promise-based)
-├── hooks/                       # useAuth, useFirestore, useToast
+├── contexts/
+│   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)
+│   └── CustomerContext.jsx      # Selected customer data + handlers (scoped)
+├── hooks/                       # useAuth, useFirestore, useToast, useCustomer
 ├── services/                    # firebase.js (init), firestoreOperations.js (all DB ops)
 ├── test/                        # Vitest helpers: setup.js, firebaseMock.js
 └── utils/formatters.js          # Turkish number/currency formatting

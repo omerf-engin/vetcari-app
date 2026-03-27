@@ -8,6 +8,7 @@ import { useAuth } from './hooks/useAuth';
 import Login from './components/auth/Login';
 import { useFirestore } from './hooks/useFirestore';
 import { useToast } from './hooks/useToast';
+import { CustomerProvider } from './contexts/CustomerContext';
 import {
   addCustomer,
   deleteCustomer,
@@ -224,20 +225,23 @@ export default function App() {
         )}
 
         {activeTab === 'customerDetail' && selectedCustomerId && (
-          <CustomerDetail
-            customer={customers.find(c => c.id === selectedCustomerId)}
-            drugs={drugs}
-            serviceDebts={serviceDebts.filter(d => d.customerId === selectedCustomerId)}
-            drugDebts={drugDebts.filter(d => d.customerId === selectedCustomerId)}
-            transactions={transactions}
-            onBack={() => { setActiveTab('customers'); setSelectedCustomerId(null); }}
-            onToggleLock={toggleDebtLockHandler}
-            onReturnDrug={handleDrugReturn}
-            onAddServiceDebt={(desc, amt) => addServiceDebt(selectedCustomerId, desc, amt)}
-            onDeleteServiceDebt={deleteServiceDebt}
-            onAddDrugDebt={(drugId, qty) => addDrugDebt(selectedCustomerId, drugId, qty)}
-            onApplyPayment={(amt, dist) => applyPayment(selectedCustomerId, amt, dist)}
-          />
+          <CustomerProvider value={{
+            customer: customers.find(c => c.id === selectedCustomerId),
+            drugs,
+            serviceDebts: serviceDebts.filter(d => d.customerId === selectedCustomerId),
+            drugDebts: drugDebts.filter(d => d.customerId === selectedCustomerId),
+            transactions,
+            onToggleLock: toggleDebtLockHandler,
+            onReturnDrug: handleDrugReturn,
+            onAddServiceDebt: (desc, amt) => addServiceDebt(selectedCustomerId, desc, amt),
+            onDeleteServiceDebt: deleteServiceDebt,
+            onAddDrugDebt: (drugId, qty) => addDrugDebt(selectedCustomerId, drugId, qty),
+            onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
+          }}>
+            <CustomerDetail
+              onBack={() => { setActiveTab('customers'); setSelectedCustomerId(null); }}
+            />
+          </CustomerProvider>
         )}
       </main>
     </div>

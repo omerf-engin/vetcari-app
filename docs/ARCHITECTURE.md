@@ -147,12 +147,14 @@ vetcari-app/
 │   │       └── ToastContainer.jsx
 │   │
 │   ├── contexts/
-│   │   └── ToastContext.jsx
+│   │   ├── ToastContext.jsx          # Toast + async confirm (Provider)
+│   │   └── CustomerContext.jsx       # Musteri detay verileri + handler'lar (Provider)
 │   │
 │   ├── hooks/
 │   │   ├── useAuth.js
 │   │   ├── useFirestore.js
-│   │   └── useToast.js
+│   │   ├── useToast.js
+│   │   └── useCustomer.js            # CustomerContext sarmalayici hook
 │   │
 │   ├── services/
 │   │   ├── firebase.js              # Firebase init, offline cache

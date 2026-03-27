@@ -3,8 +3,10 @@ import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2 } from
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
+import { useCustomer } from '../../hooks/useCustomer';
 
-export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebts, transactions, onBack, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment }) {
+export default function CustomerDetail({ onBack }) {
+  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt } = useCustomer();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
@@ -236,11 +238,7 @@ export default function CustomerDetail({ customer, drugs, serviceDebts, drugDebt
 
       {isPaymentModalOpen && (
         <PaymentModal
-          customer={customer}
-          serviceDebts={serviceDebts}
-          extreDDebts={extreDDebts}
           onClose={() => setPaymentModalOpen(false)}
-          onConfirm={(amt, dist) => { onApplyPayment(amt, dist); setPaymentModalOpen(false); }}
         />
       )}
 

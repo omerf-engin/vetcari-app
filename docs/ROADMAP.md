@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 26 Mart 2026 (Task #12, #13 tamamlandi)
+> Son guncelleme: 28 Mart 2026 (Task #15 / Faz 6 tamamlandi)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -72,11 +72,13 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 6: Prop Drilling Optimizasyonu — PLANLANMIŞ
+## Faz 6: Prop Drilling Optimizasyonu — TAMAMLANDI
 
-- [ ] Context API ile deeply nested prop drilling'in azaltilmasi
-  - CustomerDetail, PaymentModal, HistoryModal'da prop chain'i kısaltma
-  - Toast Context şablonu örnek
+- [x] `CustomerContext.jsx` + `useCustomer.js` hook olusturuldu
+- [x] `App.jsx` → `CustomerDetail` prop zinciri (10 prop) `<CustomerProvider>` ile context'e tasinarak temizlendi
+- [x] `CustomerDetail` imzasi `{ onBack }` seviyesine indirildi
+- [x] `PaymentModal` imzasi `{ onClose }` seviyesine indirildi
+- [x] Lint: 0 hata, Test: 33/33 passing, Build: basarili
 
 > Ilgili tasklar: TASK-015
 
@@ -84,14 +86,16 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ## Faz 7: Çok Kullanıcı Desteği — PLANLANMIŞ
 
-- [ ] Tüm Firestore collection'larına `userId` alanı ekle
-- [ ] Firestore Security Rules güncelle (her kullanıcı sadece kendi verisini görsün)
-- [ ] `useFirestore` hook'unu güncelle (`where('userId', '==', uid)` ile filtrele)
-- [ ] `firestoreOperations.js`'i güncelle (tüm yazmalara `userId` ekle)
-- [ ] Mevcut veriler için migration script yaz
-- [ ] ARCHITECTURE.md Firestore yapısını güncelle
+> **Dikkat:** Adimlar sirasyla uygulanmali; siralama bozulursa mevcut veriler gorunmez hale gelir.
 
-> Ilgili tasklar: TASK-014 (Multi-user support)
+- [ ] Adim 1: Firebase Console'dan Firestore export al (yedek)
+- [ ] Adim 2: Migration script yaz ve calistir (`scripts/migrateUserId.js`)
+- [ ] Adim 3: `firestoreOperations.js` tum yazmalara `userId` ekle
+- [ ] Adim 4: `useFirestore` hook sorgularina `where('userId', '==', uid)` filtresi ekle
+- [ ] Adim 5: Firestore Security Rules'u sikilaistir
+- [ ] Adim 6: ARCHITECTURE.md Firestore yapisini guncelle
+
+> Ilgili tasklar: TASK-014
 
 ---
 
