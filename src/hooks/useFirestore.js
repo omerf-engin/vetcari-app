@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export function useFirestore(currentUser) {
@@ -37,14 +37,16 @@ export function useFirestore(currentUser) {
       if (loadedCount < 5) checkLoaded();
     };
 
-    // Subscriptions
-    unsubs.push(onSnapshot(collection(db, 'customers'), handleSnapshot(setCustomers)));
-    unsubs.push(onSnapshot(collection(db, 'drugs'), handleSnapshot(setDrugs)));
-    unsubs.push(onSnapshot(collection(db, 'serviceDebts'), handleSnapshot(setServiceDebts)));
-    unsubs.push(onSnapshot(collection(db, 'drugDebts'), handleSnapshot(setDrugDebts)));
+    const uid = currentUser.uid;
 
-    // Transactions generally ordered by timestamp descending
-    const qTrans = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'));
+    // Subscriptions — her kullanıcı sadece kendi verilerini görür
+    unsubs.push(onSnapshot(query(collection(db, 'customers'), where('userId', '==', uid)), handleSnapshot(setCustomers)));
+    unsubs.push(onSnapshot(query(collection(db, 'drugs'), where('userId', '==', uid)), handleSnapshot(setDrugs)));
+    unsubs.push(onSnapshot(query(collection(db, 'serviceDebts'), where('userId', '==', uid)), handleSnapshot(setServiceDebts)));
+    unsubs.push(onSnapshot(query(collection(db, 'drugDebts'), where('userId', '==', uid)), handleSnapshot(setDrugDebts)));
+
+    // Transactions: userId filtresi + timestamp sıralaması (composite index gerektirir)
+    const qTrans = query(collection(db, 'transactions'), where('userId', '==', uid), orderBy('timestamp', 'desc'));
     unsubs.push(onSnapshot(qTrans, handleSnapshot(setTransactions)));
 
     return () => {

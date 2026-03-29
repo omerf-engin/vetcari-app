@@ -282,7 +282,7 @@ b6c4ace'de firebaseMock ve test güncellemeleriyle tamamlandı. 30/30 test passi
 
 | Alan | Deger |
 |------|-------|
-| **Status** | PENDING |
+| **Status** | DONE |
 | **Priority** | P1 |
 | **Depends on** | — |
 
@@ -294,7 +294,7 @@ Su an Firestore veritabani tum kimlik dogrulayici kullanicilara **ortaktir**. Ye
 _Adim 1 — Migration Script (onceden calistirilmali):_
 - `scripts/migrateUserId.js` — Node.js + Firebase Admin SDK scripti
 - Firebase Console → Project Settings → Service Accounts'tan indirilen service account JSON ile calisir
-- `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` collection'larindaki tum dokumanlarini okur, `userId` alani eksikse `omerf.ngin@gmail.com`'un UID'sini yazar
+- `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` collection'larindaki tum dokumanlarini okur, `userId` alani eksikse `vet.45.cdm@gmail.com`'un UID'sini yazar
 - Batch yazma (max 500/batch), hata durumunda islenmemis dokumanlari loglar — yarida kalmaya karsi idempotent tasarim
 - Firebase Console → Firestore'dan export alindiktan SONRA calistirilmali (rollback icin)
 
@@ -311,7 +311,7 @@ _Adim 4 — Security Rules'u sikilaistir:_
 - Bu adim **migration ve sorgu filtresi tamamlandiktan sonra** yapilmali; aksi halde mevcut veriler erisim disi kalir
 
 **Kabul Kriterleri:**
-- `omerf.ngin@gmail.com` giris yaptiginda tum mevcut musteri/ilac listesi gorulur (migration basarili)
+- `vet.45.cdm@gmail.com` giris yaptiginda tum mevcut musteri/ilac listesi gorulur (migration basarili)
 - Yeni olusturulan ikinci kullanici giris yaptiginda bos bir veritabanina sahip olur
 - Yeni eklenen musteri/ilac/borc kayitlari otomatik olarak o kullaniciya ait olur
 - Migration script idempotent calisir: iki kez calistirildiginda veri bozulmaz

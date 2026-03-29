@@ -43,7 +43,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir müşteri zaten kayıtlı! Lütfen ayırt edici bir ek belirterek farklı bir isim girin.`);
       return;
     }
-    try { await addCustomer(name); }
+    try { await addCustomer(name, currentUser.uid); }
     catch (err) { handleError(err, 'Müşteri Ekleme'); }
   };
 
@@ -84,7 +84,7 @@ export default function App() {
     );
     if (ok) {
       try {
-        await deleteCustomer(customerId);
+        await deleteCustomer(customerId, currentUser.uid);
         setSelectedCustomerId(null);
       } catch (err) { handleError(err, 'Müşteri Silme'); }
     }
@@ -97,7 +97,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir ilaç sistemde zaten mevcut! Fiyatını değiştirmek için "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
-    try { await addDrug(name, price); }
+    try { await addDrug(name, price, currentUser.uid); }
     catch (err) { handleError(err, 'İlaç Ekleme'); }
   };
 
@@ -118,26 +118,26 @@ export default function App() {
   };
 
   const handleUpdateDrugPrice = async (drugId, newPrice) => {
-    try { await updateDrugPrice(drugId, newPrice, drugDebts); }
+    try { await updateDrugPrice(drugId, newPrice, drugDebts, currentUser.uid); }
     catch (err) { handleError(err, 'Fiyat Güncelleme'); }
   };
 
   const toggleDebtLockHandler = async (debtId) => {
     const debt = drugDebts.find(d => d.id === debtId);
     if (!debt) return;
-    try { await toggleDebtLock(debt); }
+    try { await toggleDebtLock(debt, currentUser.uid); }
     catch (err) { handleError(err, 'Kilit Değiştirme'); }
   };
 
   const handleDrugReturn = async (debt, returnQty) => {
     const customer = customers.find(c => c.id === debt.customerId);
     if (!customer) return;
-    try { await returnDrug(debt, returnQty, customer.balance); }
+    try { await returnDrug(debt, returnQty, customer.balance, currentUser.uid); }
     catch (err) { handleError(err, 'İade İşlemi'); }
   };
 
   const addServiceDebt = async (customerId, desc, amount) => {
-    try { await addServiceDebtOperations(customerId, desc, amount); }
+    try { await addServiceDebtOperations(customerId, desc, amount, currentUser.uid); }
     catch (err) { handleError(err, 'Hizmet Borcu Ekleme'); }
   };
 
@@ -155,14 +155,14 @@ export default function App() {
   const addDrugDebt = async (customerId, drugId, qty) => {
     const drug = drugs.find(d => String(d.id) === String(drugId));
     if (!drug) return;
-    try { await addDrugDebtOperations(customerId, drug, qty); }
+    try { await addDrugDebtOperations(customerId, drug, qty, currentUser.uid); }
     catch (err) { handleError(err, 'İlaç Borcu Ekleme'); }
   };
 
   const applyPayment = async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
-    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts); }
+    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts, currentUser.uid); }
     catch (err) { handleError(err, 'Tahsilat'); }
   };
 
