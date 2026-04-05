@@ -1,6 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { History } from 'lucide-react';
 import { fmtDate } from '../../utils/formatters';
+
+const getLogSortPriority = (title) => {
+  if (title.includes('Enflasyon') || title.includes('Fiyat Güncellemesi')) return 0;
+  if (title.includes('Tahsilat')) return 1;
+  if (title.includes('Süpürücü')) return 2;
+  if (title.includes('Borcu') || title.includes('Borç Açıldı')) return 4;
+  return 3;
+};
 
 /**
  * @param {'debt'|'customer'} [variant='debt'] — debt: tek borç ekstresi (varsayılan, mevcut davranış). customer: müşteri genel ekstre.
@@ -9,6 +17,18 @@ import { fmtDate } from '../../utils/formatters';
  */
 export default function HistoryModal({ variant = 'debt', debtInfo, customerName, logs, onClose }) {
   const isCustomer = variant === 'customer';
+
+  const sortedLogs = useMemo(() => [...logs].sort((a, b) => {
+    const pa = getLogSortPriority(a.title);
+    const pb = getLogSortPriority(b.title);
+    // Enflasyon her zaman en üstte
+    if (pa === 0 && pb !== 0) return -1;
+    if (pa !== 0 && pb === 0) return 1;
+    // Tarihe göre sırala (eski → yeni)
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    // Aynı tarih: öncelik sırasına göre (tahsilat üstte, borç altta)
+    return pa - pb;
+  }), [logs]);
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -49,7 +69,7 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
           ) : (
             <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
 
-              {logs.map((log) => (
+              {sortedLogs.map((log) => (
                 <div key={log.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
                   <div className={`flex items-center justify-center w-10 h-10 rounded-full border-4 border-white shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm ${getBadgeColor(log.type).split(' ')[0]} ${getBadgeColor(log.type).split(' ')[1]} z-10`}>
                     <div className="w-2.5 h-2.5 rounded-full bg-current"></div>

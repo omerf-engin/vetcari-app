@@ -359,3 +359,83 @@ App.jsx
 
 **Notes:**
 `ToastContext.jsx` yapi sablonu olarak kullanilabilir. `CustomerContext` yalnizca `customerDetail` tab'i aktifken anlamlidir; `<CustomerProvider>` sargi `App.jsx`'in `customerDetail` render bloguna alinmali, uygulama geneline yayilmamali.
+
+---
+
+## TASK-016: Gecmis Tarihli Borc Ekleme (Past-Dated Debt Entry)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-014 |
+
+**Problem:**
+Kullanici gecmiste kagit/hafizadan takip ettigi borclari sisteme giremiyor. Mevcut formlar sadece bugunun tarihiyle ve guncel fiyatla borc olusturuyor. Gecmis borc girisi icin ozel fiyat, kismi tahsilat ve enflasyon uygulama secenekleri gerekiyor.
+
+**Deliverables:**
+
+_Adim 1 — Firestore Operations (Backend):_
+- `firestoreOperations.js`'e 2 yeni fonksiyon eklenir:
+  - `addPastServiceDebtOperations(customerId, desc, amount, date, paidAmount, userId)`
+    - Gecmis tarihli hizmet borcu olusturur
+    - paidAmount > 0 ise tahsilati duser, kalan tutari hesaplar
+    - Kalan tutar <= 10 TL ise supurucu devreye girer
+    - Her adim icin ayri transaction log olusturur (timestamp: bugun, borc tarihi: secilen tarih)
+  - `addPastDrugDebtOperations(customerId, drug, qty, unitPrice, date, paidAmount, applyInflation, userId)`
+    - Gecmis tarihli ilac borcu olusturur (ozel birim fiyat ile)
+    - paidAmount > 0 ise eski fiyattan tahsilat duser (adet kusuratli olabilir, max 2 ondalik)
+    - Kalan tutar <= 10 TL ise supurucu devreye girer
+    - applyInflation true ise ve ilacin guncel fiyati > girilen birim fiyat ise, maxPrice guncel fiyata guncellenir
+    - Her adim icin ayri transaction log: "Gecmis Ilac Borcu", "Gecmis Tahsilat", "Supurucu", "Enflasyon Guncellemesi"
+- Float precision: `Math.round(x * 100) / 100` — mevcut pattern
+
+_Adim 2 — PastDebtModal (UI):_
+- `src/components/modals/PastDebtModal.jsx` olusturulur
+- PaymentModal pattern'i takip edilir: `{ onClose }` prop, `useCustomer()` hook
+- Iki sekmeli: [Hizmet] [Ilac]
+- Ortak alan: Tarih secici (max: bugun)
+- Hizmet sekmesi: Aciklama, Toplam Tutar, Yapilmis Tahsilat (opsiyonel), canli kalan borc hesaplama
+- Ilac sekmesi:
+  - Ilac dropdown, Adet
+  - Fiyat modu toggle: Birim Fiyat / Toplam Tutar (canli karsilikli hesaplama)
+  - Yapilmis Tahsilat (opsiyonel), canli kalan adet/tutar hesaplama
+  - "Kalan borca enflasyon uygula" checkbox (sadece guncel fiyat > girilen fiyat ise gorunur)
+- Validasyon: tarih zorunlu, tutar/fiyat/adet > 0, tahsilat >= 0 ve < toplam borc
+
+_Adim 3 — App.jsx & Context Entegrasyonu:_
+- `App.jsx`'e 2 yeni handler: `addPastServiceDebt`, `addPastDrugDebt`
+- `firestoreOperations.js`'ten yeni fonksiyonlar import edilir
+- `CustomerProvider` value'ya yeni handler'lar eklenir:
+  - `onAddPastServiceDebt: (desc, amount, date, paidAmount) => ...`
+  - `onAddPastDrugDebt: (drugId, qty, unitPrice, date, paidAmount, applyInflation) => ...`
+
+_Adim 4 — CustomerDetail Entegrasyonu:_
+- `CustomerDetail.jsx`'e "Gecmis Borc Ekle" butonu eklenir (Clock ikonu ile)
+- Buton mevcut "Yeni Islem" kartinin yakinina yerlestirilir
+- `isPastDebtModalOpen` state + PastDebtModal render
+
+_Adim 5 — Unit Testler:_
+- `firestoreOperations.test.js`'e yeni test senaryolari:
+  - Gecmis hizmet borcu: temel olusturma (gecmis tarihle)
+  - Gecmis hizmet borcu: tahsilatli
+  - Gecmis hizmet borcu: supurucu (kalan <= 10 TL)
+  - Gecmis ilac borcu: temel olusturma (ozel birim fiyatla)
+  - Gecmis ilac borcu: tahsilatli (kusuratli adet dogrulamasi)
+  - Gecmis ilac borcu: enflasyonlu
+  - Gecmis ilac borcu: tahsilat + enflasyon kombine
+  - Gecmis ilac borcu: supurucu
+
+**Kabul Kriterleri:**
+- Gecmis tarihli hizmet ve ilac borcu eklenebiliyor
+- Ilac borcunda birim fiyat veya toplam tutar girildiginde diger otomatik hesaplaniyor
+- Kismi tahsilat girildiginde eski fiyattan dusme yapiliyor (kusuratli adet destekleniyor)
+- Enflasyon secenegi isaretlendiginde kalan borca guncel fiyat yansitiliyor
+- Supurucu kurali (10 TL) gecerli
+- Transaction log'lari kayipsiz: her adim ayri log kaydina sahip
+- Log timestamp'leri bugun, borc tarihleri secilen gecmis tarih
+- Mevcut inline formlar ve islevsellik bozulmuyor
+- npm run lint: 0 hata, npm run test: tum testler geciyor, npm run build: basarili
+
+**Notes:**
+Uygulama sirasi: Backend fonksiyonlar → Modal UI → Context entegrasyonu → CustomerDetail butonu → Testler. PastDebtModal `useCustomer()` hook'u ile context'ten veri ve handler alir. Mevcut `createLog` helper'i kullanilir (userId destegi zaten mevcut).

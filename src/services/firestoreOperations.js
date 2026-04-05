@@ -35,10 +35,10 @@ const commitDeletesInBatches = async (refs) => {
 };
 
 // Yardımcı: Log objesi oluşturucu
-const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, userId) => {
+const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, userId, dateOverride) => {
   const o = {
     debtId,
-    date: new Date().toISOString().split('T')[0],
+    date: dateOverride || new Date().toISOString().split('T')[0],
     timestamp: Date.now(),
     title,
     message,
@@ -306,6 +306,81 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
 
   currentBalance = Math.round(currentBalance * 100) / 100;
   batch.update(doc(db, 'customers', customer.id), { balance: currentBalance });
+
+  await batch.commit();
+};
+
+export const addPastServiceDebtOperations = async (customerId, desc, amount, date, paidAmount, paidDate, userId) => {
+  if (amount <= 0) return;
+  const trimmed = desc.trim();
+  if (!trimmed) return;
+
+  const batch = writeBatch(db);
+  const debtRef = doc(collection(db, 'serviceDebts'));
+  let finalAmount = amount;
+  let isSwept = false;
+
+  const logRef1 = doc(collection(db, 'transactions'));
+  batch.set(logRef1, createLog(debtRef.id, 'Geçmiş Hizmet Borcu', `${trimmed} — ${fmtTL(amount)} tutarında hizmet borcu eklendi.`, 'info', customerId, undefined, userId, date));
+
+  if (paidAmount > 0) {
+    finalAmount = Math.round((amount - paidAmount) * 100) / 100;
+    const logRef2 = doc(collection(db, 'transactions'));
+    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. Kalan borç: ${fmtTL(finalAmount)}.`, 'success', customerId, undefined, userId, paidDate));
+
+    if (finalAmount <= 10) {
+      isSwept = true;
+      const logRef3 = doc(collection(db, 'transactions'));
+      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId));
+    }
+  }
+
+  if (!isSwept) {
+    batch.set(debtRef, { customerId, desc: trimmed, amount: finalAmount, date, userId });
+  }
+
+  await batch.commit();
+};
+
+export const addPastDrugDebtOperations = async (customerId, drug, qty, unitPrice, date, paidAmount, paidDate, applyInflation, userId) => {
+  if (qty <= 0 || unitPrice <= 0) return;
+
+  const batch = writeBatch(db);
+  const debtRef = doc(collection(db, 'drugDebts'));
+  let finalQty = qty;
+  let finalMaxPrice = unitPrice;
+  let isSwept = false;
+  const totalDebt = Math.round(qty * unitPrice * 100) / 100;
+
+  const logRef1 = doc(collection(db, 'transactions'));
+  batch.set(logRef1, createLog(debtRef.id, 'Geçmiş İlaç Borcu', `${fmtQty(qty)} adet × ${fmtTL(unitPrice)} = ${fmtTL(totalDebt)} borç eklendi.`, 'info', customerId, drug.id, userId, date));
+
+  if (paidAmount > 0) {
+    const qtyToDeduct = Math.round((paidAmount / unitPrice) * 100) / 100;
+    finalQty = Math.round((qty - qtyToDeduct) * 100) / 100;
+    const remainingTl = Math.round(finalQty * unitPrice * 100) / 100;
+
+    const logRef2 = doc(collection(db, 'transactions'));
+    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. ${fmtQty(qtyToDeduct)} adet düşüldü. Kalan: ${fmtQty(finalQty)} adet (${fmtTL(remainingTl)}).`, 'success', customerId, drug.id, userId, paidDate));
+
+    if (remainingTl <= 10) {
+      isSwept = true;
+      const logRef3 = doc(collection(db, 'transactions'));
+      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, drug.id, userId));
+    }
+  }
+
+  if (!isSwept && applyInflation && drug.price > unitPrice) {
+    finalMaxPrice = drug.price;
+    const oldRemaining = Math.round(finalQty * unitPrice * 100) / 100;
+    const newRemaining = Math.round(finalQty * drug.price * 100) / 100;
+    const logRef4 = doc(collection(db, 'transactions'));
+    batch.set(logRef4, createLog(debtRef.id, 'Enflasyon Güncellemesi', `Birim fiyat ${fmtTL(unitPrice)} → ${fmtTL(drug.price)} olarak güncellendi. Kalan borç ${fmtTL(oldRemaining)} → ${fmtTL(newRemaining)}.`, 'warning', customerId, drug.id, userId));
+  }
+
+  if (!isSwept) {
+    batch.set(debtRef, { customerId, drugId: drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, userId });
+  }
 
   await batch.commit();
 };

@@ -21,7 +21,9 @@ import {
   addServiceDebtOperations,
   deleteServiceDebtOperations,
   addDrugDebtOperations,
-  applyPaymentOperations
+  applyPaymentOperations,
+  addPastServiceDebtOperations,
+  addPastDrugDebtOperations
 } from './services/firestoreOperations';
 
 export default function App() {
@@ -159,6 +161,18 @@ export default function App() {
     catch (err) { handleError(err, 'İlaç Borcu Ekleme'); }
   };
 
+  const addPastServiceDebt = async (customerId, desc, amount, date, paidAmount, paidDate) => {
+    try { await addPastServiceDebtOperations(customerId, desc, amount, date, paidAmount, paidDate, currentUser.uid); }
+    catch (err) { handleError(err, 'Geçmiş Hizmet Borcu'); }
+  };
+
+  const addPastDrugDebt = async (customerId, drugId, qty, unitPrice, date, paidAmount, paidDate, applyInflation) => {
+    const drug = drugs.find(d => String(d.id) === String(drugId));
+    if (!drug) return;
+    try { await addPastDrugDebtOperations(customerId, drug, qty, unitPrice, date, paidAmount, paidDate, applyInflation, currentUser.uid); }
+    catch (err) { handleError(err, 'Geçmiş İlaç Borcu'); }
+  };
+
   const applyPayment = async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
@@ -237,6 +251,8 @@ export default function App() {
             onDeleteServiceDebt: deleteServiceDebt,
             onAddDrugDebt: (drugId, qty) => addDrugDebt(selectedCustomerId, drugId, qty),
             onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
+            onAddPastServiceDebt: (desc, amount, date, paidAmount, paidDate) => addPastServiceDebt(selectedCustomerId, desc, amount, date, paidAmount, paidDate),
+            onAddPastDrugDebt: (drugId, qty, unitPrice, date, paidAmount, paidDate, applyInflation) => addPastDrugDebt(selectedCustomerId, drugId, qty, unitPrice, date, paidAmount, paidDate, applyInflation),
           }}>
             <CustomerDetail
               onBack={() => { setActiveTab('customers'); setSelectedCustomerId(null); }}

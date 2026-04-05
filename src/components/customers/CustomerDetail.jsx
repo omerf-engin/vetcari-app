@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2, Clock } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
+import PastDebtModal from '../modals/PastDebtModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
@@ -12,6 +13,7 @@ export default function CustomerDetail({ onBack }) {
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [returnModalDebt, setReturnModalDebt] = useState(null);
   const [returnInputQty, setReturnInputQty] = useState('');
+  const [isPastDebtModalOpen, setPastDebtModalOpen] = useState(false);
 
   const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
 
@@ -233,6 +235,12 @@ export default function CustomerDetail({ onBack }) {
             )}
             <button type="submit" disabled={newDebtType === 'drug' && drugs.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors mt-4 shadow-sm disabled:opacity-50">Hesaba Ekle</button>
           </form>
+          <button
+            onClick={() => setPastDebtModalOpen(true)}
+            className="w-full mt-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm border border-slate-200"
+          >
+            <Clock className="w-4 h-4" /> Geçmiş Borç Ekle
+          </button>
         </div>
       </div>
 
@@ -240,6 +248,10 @@ export default function CustomerDetail({ onBack }) {
         <PaymentModal
           onClose={() => setPaymentModalOpen(false)}
         />
+      )}
+
+      {isPastDebtModalOpen && (
+        <PastDebtModal onClose={() => setPastDebtModalOpen(false)} />
       )}
 
       {historyDebtId && (
