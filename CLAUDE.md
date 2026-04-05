@@ -31,7 +31,7 @@ Custom hooks:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections, returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
-- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment }` from `CustomerContext`
+- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment, onAddPastServiceDebt, onAddPastDrugDebt }` from `CustomerContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
 
@@ -44,6 +44,8 @@ Custom hooks:
 - Drug debts support price locking (`isFixed`) to prevent inflation adjustments on existing debts
 - Customer `balance` field tracks advance payments that offset new debts
 - Payment distribution spreads a payment across multiple debts
+- Past-dated debts can be entered with custom pricing, partial payment deduction, and optional inflation application
+- Transaction logs use `dateOverride` for past dates while `timestamp` tracks actual creation time
 
 ## Component layout
 
@@ -55,7 +57,7 @@ src/
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
 │   ├── drugs/DrugsView          # Drug inventory & price management
-│   ├── modals/                  # PaymentModal, HistoryModal
+│   ├── modals/                  # PaymentModal, HistoryModal, PastDebtModal
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
 ├── contexts/
 │   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)
