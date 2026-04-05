@@ -10,6 +10,17 @@ const getLogSortPriority = (title) => {
   return 3;
 };
 
+const sortLogsInternal = (arr) => [...arr].sort((a, b) => {
+  // Tarihe göre sırala (yeni → eski)
+  if (a.date !== b.date) return b.date.localeCompare(a.date);
+  // Aynı tarih: timestamp'e göre (yeni → eski)
+  const ta = a.timestamp ?? 0;
+  const tb = b.timestamp ?? 0;
+  if (ta !== tb) return tb - ta;
+  // Aynı timestamp (batch): öncelik sırasına göre (enflasyon üstte, borç altta)
+  return getLogSortPriority(a.title) - getLogSortPriority(b.title);
+});
+
 /**
  * @param {'debt'|'customer'} [variant='debt'] — debt: tek borç ekstresi (varsayılan, mevcut davranış). customer: müşteri genel ekstre.
  * @param {object} [debtInfo] — variant debt iken ilaç satırı bilgisi (drugName).
@@ -18,17 +29,25 @@ const getLogSortPriority = (title) => {
 export default function HistoryModal({ variant = 'debt', debtInfo, customerName, logs, onClose }) {
   const isCustomer = variant === 'customer';
 
-  const sortedLogs = useMemo(() => [...logs].sort((a, b) => {
-    const pa = getLogSortPriority(a.title);
-    const pb = getLogSortPriority(b.title);
-    // Enflasyon her zaman en üstte
-    if (pa === 0 && pb !== 0) return -1;
-    if (pa !== 0 && pb === 0) return 1;
-    // Tarihe göre sırala (eski → yeni)
-    if (a.date !== b.date) return b.date.localeCompare(a.date);
-    // Aynı tarih: öncelik sırasına göre (tahsilat üstte, borç altta)
-    return pa - pb;
-  }), [logs]);
+  const sortedLogs = useMemo(() => isCustomer ? [] : sortLogsInternal(logs), [logs, isCustomer]);
+
+  // Genel ekstre: logları debtId'ye göre kümele, kümeleri en eski tarihlerine göre sırala
+  const logGroups = useMemo(() => {
+    if (!isCustomer) return null;
+    const map = new Map();
+    for (const log of logs) {
+      const key = log.debtId || '__unknown__';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(log);
+    }
+    const groups = [...map.entries()].map(([debtId, group]) => {
+      const sorted = sortLogsInternal(group);
+      const oldestDate = group.reduce((min, l) => (l.date && l.date < min) ? l.date : min, group[0].date || '9999');
+      return { debtId, label: group[0].sourceLabel || 'Bilinmeyen Borç', logs: sorted, oldestDate };
+    });
+    groups.sort((a, b) => b.oldestDate.localeCompare(a.oldestDate));
+    return groups;
+  }, [logs, isCustomer]);
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -66,6 +85,32 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
         <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
           {logs.length === 0 ? (
             <p className="text-center text-slate-400 py-8">Bu kayıt için henüz bir geçmiş bulunmuyor.</p>
+          ) : isCustomer && logGroups ? (
+            <div className="space-y-6">
+              {logGroups.map((group) => (
+                <div key={group.debtId}>
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{group.label}</span>
+                    <div className="flex-1 h-px bg-indigo-200/60"></div>
+                  </div>
+                  <div className="space-y-3 ml-2 pl-4 border-l-2 border-indigo-100">
+                    {group.logs.map((log) => (
+                      <div key={log.id} className="p-3 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${getBadgeColor(log.type)}`}>
+                            {log.title}
+                          </span>
+                          <time className="text-xs text-slate-400 font-medium">{fmtDate(log.date)}</time>
+                        </div>
+                        <div className="text-sm text-slate-700 leading-relaxed font-medium">
+                          {log.message}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
 
@@ -82,9 +127,6 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
                       </span>
                       <time className="text-xs text-slate-400 font-medium">{fmtDate(log.date)}</time>
                     </div>
-                    {isCustomer && log.sourceLabel && (
-                      <p className="text-xs font-semibold text-slate-500 mb-1.5">{log.sourceLabel}</p>
-                    )}
                     <div className="text-sm text-slate-700 leading-relaxed font-medium">
                       {log.message}
                     </div>

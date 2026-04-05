@@ -402,6 +402,11 @@ describe('Gecmis Hizmet Borcu', () => {
     expect(debtOps.length).toBe(0);
     expect(sets.length).toBe(3); // 3 log
   });
+
+  it('validasyon: paidAmount >= amount ise islem yapmaz', async () => {
+    await addPastServiceDebtOperations('cust1', 'Muayene', 500, '2026-01-15', 500, '2026-01-20', 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
 });
 
 // =============================================
@@ -482,6 +487,13 @@ describe('Gecmis Ilac Borcu', () => {
   it('validasyon: qty <= 0 ise islem yapmaz', async () => {
     const drug = { id: 'drug1', price: 90 };
     await addPastDrugDebtOperations('cust1', drug, 0, 75, '2026-01-20', 0, null, false, 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+
+  it('validasyon: paidAmount >= totalDebt ise islem yapmaz', async () => {
+    const drug = { id: 'drug1', price: 90 };
+    // 4 × 75 = 300, tahsilat 300 → tam odeme, borc olusturulmamali
+    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-01-20', 300, '2026-01-25', false, 'uid1');
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 });

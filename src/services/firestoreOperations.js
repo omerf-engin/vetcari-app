@@ -312,6 +312,7 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
 
 export const addPastServiceDebtOperations = async (customerId, desc, amount, date, paidAmount, paidDate, userId) => {
   if (amount <= 0) return;
+  if (paidAmount >= amount) return;
   const trimmed = desc.trim();
   if (!trimmed) return;
 
@@ -325,6 +326,7 @@ export const addPastServiceDebtOperations = async (customerId, desc, amount, dat
 
   if (paidAmount > 0) {
     finalAmount = Math.round((amount - paidAmount) * 100) / 100;
+    if (finalAmount < 0) finalAmount = 0;
     const logRef2 = doc(collection(db, 'transactions'));
     batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. Kalan borç: ${fmtTL(finalAmount)}.`, 'success', customerId, undefined, userId, paidDate));
 
@@ -344,13 +346,14 @@ export const addPastServiceDebtOperations = async (customerId, desc, amount, dat
 
 export const addPastDrugDebtOperations = async (customerId, drug, qty, unitPrice, date, paidAmount, paidDate, applyInflation, userId) => {
   if (qty <= 0 || unitPrice <= 0) return;
+  const totalDebt = Math.round(qty * unitPrice * 100) / 100;
+  if (paidAmount >= totalDebt) return;
 
   const batch = writeBatch(db);
   const debtRef = doc(collection(db, 'drugDebts'));
   let finalQty = qty;
   let finalMaxPrice = unitPrice;
   let isSwept = false;
-  const totalDebt = Math.round(qty * unitPrice * 100) / 100;
 
   const logRef1 = doc(collection(db, 'transactions'));
   batch.set(logRef1, createLog(debtRef.id, 'Geçmiş İlaç Borcu', `${fmtQty(qty)} adet × ${fmtTL(unitPrice)} = ${fmtTL(totalDebt)} borç eklendi.`, 'info', customerId, drug.id, userId, date));
@@ -358,6 +361,7 @@ export const addPastDrugDebtOperations = async (customerId, drug, qty, unitPrice
   if (paidAmount > 0) {
     const qtyToDeduct = Math.round((paidAmount / unitPrice) * 100) / 100;
     finalQty = Math.round((qty - qtyToDeduct) * 100) / 100;
+    if (finalQty < 0) finalQty = 0;
     const remainingTl = Math.round(finalQty * unitPrice * 100) / 100;
 
     const logRef2 = doc(collection(db, 'transactions'));

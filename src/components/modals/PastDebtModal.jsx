@@ -76,12 +76,12 @@ export default function PastDebtModal({ onClose }) {
       if (!serviceCalc || serviceCalc.amount <= 0 || !desc.trim() || !sDate) return;
       const paid = serviceCalc.paid;
       if (paid < 0 || paid >= serviceCalc.amount) return;
-      onAddPastServiceDebt(desc, serviceCalc.amount, sDate, paid, sPaidDate);
+      onAddPastServiceDebt(desc, serviceCalc.amount, sDate, paid, paid > 0 ? sPaidDate : null);
       onClose();
     } else {
       if (!drugCalc || !effectiveDrugId || !dDate) return;
       if (drugCalc.paid < 0 || drugCalc.paid >= drugCalc.totalPrice) return;
-      onAddPastDrugDebt(effectiveDrugId, parseFloat(qty), drugCalc.unitPrice, dDate, drugCalc.paid, dPaidDate, applyInflation);
+      onAddPastDrugDebt(effectiveDrugId, parseFloat(qty), drugCalc.unitPrice, dDate, drugCalc.paid, drugCalc.paid > 0 ? dPaidDate : null, applyInflation);
       onClose();
     }
   };
