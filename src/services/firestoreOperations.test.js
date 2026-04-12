@@ -323,6 +323,39 @@ describe('Waterfall Tahsilat Dagitimi', () => {
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 
+  it('hizmet borcu tahsilatinda log yazar', async () => {
+    const serviceDebts = [{ id: 'sd1', amount: 500 }];
+    const dist = [{ type: 'service', id: 'sd1', deduct: 200 }];
+    await applyPaymentOperations(customer, 200, dist, serviceDebts, []);
+
+    const logs = mockBatch.operations.filter(op => op.type === 'set' && op.data.title === 'Tahsilat');
+    expect(logs.length).toBe(1);
+    expect(logs[0].data.message).toMatch(/200/);
+
+    const sweeps = mockBatch.operations.filter(op => op.type === 'set' && op.data.title?.includes('Süpürücü'));
+    expect(sweeps.length).toBe(0);
+  });
+
+  it('hizmet borcu tahsilatinda supurucu tetiklenir (kalan <= 10 TL)', async () => {
+    const serviceDebts = [{ id: 'sd1', amount: 100 }];
+    const dist = [{ type: 'service', id: 'sd1', deduct: 95 }];
+    await applyPaymentOperations(customer, 95, dist, serviceDebts, []);
+
+    const logs = mockBatch.operations.filter(op => op.type === 'set' && op.data.title === 'Tahsilat');
+    expect(logs.length).toBe(1);
+    const sweeps = mockBatch.operations.filter(op => op.type === 'set' && op.data.title?.includes('Süpürücü'));
+    expect(sweeps.length).toBe(1);
+  });
+
+  it('tam hizmet tahsilatinda supurucu yazilmaz', async () => {
+    const serviceDebts = [{ id: 'sd1', amount: 200 }];
+    const dist = [{ type: 'service', id: 'sd1', deduct: 200 }];
+    await applyPaymentOperations(customer, 200, dist, serviceDebts, []);
+
+    const sweeps = mockBatch.operations.filter(op => op.type === 'set' && op.data.title?.includes('Süpürücü'));
+    expect(sweeps.length).toBe(0);
+  });
+
   it('floating point hassasiyeti korunur', async () => {
     const serviceDebts = [];
     const drugDebts = [{ id: 'dd1', qty: 3, maxPrice: 33.3 }]; // 99.9 TL

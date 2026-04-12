@@ -37,17 +37,22 @@ export function useFirestore(currentUser) {
       if (loadedCount < 5) checkLoaded();
     };
 
+    const handleError = (error) => {
+      console.error('[useFirestore] Veri dinleme hatası:', error);
+      setDataLoading(false);
+    };
+
     const uid = currentUser.uid;
 
     // Subscriptions — her kullanıcı sadece kendi verilerini görür
-    unsubs.push(onSnapshot(query(collection(db, 'customers'), where('userId', '==', uid)), handleSnapshot(setCustomers)));
-    unsubs.push(onSnapshot(query(collection(db, 'drugs'), where('userId', '==', uid)), handleSnapshot(setDrugs)));
-    unsubs.push(onSnapshot(query(collection(db, 'serviceDebts'), where('userId', '==', uid)), handleSnapshot(setServiceDebts)));
-    unsubs.push(onSnapshot(query(collection(db, 'drugDebts'), where('userId', '==', uid)), handleSnapshot(setDrugDebts)));
+    unsubs.push(onSnapshot(query(collection(db, 'customers'), where('userId', '==', uid)), handleSnapshot(setCustomers), handleError));
+    unsubs.push(onSnapshot(query(collection(db, 'drugs'), where('userId', '==', uid)), handleSnapshot(setDrugs), handleError));
+    unsubs.push(onSnapshot(query(collection(db, 'serviceDebts'), where('userId', '==', uid)), handleSnapshot(setServiceDebts), handleError));
+    unsubs.push(onSnapshot(query(collection(db, 'drugDebts'), where('userId', '==', uid)), handleSnapshot(setDrugDebts), handleError));
 
     // Transactions: userId filtresi + timestamp sıralaması (composite index gerektirir)
     const qTrans = query(collection(db, 'transactions'), where('userId', '==', uid), orderBy('timestamp', 'desc'));
-    unsubs.push(onSnapshot(qTrans, handleSnapshot(setTransactions)));
+    unsubs.push(onSnapshot(qTrans, handleSnapshot(setTransactions), handleError));
 
     return () => {
       unsubs.forEach(unsub => unsub());

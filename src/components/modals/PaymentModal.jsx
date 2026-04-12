@@ -36,8 +36,8 @@ export default function PaymentModal({ onClose }) {
       const cap = Math.min(sd.amount, pool);
       let deduct =
         override !== undefined
-          ? Math.round(Math.min(Math.max(0, override), sd.amount, pool) * 10) / 10
-          : Math.round(Math.max(0, cap) * 10) / 10;
+          ? Math.round(Math.min(Math.max(0, override), sd.amount, pool) * 100) / 100
+          : Math.round(Math.max(0, cap) * 100) / 100;
       newDist.push({ type: 'service', id: sd.id, desc: sd.desc, original: sd.amount, deduct });
       pool -= deduct;
     });
@@ -49,8 +49,8 @@ export default function PaymentModal({ onClose }) {
     extreDDebts.forEach((dd) => {
       if (manualOverrides[dd.id] === undefined) return;
       const v = Math.round(
-        Math.min(Math.max(0, manualOverrides[dd.id]), dd.tlValue) * 10
-      ) / 10;
+        Math.min(Math.max(0, manualOverrides[dd.id]), dd.tlValue) * 100
+      ) / 100;
       manualDrugDeduct[dd.id] = v;
       manualDrugSum += v;
     });
@@ -65,7 +65,7 @@ export default function PaymentModal({ onClose }) {
       autoDrugRows.forEach((dd, idx) => {
         const restTl = autoDrugRows.slice(idx).reduce((s, d) => s + d.tlValue, 0);
         const ratio = restTl > 0 ? dd.tlValue / restTl : 0;
-        const share = Math.round(Math.min(left * ratio, dd.tlValue) * 10) / 10;
+        const share = Math.round(Math.min(left * ratio, dd.tlValue) * 100) / 100;
         autoDrugDeduct[dd.id] = share;
         left -= share;
       });

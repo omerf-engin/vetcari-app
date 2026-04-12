@@ -216,7 +216,7 @@ export const addServiceDebtOperations = async (customerId, desc, amount, userId)
   await batch.commit();
 };
 
-export const deleteServiceDebtOperations = async (debtId) => {
+export const deleteServiceDebtOperations = async (debtId, userId) => {
   const debtRef = doc(db, 'serviceDebts', debtId);
   const snap = await getDoc(debtRef);
   const batch = writeBatch(db);
@@ -233,7 +233,7 @@ export const deleteServiceDebtOperations = async (debtId) => {
         'warning',
         cid,
         undefined,
-        d.userId
+        userId
       )
     );
   }
@@ -342,6 +342,19 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
           batch.delete(doc(db, 'serviceDebts', item.id));
         } else {
           batch.update(doc(db, 'serviceDebts', item.id), { amount: newAmount });
+        }
+
+        // hizmet tahsilat logu
+        const logRef1 = doc(collection(db, 'transactions'));
+        batch.set(logRef1, createLog(item.id, 'Tahsilat',
+          `${fmtTL(item.deduct)} ödendi. Kalan borç: ${fmtTL(newAmount)}.`,
+          'success', customer.id, undefined, userId));
+
+        if (newAmount <= 10 && newAmount > 0) {
+          const logRef2 = doc(collection(db, 'transactions'));
+          batch.set(logRef2, createLog(item.id, 'Süpürücü (Kapatıldı)',
+            `Kalan mikro küsurat 10 TL altında olduğu için silindi.`,
+            'success', customer.id, undefined, userId));
         }
       }
     } else if (item.type === 'drug') {

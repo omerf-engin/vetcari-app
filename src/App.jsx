@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Header from './components/layout/Header';
 import DashboardView from './components/dashboard/DashboardView';
 import CustomersView from './components/customers/CustomersView';
@@ -44,7 +44,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir müşteri zaten kayıtlı! Lütfen ayırt edici bir ek belirterek farklı bir isim girin.`);
       return;
     }
-    try { await addCustomer(name, currentUser.uid); }
+    try { await addCustomer(name, currentUser.uid); toast.success('Müşteri eklendi'); }
     catch (err) { handleError(err, 'Müşteri Ekleme'); }
   };
 
@@ -55,7 +55,7 @@ export default function App() {
       toast.warning(`"${newName}" adında bir müşteri zaten kayıtlı!`);
       return;
     }
-    try { await updateCustomerName(customerId, newName); }
+    try { await updateCustomerName(customerId, newName, currentUser.uid); }
     catch (err) { handleError(err, 'İsim Güncelleme'); }
   };
 
@@ -87,6 +87,7 @@ export default function App() {
       try {
         await deleteCustomer(customerId, currentUser.uid);
         setSelectedCustomerId(null);
+        toast.success('Müşteri silindi');
       } catch (err) { handleError(err, 'Müşteri Silme'); }
     }
   };
@@ -98,7 +99,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir ilaç sistemde zaten mevcut! Fiyatını değiştirmek için "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
-    try { await addDrug(name, price, currentUser.uid); }
+    try { await addDrug(name, price, currentUser.uid); toast.success('İlaç eklendi'); }
     catch (err) { handleError(err, 'İlaç Ekleme'); }
   };
 
@@ -113,13 +114,13 @@ export default function App() {
       "Bu ilacı kalıcı olarak silmek istediğinize emin misiniz? Müşterilerin geçmiş ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir."
     );
     if (ok) {
-      try { await deleteDrug(drugId); }
+      try { await deleteDrug(drugId, currentUser.uid); }
       catch (err) { handleError(err, 'İlaç Silme'); }
     }
   };
 
   const handleUpdateDrugPrice = async (drugId, newPrice) => {
-    try { await updateDrugPrice(drugId, newPrice, drugDebts, currentUser.uid); }
+    try { await updateDrugPrice(drugId, newPrice, drugDebts, currentUser.uid); toast.success('Fiyat güncellendi'); }
     catch (err) { handleError(err, 'Fiyat Güncelleme'); }
   };
 
@@ -148,7 +149,7 @@ export default function App() {
       "Bu hizmet kaydını iptal etmek istediğinize emin misiniz? Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir."
     );
     if (ok) {
-      try { await deleteServiceDebtOperations(debtId); }
+      try { await deleteServiceDebtOperations(debtId, currentUser.uid); }
       catch (err) { handleError(err, 'Hizmet Borcu Silme'); }
     }
   };
@@ -172,9 +173,33 @@ export default function App() {
   const applyPayment = async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
-    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts, currentUser.uid); }
+    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts, currentUser.uid); toast.success('Tahsilat başarıyla uygulandı'); }
     catch (err) { handleError(err, 'Tahsilat'); }
   };
+
+  const customerProviderValue = useMemo(() => {
+    if (!selectedCustomerId) return null;
+    const customer = customers.find(c => c.id === selectedCustomerId);
+    const custServiceDebts = serviceDebts.filter(d => d.customerId === selectedCustomerId);
+    const custDrugDebts = drugDebts.filter(d => d.customerId === selectedCustomerId);
+    const debtIds = new Set([...custServiceDebts.map(d => d.id), ...custDrugDebts.map(d => d.id)]);
+    const custTransactions = transactions.filter(t =>
+      t.customerId === selectedCustomerId || (!t.customerId && debtIds.has(t.debtId))
+    );
+    return {
+      customer, drugs,
+      serviceDebts: custServiceDebts, drugDebts: custDrugDebts,
+      transactions: custTransactions,
+      onToggleLock: toggleDebtLockHandler, onReturnDrug: handleDrugReturn,
+      onAddServiceDebt: (desc, amt) => addServiceDebt(selectedCustomerId, desc, amt),
+      onDeleteServiceDebt: deleteServiceDebt,
+      onAddBulkDrugDebt: (items, date, paidAmount, paidDate, applyInflation) => addBulkDrugDebt(selectedCustomerId, items, date, paidAmount, paidDate, applyInflation),
+      onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
+      onAddPastServiceDebt: (desc, amount, date, paidAmount, paidDate) => addPastServiceDebt(selectedCustomerId, desc, amount, date, paidAmount, paidDate),
+    };
+  }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
+      toggleDebtLockHandler, handleDrugReturn, addServiceDebt, deleteServiceDebt,
+      addBulkDrugDebt, applyPayment, addPastServiceDebt]);
 
   if (loading) {
     return (
@@ -234,21 +259,8 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'customerDetail' && selectedCustomerId && (
-          <CustomerProvider value={{
-            customer: customers.find(c => c.id === selectedCustomerId),
-            drugs,
-            serviceDebts: serviceDebts.filter(d => d.customerId === selectedCustomerId),
-            drugDebts: drugDebts.filter(d => d.customerId === selectedCustomerId),
-            transactions,
-            onToggleLock: toggleDebtLockHandler,
-            onReturnDrug: handleDrugReturn,
-            onAddServiceDebt: (desc, amt) => addServiceDebt(selectedCustomerId, desc, amt),
-            onDeleteServiceDebt: deleteServiceDebt,
-            onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
-            onAddPastServiceDebt: (desc, amount, date, paidAmount, paidDate) => addPastServiceDebt(selectedCustomerId, desc, amount, date, paidAmount, paidDate),
-            onAddBulkDrugDebt: (items, date, paidAmount, paidDate, applyInflation) => addBulkDrugDebt(selectedCustomerId, items, date, paidAmount, paidDate, applyInflation),
-          }}>
+        {activeTab === 'customerDetail' && selectedCustomerId && customerProviderValue && (
+          <CustomerProvider value={customerProviderValue}>
             <CustomerDetail
               onBack={() => { setActiveTab('customers'); setSelectedCustomerId(null); }}
             />
