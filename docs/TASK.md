@@ -679,3 +679,148 @@ Veri zaten mevcut; yeni Firestore koleksiyonu gerekmez. `transactions` uzerinde 
 
 **Notes:**
 Firestore migration gerekmez; `stock` alani yoksa `undefined` → stok takibi devre disi sayilir. Bu sayede mevcut veriler etkilenmez. En yuksek is yuklu task; Firestore write path degisiyor.
+
+---
+
+## TASK-023: TypeScript Migrasyonu (Incremental)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P2 |
+| **Depends on** | TASK-019 |
+
+### Strateji
+
+Incremental gecis: `allowJs: true` + `checkJs: false` ile mevcut `.jsx` dosyalari dokunulmadan calisir. Her adim ayri commit; proje hicbir noktada bozulmaz. Hedef: `strict: true` — `noImplicitAny`, `strictNullChecks`, `strictFunctionTypes` dahil tum kontroller acik.
+
+### Gecis Sirasi
+
+```
+Adim 1 — Altyapi kur          (tsconfig, vite.config, eslint, @types)
+Adim 2 — Tip tanimlari yaz    (src/types/index.ts)
+Adim 3 — Servis katmani       (firebase.ts, firestoreOperations.ts)
+Adim 4 — Hook'lar              (useAuth, useFirestore, useToast, useCustomer)
+Adim 5 — Context'ler           (ToastContext, CustomerContext)
+Adim 6 — Utilities             (formatters.ts)
+Adim 7 — Modal'lar             (PaymentModal, DebtModal, HistoryModal)
+Adim 8 — Component'lar (leaf)  (Login, Header, DrugsView, CustomersView)
+Adim 9 — Component'lar (root)  (CustomerDetail, DashboardView, App)
+Adim 10 — Test dosyalari       (setup.ts, firebaseMock.ts)
+Adim 11 — allowJs kaldır       (tsconfig'den, tum js dosyasi kalmamali)
+```
+
+### Deliverables
+
+**Adim 1 — Altyapi:**
+- `tsconfig.json`: `strict: true`, `target: ES2020`, `moduleResolution: bundler`, `allowJs: true`, `jsx: react-jsx`
+- `vite.config.ts` olarak yeniden adlandir (zaten TS destekliyor)
+- `eslint.config.js` → `typescript-eslint` entegrasyonu
+- Bagimliliklar: `typescript`, `@types/react`, `@types/react-dom` (zaten devDep'lerde mevcut)
+
+**Adim 2 — `src/types/index.ts`:**
+```ts
+export interface Customer {
+  id: string;
+  name: string;
+  balance: number;
+  userId: string;
+  createdAt?: number;
+}
+
+export interface Drug {
+  id: string;
+  name: string;
+  price: number;
+  userId: string;
+}
+
+export interface ServiceDebt {
+  id: string;
+  customerId: string;
+  userId: string;
+  desc: string;
+  amount: number;
+  date: string;
+  createdAt?: number;
+}
+
+export interface DrugDebt {
+  id: string;
+  customerId: string;
+  drugId: string;
+  userId: string;
+  qty: number;
+  maxPrice: number;
+  isFixed: boolean;
+  date?: string;
+}
+
+export interface Transaction {
+  id: string;
+  customerId?: string;
+  debtId?: string;
+  drugId?: string;
+  userId: string;
+  type: string;
+  amount: number;
+  description?: string;
+  timestamp: number;
+  dateOverride?: string;
+}
+```
+
+**Adim 3 — Servis katmani (`firestoreOperations.ts`):**
+- Tum fonksiyon parametreleri ve donus tipleri acik
+- `writeBatch` cagrilarinda tip hatasi cikmamali
+- `DocumentSnapshot` → `as Customer` cast'leri tip guard'a donusturulur:
+  ```ts
+  function toCustomer(snap: DocumentSnapshot): Customer { ... }
+  ```
+
+**Adim 4 — Hook'lar:**
+- `useAuth`: `{ currentUser: User | null; loading: boolean }`
+- `useFirestore`: `{ customers: Customer[]; drugs: Drug[]; serviceDebts: ServiceDebt[]; drugDebts: DrugDebt[]; transactions: Transaction[]; dataLoading: boolean }`
+- `useToast`: mevcut `toast` / `confirm` arayuzu tipli
+- `useCustomer`: `CustomerContextValue` interface ile
+
+**Adim 5 — Context'ler:**
+- `ToastContext`: `ToastContextValue` interface — `toast` ve `confirm` fonksiyon imzalari acik
+- `CustomerContext`: `CustomerContextValue` interface — `onToggleLock`, `onReturnDrug` vs. imzalari
+
+**Adim 6-9 — Component'lar:**
+- Her component `React.FC` degil, direkt fonksiyon + props interface (proje konvansiyonu korunur)
+- Ornek:
+  ```ts
+  interface DashboardViewProps {
+    customers: Customer[];
+    serviceDebts: ServiceDebt[];
+    drugDebts: DrugDebt[];
+    onNavigate: (tab: string) => void;
+    onSelectCustomer: (id: string) => void;
+  }
+  export default function DashboardView({ ... }: DashboardViewProps) { ... }
+  ```
+- `activeTab` state'i literal union tipine alinir: `type Tab = 'dashboard' | 'customers' | 'customerDetail' | 'drugs'`
+
+**Adim 10 — Test dosyalari:**
+- `firebaseMock.ts`: mock nesneleri tipli (Firestore mock'lari `Partial<Firestore>` ile)
+- Vitest type imports: `import type { Mock } from 'vitest'`
+
+**Adim 11 — Temizlik:**
+- `tsconfig.json`'dan `allowJs` kaldirilir
+- `eslint.config.js`'de JS kurali kaldirilir
+- `vite.config.js` silinir (`.ts` versiyonu aktif)
+
+### Kabul Kriterleri
+
+- `tsc --noEmit` 0 hata ile tamamlanir
+- `npm run lint` 0 error (TS lint kurallari dahil)
+- `npm run test` 48/48 (yeni tip hatalari test'leri kirmaz)
+- `npm run build` basarili
+- Hicbir `any` kasten kullanilmaz; zorunlu cast noktalari `// @ts-expect-error` ile aciklamali not eklenerek isaretlenir
+- Firestore'dan gelen veriler tip-safe: `as any` cast'i `src/types/` interface'leri uzerinden yapilir
+
+### Notes
+
+`allowJs: true` sayesinde adimlar istediginiz tempoda tamamlanabilir; her adim ayri commit. `@types/react` ve `@types/react-dom` zaten `devDependencies`'de mevcut (`^19.x`). Sadece `typescript` paketi eklenmesi gerekiyor (`npm i -D typescript`). `vite.config.js` zaten Vite 8 ile `.ts` extension'i native destekliyor; rename disinda degisiklik gerekmez.
