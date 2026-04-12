@@ -52,7 +52,7 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
             <p className="font-semibold text-slate-600">Henüz müşteri eklenmemiş</p>
             <p className="text-sm mt-1 mb-4">İlk müşterinizi eklemek için aşağıdaki butonu kullanın.</p>
             <button
-              onClick={() => setIsAdding(true)}
+              onClick={() => { setIsAdding(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors mx-auto"
             >
               <UserPlus className="w-4 h-4" /> İlk Müşteriyi Ekle

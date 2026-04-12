@@ -181,11 +181,11 @@ export default function DebtModal({ mode, onClose }) {
           <div className="flex bg-slate-100 p-1.5 rounded-lg">
             <button
               className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all ${tab === 'service' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
-              onClick={() => setTab('service')}
+              onClick={() => { setTab('service'); setShowDrugPayment(false); }}
             >Hizmet (TL)</button>
             <button
               className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all ${tab === 'drug' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
-              onClick={() => setTab('drug')}
+              onClick={() => { setTab('drug'); setShowServicePayment(false); }}
               disabled={drugs.length === 0}
             >İlaç (Adet)</button>
           </div>
