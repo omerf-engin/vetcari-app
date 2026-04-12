@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 12 Nisan 2026 (Task #17 / Faz 9 tamamlandi)
+> Son guncelleme: 12 Nisan 2026 (Task #18 / Faz 9 bug fix)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -121,8 +121,9 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] Gecmis modda orantili kismi tahsilat preview + toplu enflasyon checkbox
 - [x] CustomerDetail sidebar sadelestirme: inline form → 2 temiz buton
 - [x] 45/45 unit test geciyor, lint clean, build basarili
+- [x] Bug fix: gecmis tahsilat tarihi borc tarihini otomatik takip eder (TASK-018)
 
-> Ilgili tasklar: TASK-017
+> Ilgili tasklar: TASK-017, TASK-018
 
 ---
 

@@ -504,3 +504,40 @@ _Adim 5 — PastDebtModal Silme:_
 
 **Notes:**
 Commit: `bea90fd`. Mevcut `addDrugDebtOperations` ve `addPastDrugDebtOperations` backend'de korundu (testlerde kullaniliyor) ama App.jsx context'ten referanslari kaldirildi. Her satir bagimsiz `priceMode` ('unit' | 'total') state'i tasir; `drugCalc` useMemo modlar arasi hesaplamayi handle eder. Review sonrasi 3 ek duzeltme yapildi: unused React import kaldirildi, negatif paid guard eklendi, `isLast` hesabi son valid satirla duzeltildi.
+
+---
+
+## TASK-018: Gecmis Borc Tahsilat Tarihi Duzeltmesi (Bug Fix)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-017 |
+
+**Problem:**
+Gecmis mod `DebtModal`'da `dPaidDate` ve `sPaidDate` state'leri bugunun tarihi ile baslatiliyordu. Kullanici borc tarihini (ornegin 20 Kasim 2025) sectiginde tahsilat tarihi hala bugune kaliyordu. Kullanici "Tahsilat Tarihi" alanini fark etmeden gecerse ekstreye yanlis (bugunku) tarihli "Gecmis Tahsilat" logu yaziliyordu.
+
+**Root Cause:**
+`DebtModal.jsx` icerisinde:
+```javascript
+const [dPaidDate, setDPaidDate] = useState(today);  // ilaç
+const [sPaidDate, setSPaidDate] = useState(today);  // hizmet
+```
+Borc tarihi degistiginde tahsilat tarihi otomatik guncellenmiyordu.
+
+**Fix:**
+```javascript
+useEffect(() => { setSPaidDate(sDate); }, [sDate]);
+useEffect(() => { setDPaidDate(dDate); }, [dDate]);
+```
+Borc tarihi secildiginde tahsilat tarihi de ayni tarihe ayarlanir. Kullanici dilerse "Tahsilat Tarihi" alanini manuel olarak degistirebilir.
+
+**Kabul Kriterleri:**
+- 20 Kasim 2025 tarihli borc + tahsilat girildiginde ekstrede "Gecmis Tahsilat" logu 20 Kasim 2025 tarihini gosterir
+- Enflasyon Guncellemesi logu bugunku tarihi gostermeye devam eder (dogru davranis)
+- Kullanici farkli bir tahsilat tarihi girmek isterse "Tahsilat Tarihi" alani hala duzenlenebilir
+- Hem hizmet hem ilac sekmesi icin gecerli
+
+**Notes:**
+Commit: `90313f8`. Lint clean, 45/45 test gecti.
