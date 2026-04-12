@@ -31,7 +31,7 @@ Custom hooks:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections, returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
-- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt, onApplyPayment, onAddPastServiceDebt, onAddPastDrugDebt }` from `CustomerContext`
+- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onApplyPayment, onAddPastServiceDebt, onAddBulkDrugDebt }` from `CustomerContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
 
@@ -57,7 +57,7 @@ src/
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
 │   ├── drugs/DrugsView          # Drug inventory & price management
-│   ├── modals/                  # PaymentModal, HistoryModal, PastDebtModal
+│   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
 ├── contexts/
 │   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)

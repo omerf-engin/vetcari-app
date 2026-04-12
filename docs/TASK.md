@@ -503,4 +503,4 @@ _Adim 5 — PastDebtModal Silme:_
 - Transaction log'lari her ilac borcu icin ayri olusturuluyor
 
 **Notes:**
-Commit: `64d793c`. Mevcut `addDrugDebtOperations` ve `addPastDrugDebtOperations` backend'de korundu (testlerde kullaniliyor) ama App.jsx context'ten referanslari kaldirildi. PastDebtModal'daki `priceMode` (Birim/Toplam toggle) coklu satirda karmasiklik yaratacagi icin kaldirildi; her satirda sadece birim fiyat girisi var.
+Commit: `bea90fd`. Mevcut `addDrugDebtOperations` ve `addPastDrugDebtOperations` backend'de korundu (testlerde kullaniliyor) ama App.jsx context'ten referanslari kaldirildi. Her satir bagimsiz `priceMode` ('unit' | 'total') state'i tasir; `drugCalc` useMemo modlar arasi hesaplamayi handle eder. Review sonrasi 3 ek duzeltme yapildi: unused React import kaldirildi, negatif paid guard eklendi, `isLast` hesabi son valid satirla duzeltildi.

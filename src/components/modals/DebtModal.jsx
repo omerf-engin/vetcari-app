@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Clock, Check, Trash2 } from 'lucide-react';
 import { useCustomer } from '../../hooks/useCustomer';
 import { fmtTL, fmtQty } from '../../utils/formatters';
@@ -50,7 +50,7 @@ export default function DebtModal({ mode, onClose }) {
   // Hizmet hesaplaması
   const serviceCalc = useMemo(() => {
     const a = parseFloat(amount) || 0;
-    const p = parseFloat(sPaid) || 0;
+    const p = Math.max(0, parseFloat(sPaid) || 0);
     if (a <= 0) return null;
     return { amount: a, paid: p, remaining: Math.round((a - p) * 100) / 100 };
   }, [amount, sPaid]);
@@ -86,9 +86,10 @@ export default function DebtModal({ mode, onClose }) {
     let distributions = null;
     if (paid > 0 && grandTotal > 0) {
       let remaining = paid;
+      const lastValidIdx = parsed.reduce((acc, r, i) => r.valid ? i : acc, -1);
       distributions = parsed.map((r, i) => {
         if (!r.valid) return { ...r, paidShare: 0, remainQty: r.qty, remainTl: r.total, swept: false };
-        const isLast = i === parsed.length - 1;
+        const isLast = i === lastValidIdx;
         const share = isLast ? remaining : Math.round((r.total / grandTotal) * paid * 100) / 100;
         const actual = Math.min(share, r.total, remaining);
         remaining = Math.round((remaining - actual) * 100) / 100;
