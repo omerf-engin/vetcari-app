@@ -31,6 +31,10 @@ export default function DebtModal({ mode, onClose }) {
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
+  // Borç tarihi değiştiğinde tahsilat tarihini de güncelle (hizmet ve ilaç)
+  useEffect(() => { setSPaidDate(sDate); }, [sDate]);
+  useEffect(() => { setDPaidDate(dDate); }, [dDate]);
+
   // Row management
   const addRow = () => setRows(prev => [...prev, { id: crypto.randomUUID(), drugId: '', qty: '1', priceMode: 'unit', unitPrice: '' }]);
   const removeRow = (rowId) => setRows(prev => prev.filter(r => r.id !== rowId));
