@@ -1,6 +1,6 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.3  
+> **Sürüm:** 1.4  
 > **Son güncelleme:** 12 Nisan 2026  
 > **Durum:** Geliştirme aşamasında
 
@@ -48,6 +48,8 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 4. Sistem otomatik dağıtım önerisi sunar, veteriner dağıtım rakamlarını **manuel override** edebilir
 5. İşlem sonrası kalan para müşteriye **avans** olarak yazılır
 
+Her iki borç tipi (hizmet ve ilaç) için de tahsilat işlemi sırasında `Tahsilat` transaction logu yazılır. Süpürücü devreye girdiğinde ek bir `Süpürücü (Kapatıldı)` logu oluşturulur.
+
 ### Süpürücü (Sweeper) Algoritması
 
 Tahsilat veya iade sonrası bir borcun güncel TL karşılığı **≤ 10 TL** ise:
@@ -89,6 +91,14 @@ Tek işlemde birden fazla ilaç borcu eklenebilir (`addBulkDrugDebtOperations`):
 Ekstre her zaman `timestamp` alanına göre azalan sırada (`desc`) gösterilir:
 - Aynı gün içinde dahi sonraki işlem üstte yer alır (LIFO)
 - `dateOverride` ile görüntülenen tarih farklı olsa bile sıralama `timestamp` ile belirlenir
+
+### Performans: Memoize Stratejisi
+
+`App.jsx`'te `CustomerProvider` value'su `useMemo` ile oluşturulur:
+- Transaction'lar seçili müşteriye göre pre-filter edilir (tüm müşterilerin logları yerine)
+- 7 handler fonksiyonu `useCallback` ile sarılır → stabil referanslar sağlanır
+- `ToastContext`'te `toast` objesi ve context value `useMemo` ile stabilize edilmiştir
+- Sonuç: CustomerDetail ve alt bileşenleri yalnızca gerçek veri değişikliklerinde yeniden render alır
 
 ---
 
@@ -175,12 +185,12 @@ vetcari-app/
 │   │       └── ToastContainer.jsx
 │   │
 │   ├── contexts/
-│   │   ├── ToastContext.jsx          # Toast + async confirm (Provider)
+│   │   ├── ToastContext.jsx          # Toast + async confirm (Provider, memoize edilmis)
 │   │   └── CustomerContext.jsx       # Musteri detay verileri + handler'lar (Provider)
 │   │
 │   ├── hooks/
 │   │   ├── useAuth.js
-│   │   ├── useFirestore.js
+│   │   ├── useFirestore.js           # onSnapshot hata callback'li (baglanti duserse spinner durur)
 │   │   ├── useToast.js
 │   │   └── useCustomer.js            # CustomerContext sarmalayici hook
 │   │

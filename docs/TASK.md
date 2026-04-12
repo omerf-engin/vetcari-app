@@ -541,3 +541,62 @@ Borc tarihi secildiginde tahsilat tarihi de ayni tarihe ayarlanir. Kullanici dil
 
 **Notes:**
 Commit: `90313f8`. Lint clean, 45/45 test gecti.
+
+---
+
+## TASK-019: Mimari ve Business Logic Sorunlari (Code Review Fix)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-017 |
+
+**Problem:**
+Code review sonucu 7 sorun tespit edildi. En kritigi: `applyPaymentOperations` hizmet borcu tahsilatinda hicbir transaction logu yazmiyordu (ilac dalinda dogru sekilde log vardi). Bu, musteri ekstresinde hizmet tahsilatlarinin gorulmemesine yol aciyordu. Diger sorunlar: snapshot hata yakalama eksikligi, CustomerProvider value'nun her renderda yeniden olusturulmasi, PaymentModal'da yuvarlama tutarsizligi, bazi fonksiyonlarda userId parametresi eksikligi ve basari toast'larinin yoklugu.
+
+**Deliverables:**
+
+_1 — Eksik Hizmet Tahsilat Logu (Kritik Bug Fix):_
+- `applyPaymentOperations` fonksiyonunun `item.type === 'service'` dalina `Tahsilat` ve `Supurucu (Kapatildi)` transaction loglari eklendi
+- Ilac dalindaki mevcut pattern ile birebir uyumlu: `createLog` ile `drugId: undefined`, ayni log title ve message formati
+
+_2 — PaymentModal Yuvarlama Tutarliligi:_
+- Modal icindeki dagitim hesabinda `* 10 / 10` (0.1 TL hassasiyet) → `* 100 / 100` (0.01 TL hassasiyet) duzeltildi
+- Backend (`firestoreOperations.js`) zaten her yerde `* 100 / 100` kullaniyordu; modal artik backend ile tutarli
+
+_3 — useFirestore Hata Yakalama:_
+- 5 `onSnapshot` cagrisina `handleError` callback eklendi
+- Firestore baglantisi duserse `dataLoading` `false`'a cekilir → kullanici sonsuz spinner'da takili kalmaz
+
+_4 — ToastContext Memoize:_
+- `toast` objesi `useMemo` ile stabilize edildi (`addToast` dep)
+- Context value `useMemo` ile sarildi (`toast` + `confirm` deps)
+- Bu degisiklik downstream tum `useCallback` zincirinin stabilitesini sagladi
+
+_5 — App.jsx Handler Memoize:_
+- `handleError` + 7 handler fonksiyonu (`toggleDebtLockHandler`, `handleDrugReturn`, `addServiceDebt`, `deleteServiceDebt`, `addBulkDrugDebt`, `addPastServiceDebt`, `applyPayment`) `useCallback` ile sarildi
+- `customerProviderValue` `useMemo` ile olusturuldu: transaction pre-filtering + stabil referans
+- Lint 0 error 0 warning (onceki 7 `exhaustive-deps` warning tamamen gitti)
+
+_6 — userId Parametreleri:_
+- `deleteServiceDebtOperations` imzasina `userId` eklendi, log artik islemi yapan kullaniciyi yansitir (onceden dokuman yaraticisindan aliniyordu)
+- `updateCustomerName` ve `deleteDrug` caller'larindan gereksiz extra arguman temizlendi
+
+_7 — Basari Toast'lari:_
+- 5 handler'a basari toast eklendi: musteri ekleme/silme, ilac ekleme, fiyat guncelleme, tahsilat
+
+_8 — Test Kapsamasi:_
+- 3 yeni test: kismi hizmet tahsilati log dogrulama, supurucu tetikleme (kalan <= 10 TL), tam odeme (supurucu yazilmaz)
+- Mevcut `deleteServiceDebtOperations` testine `userId` parametresi ve `userId` assertion eklendi
+
+**Kabul Kriterleri:**
+- Hizmet borcu tahsilatinda `Tahsilat` logu ekstrede gorunuyor
+- Kalan <= 10 TL ise `Supurucu (Kapatildi)` logu yaziliyor; tam odemede supurucu yazilmiyor
+- PaymentModal dagitim hesabi 0.01 TL hassasiyetle calisiyor (backend ile tutarli)
+- Firestore baglantisi duserse spinner durur, kullanici takilmaz
+- CustomerProvider value sadece veri degisikliginde yeniden hesaplaniyor (stabil handler referanslari)
+- Lint: 0 error 0 warning, Test: 48/48, Build: basarili
+
+**Notes:**
+Commit 1: `d897da2` — ana degisiklikler. Commit 2: `9d79cf9` — review sonrasi memoize duzeltmeleri (ToastContext + useCallback stabilizasyonu).

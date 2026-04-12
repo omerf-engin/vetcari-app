@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 12 Nisan 2026 (Task #18 / Faz 9 bug fix)
+> Son guncelleme: 12 Nisan 2026 (Task #19 / Faz 10 mimari iyilestirme)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -127,7 +127,22 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10: Gelecek (Nice-to-Have)
+## Faz 10: Mimari Iyilestirmeler ve Bug Fix — TAMAMLANDI
+
+- [x] Eksik hizmet borcu tahsilat logu eklendi (kritik bug — ekstrede gorunmuyordu)
+- [x] PaymentModal yuvarlama hassasiyeti 0.1 TL → 0.01 TL (backend ile tutarli)
+- [x] `useFirestore` onSnapshot hata callback'leri (sonsuz spinner onleme)
+- [x] ToastContext `toast` objesi ve context value `useMemo` ile stabilize edildi
+- [x] App.jsx handler'lari `useCallback` ile sarildi, `customerProviderValue` `useMemo` ile olusturuldu
+- [x] `deleteServiceDebtOperations` userId parametresi eklendi (log islemi yapan kullaniciyi yansitir)
+- [x] 5 handler'a basari toast eklendi
+- [x] 48/48 unit test geciyor, lint 0 error 0 warning, build basarili
+
+> Ilgili tasklar: TASK-019
+
+---
+
+## Faz 11: Gelecek (Nice-to-Have)
 
 - [ ] Responsive ince ayarlar (mobil test)
 - [ ] Disa aktarma (CSV / PDF ekstre)

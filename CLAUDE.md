@@ -24,12 +24,12 @@ npm run test:watch # Run tests in watch mode
 **Routing:** State-based tab navigation in `App.jsx` via `activeTab` state (not a router library). Tabs: `dashboard`, `customers`, `customerDetail`, `drugs`. Unauthenticated users see `Login`.
 
 **State management:** `App.jsx` holds navigation state. No Redux. Two Context providers:
-- `ToastContext` — UI-layer toast/confirm system (app-wide, wraps entire app)
+- `ToastContext` — UI-layer toast/confirm system (app-wide, wraps entire app). `toast` object and context value are memoized (`useMemo`) for stable references
 - `CustomerContext` — selected customer data + action handlers (scoped to `customerDetail` tab only)
 
 Custom hooks:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
-- `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections, returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
+- `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections with error callbacks (connection drop sets `dataLoading=false` instead of infinite spinner), returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
 - `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onApplyPayment, onAddPastServiceDebt, onAddBulkDrugDebt }` from `CustomerContext`
 
@@ -43,7 +43,7 @@ Custom hooks:
 - Debts below 10₺ are auto-swept (micro-transaction cleanup)
 - Drug debts support price locking (`isFixed`) to prevent inflation adjustments on existing debts
 - Customer `balance` field tracks advance payments that offset new debts
-- Payment distribution spreads a payment across multiple debts
+- Payment distribution spreads a payment across multiple debts. Both service and drug debt payments write `Tahsilat` transaction logs. Rounding uses `Math.round(x * 100) / 100` (0.01 TL precision) consistently across modal and backend
 - Past-dated debts can be entered with custom pricing, partial payment deduction, and optional inflation application
 - Transaction logs use `dateOverride` for past dates while `timestamp` tracks actual creation time
 
