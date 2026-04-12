@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 28 Mart 2026 (Task #15 / Faz 6 tamamlandi)
+> Son guncelleme: 12 Nisan 2026 (Task #17 / Faz 9 tamamlandi)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -84,22 +84,49 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 7: Çok Kullanıcı Desteği — PLANLANMIŞ
+## Faz 7: Çok Kullanıcı Desteği — TAMAMLANDI
 
 > **Dikkat:** Adimlar sirasyla uygulanmali; siralama bozulursa mevcut veriler gorunmez hale gelir.
 
-- [ ] Adim 1: Firebase Console'dan Firestore export al (yedek)
-- [ ] Adim 2: Migration script yaz ve calistir (`scripts/migrateUserId.js`)
-- [ ] Adim 3: `firestoreOperations.js` tum yazmalara `userId` ekle
-- [ ] Adim 4: `useFirestore` hook sorgularina `where('userId', '==', uid)` filtresi ekle
-- [ ] Adim 5: Firestore Security Rules'u sikilaistir
-- [ ] Adim 6: ARCHITECTURE.md Firestore yapisini guncelle
+- [x] Adim 1: Firebase Console'dan Firestore export al (yedek)
+- [x] Adim 2: Migration script yaz ve calistir (`scripts/migrateUserId.js`)
+- [x] Adim 3: `firestoreOperations.js` tum yazmalara `userId` ekle
+- [x] Adim 4: `useFirestore` hook sorgularina `where('userId', '==', uid)` filtresi ekle
+- [x] Adim 5: Firestore Security Rules'u sikilaistir
+- [x] Adim 6: ARCHITECTURE.md Firestore yapisini guncelle
 
 > Ilgili tasklar: TASK-014
 
 ---
 
-## Faz 8: Gelecek (Nice-to-Have)
+## Faz 8: Gecmis Tarihli Borc Ekleme — TAMAMLANDI
+
+- [x] `addPastServiceDebtOperations` backend fonksiyonu (gecmis tarihli hizmet borcu, kismi tahsilat, supurucu)
+- [x] `addPastDrugDebtOperations` backend fonksiyonu (ozel birim fiyat, kismi tahsilat, enflasyon, supurucu)
+- [x] `PastDebtModal.jsx` — Hizmet + Ilac sekmeleri, tarih secici, birim/toplam fiyat toggle, canli hesaplama
+- [x] Ekstre siralama duzeltmesi: timestamp kronolojisi, ayni gunde LIFO sirasi
+- [x] Transaction log `dateOverride` destegi (log bugun, borc secilen gecmis tarih)
+- [x] 45/45 unit test geciyor
+
+> Ilgili tasklar: TASK-016
+
+---
+
+## Faz 9: Toplu Ilac Borcu ve Unified DebtModal — TAMAMLANDI
+
+- [x] `addBulkDrugDebtOperations` backend fonksiyonu (tek writeBatch, N ilac + log, orantili tahsilat dagilimi)
+- [x] `DebtModal.jsx` — mode='today'/'past' ile unified tek bilesen (PastDebtModal kapsandi ve silindi)
+- [x] Ilac sekmesinde dinamik cok satirli giris (satir ekle/sil, duplikat ilac engeli)
+- [x] Satir bazli `priceMode` toggle: Birim Fiyat / Toplam Tutar (past modda)
+- [x] Gecmis modda orantili kismi tahsilat preview + toplu enflasyon checkbox
+- [x] CustomerDetail sidebar sadelestirme: inline form → 2 temiz buton
+- [x] 45/45 unit test geciyor, lint clean, build basarili
+
+> Ilgili tasklar: TASK-017
+
+---
+
+## Faz 10: Gelecek (Nice-to-Have)
 
 - [ ] Responsive ince ayarlar (mobil test)
 - [ ] Disa aktarma (CSV / PDF ekstre)

@@ -1,7 +1,7 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.0  
-> **Son güncelleme:** 25 Mart 2026  
+> **Sürüm:** 1.3  
+> **Son güncelleme:** 12 Nisan 2026  
 > **Durum:** Geliştirme aşamasında
 
 ---
@@ -19,6 +19,9 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 - Süpürücü mekanizması (10 TL altı küsüratları otomatik silme)
 - İlaç iade yönetimi (fazla iade → avansa çevirme)
 - Borç bazlı işlem geçmişi (ekstre/timeline)
+- Geçmiş tarihli borç girişi (özel fiyat, kısmi tahsilat, enflasyon seçeneği)
+- Toplu ilaç borcu ekleme (tek seferde N ilaç, orantılı tahsilat dağıtımı)
+- Çok kullanıcı desteği (her kullanıcı kendi izole veritabanında çalışır)
 
 ---
 
@@ -139,6 +142,7 @@ vetcari-app/
 │   │   ├── drugs/
 │   │   │   └── DrugsView.jsx        # İlaç envanter / fiyat
 │   │   ├── modals/
+│   │   │   ├── DebtModal.jsx        # Borç ekleme (mode='today'/'past', hizmet+ilaç sekmeleri, toplu satır)
 │   │   │   ├── PaymentModal.jsx     # Tahsilat (waterfall)
 │   │   │   └── HistoryModal.jsx     # Borç işlem geçmişi
 │   │   └── ui/
@@ -193,14 +197,14 @@ erDiagram
         string id PK
         string name "Ad Soyad (Hayvan Adı)"
         number balance "Kullanılabilir avans (₺)"
-        timestamp createdAt
+        string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 
     drugs {
         string id PK
         string name "İlaç adı"
         number price "Güncel birim satış fiyatı (₺)"
-        timestamp updatedAt
+        string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 
     serviceDebts {
@@ -208,7 +212,8 @@ erDiagram
         string customerId FK
         string desc "Hizmet açıklaması"
         number amount "Borç tutarı (₺)"
-        string date
+        string date "Borç tarihi (YYYY-MM-DD)"
+        string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 
     drugDebts {
@@ -218,16 +223,20 @@ erDiagram
         number qty "Kalan adet"
         number maxPrice "Baz fiyat (₺)"
         boolean isFixed "Zam koruması aktif mi"
-        string date
+        string date "Borç tarihi (YYYY-MM-DD)"
+        string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 
     transactions {
         string id PK
         string debtId FK
-        string date "İşlem tarihi"
+        string customerId FK
+        string date "İşlem tarihi (görüntüleme, geçmiş borçta override edilir)"
+        number timestamp "Gerçek oluşturma zamanı (ms) — ekstre sıralaması için"
         string title "İşlem başlığı"
         string message "Detay mesajı"
-        string type "info | success | warning | danger"
+        string type "info | success | warning | danger | neutral"
+        string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 ```
 
@@ -274,28 +283,23 @@ sequenceDiagram
 
 ### Güvenlik Kuralları (Security Rules)
 
-Mevcut `firestore.rules` dosyası: Firebase Console'dan eklenmiş her kimlik doğrulanmış kullanıcı tüm veriye erişebilir. Uygulama içinde kayıt ekranı olmadığından yalnızca manuel eklenen kullanıcılar giriş yapabilir.
+Her doküman `userId` alanı taşır. Okuma/yazma yalnızca token'daki `uid` ile dokümanın `userId`'si eşleştiğinde izin verilir. Uygulama içinde kayıt ekranı olmadığından yalnızca Firebase Console'dan eklenen kullanıcılar giriş yapabilir.
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Giriş yapmış her kullanıcı okuma/yazma yapabilir.
-    // "Kayıt Ol" butonu olmadığı için yalnızca Firebase Console'dan
-    // eklenen kullanıcılar sisteme girebilir.
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    match /{document=**} {
-      allow read, write: if isAuthenticated();
+    match /{collection}/{docId} {
+      allow read, update, delete: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
     }
   }
 }
 ```
 
-> **Not:** Şu anda veritabanı tüm kullanıcılar arasında **ortaktır** — kullanıcıya özel izolasyon yoktur. TASK-014 bu sorunu çözmeyi planlamaktadır.
+> **Not:** Her kullanıcı yalnızca kendi oluşturduğu müşteri/ilaç/borç verilerine erişebilir. İzolasyon Firestore Security Rules + `userId` filtreli `onSnapshot` sorguları ile çift katmanlı olarak sağlanmaktadır (TASK-014).
 
 ---
 
