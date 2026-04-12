@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 12 Nisan 2026 (Task #22 / Faz 11 planlama)
+> Son guncelleme: 12 Nisan 2026 (Task #24 / Faz 10+ tamamlandi, TypeScript planlandi)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -139,6 +139,37 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] 48/48 unit test geciyor, lint 0 error 0 warning, build basarili
 
 > Ilgili tasklar: TASK-019
+
+---
+
+## Faz 10+: UI/UX Cilalamasi — TAMAMLANDI
+
+- [x] Dashboard borçlular listesi tıklanabilir (müşteri detayına geçiş)
+- [x] Mobilde müşteri kartı edit/delete butonları her zaman görünür
+- [x] Header çıkış butonu etiketlendi; logo ikonu Stethoscope oldu
+- [x] Login e-posta alanı Mail ikonu; versiyon package.json'dan dinamik
+- [x] Dashboard sağ panel Borç Özeti tablosuna dönüştürüldü
+- [x] İlaç borcu buton grubu etiketli tek satır yapıldı
+- [x] Geçmiş borç modalında tahsilat alanları collapsible toggle'a alındı
+- [x] CustomersView ve Dashboard boş durumlar iyileştirildi (ikon + CTA)
+- [x] DrugsView "Yeni İlaç Ekle" birincil buton stiline kavuştu
+
+> Ilgili tasklar: TASK-024
+
+---
+
+## Faz 10++: TypeScript Migrasyonu — PLANLANDI
+
+- [ ] Altyapi: tsconfig.json, vite.config.ts, typescript-eslint
+- [ ] src/types/index.ts — Customer, Drug, ServiceDebt, DrugDebt, Transaction interface'leri
+- [ ] Servis katmani: firestoreOperations.ts (tip guard'lar)
+- [ ] Hook'lar: useAuth, useFirestore, useToast, useCustomer
+- [ ] Context'ler: ToastContext, CustomerContext
+- [ ] Utilities: formatters.ts
+- [ ] Modal ve component'lar (leaf → root sirasi)
+- [ ] Test dosyalari ve allowJs kaldirilmasi
+
+> Ilgili tasklar: TASK-023
 
 ---
 

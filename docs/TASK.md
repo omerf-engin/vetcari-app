@@ -603,6 +603,42 @@ Commit 1: `d897da2` — ana degisiklikler. Commit 2: `9d79cf9` — review sonras
 
 ---
 
+## TASK-024: UI/UX Iyilestirme (11 Sorun)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-019 |
+
+**Deliverables:**
+- #1 Dashboard borçlular listesi tıklanabilir → müşteri detayına gider (`onSelectCustomer` prop akışı)
+- #2 Mobilde müşteri kartı edit/delete butonları her zaman görünür (hover-only opacity kaldırıldı)
+- #3 Header çıkış butonuna "Çıkış" yazısı eklendi (sm+ ekranda)
+- #4 Login e-posta alanında `Lock` → `Mail` ikonu
+- #5 Dashboard sağ panel: indigo CTA → 4 satırlı Borç Özeti tablosu (aktif borç/kayıt sayıları)
+- #6 İlaç borcu buton grubu 2×2 ikondan etiketli tek satıra dönüştürüldü (Geçmiş / Sabit/Serbest / İade)
+- #7 Geçmiş borç modalında tahsilat alanları collapsible toggle'a alındı (varsayılan: gizli)
+- #8 DrugsView "Yeni İlaç Ekle" butonu birincil `bg-indigo-600` stiline kavuştu
+- #9 CustomersView boş durum: müşteri yoksa CTA, arama sonuçsuzsa SearchX ikonu
+- #10 Logo ikonu `TrendingUp` → `Stethoscope` (Header + Login)
+- #11 Versiyon numarası `package.json`'dan dinamik okunuyor
+
+**Bug Fixes (review sonrası):**
+- DebtModal: sekme değiştirildiğinde diğer sekmenin tahsilat toggle'ı sıfırlanır
+- CustomersView: boş durum CTA butonuna tıklandığında sayfanın tepesine smooth scroll
+
+**Kabul Kriterleri:**
+- Dashboard borçlular listesinde isme tıklamak `customerDetail` sekmesini açmalı
+- Mobilde (DevTools emulator) müşteri kartında edit/delete butonları görünür olmalı
+- Geçmiş borç modalında tahsilat alanları başlangıçta gizli, toggle ile açılmalı; sekme değiştiğinde kapanmalı
+- Lint: 0 error, Test: 48/48, Build: başarılı
+
+**Notes:**
+Commit 1: `fcd3e6e` — 11 UI/UX sorununun implementasyonu. Commit 2: `69ea6c4` — review sonrası 2 bug fix (toggle sıfırlama + CTA scroll).
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |

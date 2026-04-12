@@ -1,8 +1,8 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.5  
+> **Sürüm:** 1.6  
 > **Son güncelleme:** 12 Nisan 2026  
-> **Durum:** Geliştirme aşamasında (Faz 11 planlama)
+> **Durum:** Geliştirme aşamasında (Faz 10+ tamamlandı, TypeScript migrasyonu ve Faz 11 planlama)
 
 ---
 
@@ -23,7 +23,11 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 - Toplu ilaç borcu ekleme (tek seferde N ilaç, orantılı tahsilat dağıtımı)
 - Çok kullanıcı desteği (her kullanıcı kendi izole veritabanında çalışır)
 
-### Planlanan Özellikler (Faz 11)
+### Planlanan Özellikler
+
+**TypeScript Migrasyonu (TASK-023):** Incremental geçiş — `allowJs: true` ile başlanır, `strict: true` hedeflenir. Sıra: `src/types/index.ts` → servis → hook → context → component. Detaylar: [TASK.md](./TASK.md#task-023).
+
+**Faz 11:**
 - **Dönemsel finansal raporlama** (TASK-020): Dashboard'da tarih aralığı filtresi ile tahsilat/borç özeti
 - **PDF ve CSV ekstre dışa aktarma** (TASK-021): Müşteriye yazılı hesap özeti üretme (`@react-pdf/renderer` + `Blob`)
 - **İlaç stok takibi** (TASK-022): `drugs` koleksiyonuna `stock`/`minStock` alanı, otomatik düşüm, kritik eşik uyarısı
