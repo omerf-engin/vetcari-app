@@ -3,17 +3,17 @@ import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2, Clock
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
-import PastDebtModal from '../modals/PastDebtModal';
+import DebtModal from '../modals/DebtModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
-  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onAddDrugDebt } = useCustomer();
+  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onDeleteServiceDebt } = useCustomer();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [returnModalDebt, setReturnModalDebt] = useState(null);
   const [returnInputQty, setReturnInputQty] = useState('');
-  const [isPastDebtModalOpen, setPastDebtModalOpen] = useState(false);
+  const [debtModalMode, setDebtModalMode] = useState(null);
 
   const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
 
@@ -64,27 +64,6 @@ export default function CustomerDetail({ onBack }) {
       .map((t) => ({ ...t, sourceLabel: resolveSourceLabel(t) }))
       .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
   }, [transactions, serviceDebts, drugDebts, drugs, customer.id]);
-
-  const [newDebtType, setNewDebtType] = useState('service');
-  const [desc, setDesc] = useState('');
-  const [amount, setAmount] = useState('');
-  const [selDrugId, setSelDrugId] = useState(drugs[0]?.id || '');
-  const [qty, setQty] = useState('1');
-
-  const effectiveDrugId = selDrugId || (drugs.length > 0 ? drugs[0].id : '');
-
-  const handleAddDebt = (e) => {
-    e.preventDefault();
-    if (newDebtType === 'service') {
-      if (!desc || !amount) return;
-      onAddServiceDebt(desc, parseFloat(amount));
-      setDesc(''); setAmount('');
-    } else {
-      if (!effectiveDrugId || !qty) return;
-      onAddDrugDebt(effectiveDrugId, parseFloat(qty));
-      setQty('1');
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -199,48 +178,20 @@ export default function CustomerDetail({ onBack }) {
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 self-start sticky top-6">
           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3"><Plus className="w-5 h-5 text-indigo-600" /> Yeni İşlem (Borç Yaz)</h3>
-          <div className="flex bg-slate-100 p-1.5 rounded-lg mb-5">
-            <button className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all ${newDebtType === 'service' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`} onClick={() => setNewDebtType('service')}>Hizmet (TL)</button>
-            <button className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all ${newDebtType === 'drug' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`} onClick={() => setNewDebtType('drug')}>İlaç (Adet)</button>
+          <div className="space-y-3">
+            <button
+              onClick={() => setDebtModalMode('today')}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Borç Ekle
+            </button>
+            <button
+              onClick={() => setDebtModalMode('past')}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm border border-slate-200"
+            >
+              <Clock className="w-4 h-4" /> Geçmiş Borç Ekle
+            </button>
           </div>
-          <form onSubmit={handleAddDebt} className="space-y-4">
-            {newDebtType === 'service' ? (
-              <>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Açıklama</label>
-                  <input type="text" value={desc} onChange={e => setDesc(e.target.value)} required placeholder="Örn: Muayene" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Tutar (₺)</label>
-                  <input type="number" step="0.1" min="0" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="0.0" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold text-lg" />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">İlaç Seçimi</label>
-                  {drugs.length === 0 ? (
-                    <div className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100">Önce sisteme ilaç eklemelisiniz.</div>
-                  ) : (
-                    <select value={effectiveDrugId} onChange={e => setSelDrugId(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
-                      {drugs.map(d => <option key={d.id} value={d.id}>{d.name} ({fmtTL(d.price)})</option>)}
-                    </select>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Adet / Kutu</label>
-                  <input type="number" step="0.1" value={qty} onChange={e => setQty(e.target.value)} required min="0.1" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold text-lg" />
-                </div>
-              </>
-            )}
-            <button type="submit" disabled={newDebtType === 'drug' && drugs.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors mt-4 shadow-sm disabled:opacity-50">Hesaba Ekle</button>
-          </form>
-          <button
-            onClick={() => setPastDebtModalOpen(true)}
-            className="w-full mt-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm border border-slate-200"
-          >
-            <Clock className="w-4 h-4" /> Geçmiş Borç Ekle
-          </button>
         </div>
       </div>
 
@@ -250,8 +201,8 @@ export default function CustomerDetail({ onBack }) {
         />
       )}
 
-      {isPastDebtModalOpen && (
-        <PastDebtModal onClose={() => setPastDebtModalOpen(false)} />
+      {debtModalMode && (
+        <DebtModal mode={debtModalMode} onClose={() => setDebtModalMode(null)} />
       )}
 
       {historyDebtId && (

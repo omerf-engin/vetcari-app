@@ -20,10 +20,9 @@ import {
   returnDrug,
   addServiceDebtOperations,
   deleteServiceDebtOperations,
-  addDrugDebtOperations,
+  addBulkDrugDebtOperations,
   applyPaymentOperations,
-  addPastServiceDebtOperations,
-  addPastDrugDebtOperations
+  addPastServiceDebtOperations
 } from './services/firestoreOperations';
 
 export default function App() {
@@ -154,23 +153,20 @@ export default function App() {
     }
   };
 
-  const addDrugDebt = async (customerId, drugId, qty) => {
-    const drug = drugs.find(d => String(d.id) === String(drugId));
-    if (!drug) return;
-    try { await addDrugDebtOperations(customerId, drug, qty, currentUser.uid); }
-    catch (err) { handleError(err, 'İlaç Borcu Ekleme'); }
+  const addBulkDrugDebt = async (customerId, items, date, paidAmount, paidDate, applyInflation) => {
+    const resolvedItems = items.map(item => {
+      const drug = drugs.find(d => String(d.id) === String(item.drugId));
+      if (!drug) return null;
+      return { drug, qty: item.qty, unitPrice: item.unitPrice };
+    }).filter(Boolean);
+    if (resolvedItems.length === 0) return;
+    try { await addBulkDrugDebtOperations(customerId, resolvedItems, date, paidAmount, paidDate, applyInflation, currentUser.uid); }
+    catch (err) { handleError(err, 'Toplu İlaç Borcu'); }
   };
 
   const addPastServiceDebt = async (customerId, desc, amount, date, paidAmount, paidDate) => {
     try { await addPastServiceDebtOperations(customerId, desc, amount, date, paidAmount, paidDate, currentUser.uid); }
     catch (err) { handleError(err, 'Geçmiş Hizmet Borcu'); }
-  };
-
-  const addPastDrugDebt = async (customerId, drugId, qty, unitPrice, date, paidAmount, paidDate, applyInflation) => {
-    const drug = drugs.find(d => String(d.id) === String(drugId));
-    if (!drug) return;
-    try { await addPastDrugDebtOperations(customerId, drug, qty, unitPrice, date, paidAmount, paidDate, applyInflation, currentUser.uid); }
-    catch (err) { handleError(err, 'Geçmiş İlaç Borcu'); }
   };
 
   const applyPayment = async (customerId, receivedAmount, distributionArr) => {
@@ -249,10 +245,9 @@ export default function App() {
             onReturnDrug: handleDrugReturn,
             onAddServiceDebt: (desc, amt) => addServiceDebt(selectedCustomerId, desc, amt),
             onDeleteServiceDebt: deleteServiceDebt,
-            onAddDrugDebt: (drugId, qty) => addDrugDebt(selectedCustomerId, drugId, qty),
             onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
             onAddPastServiceDebt: (desc, amount, date, paidAmount, paidDate) => addPastServiceDebt(selectedCustomerId, desc, amount, date, paidAmount, paidDate),
-            onAddPastDrugDebt: (drugId, qty, unitPrice, date, paidAmount, paidDate, applyInflation) => addPastDrugDebt(selectedCustomerId, drugId, qty, unitPrice, date, paidAmount, paidDate, applyInflation),
+            onAddBulkDrugDebt: (items, date, paidAmount, paidDate, applyInflation) => addBulkDrugDebt(selectedCustomerId, items, date, paidAmount, paidDate, applyInflation),
           }}>
             <CustomerDetail
               onBack={() => { setActiveTab('customers'); setSelectedCustomerId(null); }}

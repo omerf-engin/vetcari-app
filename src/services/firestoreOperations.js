@@ -262,6 +262,69 @@ export const addDrugDebtOperations = async (customerId, drug, qty, userId) => {
   await batch.commit();
 };
 
+export const addBulkDrugDebtOperations = async (customerId, items, date, paidAmount, paidDate, applyInflation, userId) => {
+  if (!items || items.length === 0) return;
+  const batch = writeBatch(db);
+  const isToday = date === new Date().toISOString().split('T')[0];
+
+  const grandTotal = items.reduce((sum, it) => sum + Math.round(it.qty * it.unitPrice * 100) / 100, 0);
+  if (grandTotal <= 0) return;
+  if (paidAmount > 0 && paidAmount >= grandTotal) return;
+
+  let paidRemaining = paidAmount || 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.qty <= 0 || item.unitPrice <= 0) continue;
+
+    const debtRef = doc(collection(db, 'drugDebts'));
+    const itemTotal = Math.round(item.qty * item.unitPrice * 100) / 100;
+    let finalQty = item.qty;
+    let finalMaxPrice = item.unitPrice;
+    let isSwept = false;
+
+    const logRef1 = doc(collection(db, 'transactions'));
+    batch.set(logRef1, createLog(debtRef.id, isToday ? 'Borç Açıldı' : 'Geçmiş İlaç Borcu', `${fmtQty(item.qty)} adet × ${fmtTL(item.unitPrice)} = ${fmtTL(itemTotal)} borç eklendi.`, 'info', customerId, item.drug.id, userId, isToday ? undefined : date));
+
+    if (paidRemaining > 0 && grandTotal > 0) {
+      const isLast = i === items.length - 1;
+      const share = isLast ? paidRemaining : Math.round((itemTotal / grandTotal) * paidAmount * 100) / 100;
+      const actualShare = Math.min(share, itemTotal, paidRemaining);
+
+      if (actualShare > 0) {
+        const qtyDeducted = Math.round((actualShare / item.unitPrice) * 100) / 100;
+        finalQty = Math.round((item.qty - qtyDeducted) * 100) / 100;
+        if (finalQty < 0) finalQty = 0;
+        const remainTl = Math.round(finalQty * item.unitPrice * 100) / 100;
+        paidRemaining = Math.round((paidRemaining - actualShare) * 100) / 100;
+
+        const logRef2 = doc(collection(db, 'transactions'));
+        batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(actualShare)} tahsilat düşüldü. ${fmtQty(qtyDeducted)} adet düşüldü. Kalan: ${fmtQty(finalQty)} adet (${fmtTL(remainTl)}).`, 'success', customerId, item.drug.id, userId, paidDate));
+
+        if (remainTl <= 10) {
+          isSwept = true;
+          const logRef3 = doc(collection(db, 'transactions'));
+          batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, item.drug.id, userId));
+        }
+      }
+    }
+
+    if (!isSwept && applyInflation && item.drug.price > item.unitPrice) {
+      finalMaxPrice = item.drug.price;
+      const oldRemaining = Math.round(finalQty * item.unitPrice * 100) / 100;
+      const newRemaining = Math.round(finalQty * item.drug.price * 100) / 100;
+      const logRef4 = doc(collection(db, 'transactions'));
+      batch.set(logRef4, createLog(debtRef.id, 'Enflasyon Güncellemesi', `Birim fiyat ${fmtTL(item.unitPrice)} → ${fmtTL(item.drug.price)} olarak güncellendi. Kalan borç ${fmtTL(oldRemaining)} → ${fmtTL(newRemaining)}.`, 'warning', customerId, item.drug.id, userId));
+    }
+
+    if (!isSwept) {
+      batch.set(debtRef, { customerId, drugId: item.drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, userId });
+    }
+  }
+
+  await batch.commit();
+};
+
 export const applyPaymentOperations = async (customer, receivedAmount, distributionArr, currentServiceDebts, currentDrugDebts, userId) => {
   if (receivedAmount < 0) return;
   const batch = writeBatch(db);

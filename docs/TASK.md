@@ -439,3 +439,68 @@ _Adim 5 — Unit Testler:_
 
 **Notes:**
 Uygulama sirasi: Backend fonksiyonlar → Modal UI → Context entegrasyonu → CustomerDetail butonu → Testler. PastDebtModal `useCustomer()` hook'u ile context'ten veri ve handler alir. Mevcut `createLog` helper'i kullanilir (userId destegi zaten mevcut).
+
+---
+
+## TASK-017: Toplu Ilac Borcu Ekleme ve Unified DebtModal
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-015, TASK-016 |
+
+**Problem:**
+Ilac borcu ekleme tek tek yapiliyordu (bir ilac sec → adet gir → kaydet). Gercek veteriner pratiginde bir ziyarette birden fazla ilac verilmesi yaygindir. Ayrica borc ekleme UX'i inline form + ayri PastDebtModal seklinde bolunmustu; tutarsiz ve sidebar'i karisik hale getiriyordu.
+
+**Deliverables:**
+
+_Adim 1 — Backend (`firestoreOperations.js`):_
+- `addBulkDrugDebtOperations(customerId, items, date, paidAmount, paidDate, applyInflation, userId)` fonksiyonu
+- Tek `writeBatch` ile N ilac borcu + N transaction log olusturur
+- Orantili kismi tahsilat dagilimi: her satirin toplam icindeki payina gore (son satir kalan tutari alir — rounding fix)
+- Satir bazli sweep kontrolu (kalan <= 10 TL → borc olusturulmaz)
+- Toplu enflasyon uygulama (drug.price > unitPrice ise maxPrice guncellenir)
+- Guard: `grandTotal <= 0` ve `paidAmount > 0 && paidAmount >= grandTotal` durumlarinda early return
+
+_Adim 2 — Unified DebtModal (`src/components/modals/DebtModal.jsx`):_
+- Tek bilesen, `mode` prop'u ile iki mod: `today` / `past`
+- Hizmet (TL) / Ilac (Adet) sekmeleri
+- Hizmet sekmesi: today modda aciklama + tutar; past modda tarih + tahsilat + kalan borc gosterimi
+- Ilac sekmesi: dinamik satir listesi (varsayilan 1 satir, "+ Ilac Satiri Ekle" ile eklenir)
+  - Her satir: ilac dropdown, adet, [past] birim fiyat, satir toplam gosterimi, sil butonu
+  - Satir bazli fiyat modu toggle: Birim Fiyat / Toplam Tutar (past modda)
+  - Duplikat ilac kontrolu (inline kirmizi uyari + submit engeli)
+  - Toplu ozet (kalem sayisi + toplam TL)
+  - [past] Orantili kismi tahsilat (toplu, tum satirlara dagitilir) + dagilim preview
+  - [past] Enflasyon checkbox (toplu, en az 1 satirda fiyat farki varsa gorunur)
+- Ilac secildiginde birim fiyat otomatik doldurulur (past modda duzenlenebilir)
+- `isPast` sabiti ile okunabilir kosul kontrolleri
+
+_Adim 3 — App.jsx Entegrasyonu:_
+- `addBulkDrugDebtOperations` import, `addDrugDebtOperations` ve `addPastDrugDebtOperations` import'tan kaldirildi
+- `addBulkDrugDebt` handler: items'i drugId → drug object olarak resolve eder
+- Context value: `onAddDrugDebt` ve `onAddPastDrugDebt` kaldirildi, `onAddBulkDrugDebt` eklendi
+
+_Adim 4 — CustomerDetail Sadelestirilmesi:_
+- Inline form tamamen kaldirildi (tab toggle, input'lar, handleAddDebt)
+- Yerine 2 buton: "Borc Ekle" → `DebtModal(mode='today')`, "Gecmis Borc Ekle" → `DebtModal(mode='past')`
+- State'ler sadelesti: `newDebtType`, `desc`, `amount`, `selDrugId`, `qty` kaldirildi → tek `debtModalMode` state
+
+_Adim 5 — PastDebtModal Silme:_
+- `src/components/modals/PastDebtModal.jsx` tamamen silindi, yeni DebtModal tarafindan kapsandi
+
+**Kabul Kriterleri:**
+- Tek seferde birden fazla ilac borcu eklenebiliyor (today ve past mod)
+- Gecmis modda orantili kismi tahsilat dogru dagitiliyor
+- Gecmis modda enflasyon toplu uygulanabiliyor
+- Duplikat ilac secimi engelleniyor (inline uyari + submit engeli)
+- Sweep kurali satir bazli calisiyor (kalan <= 10 TL)
+- Hizmet borcu ekleme modal icinde tab olarak calisiyor (today + past)
+- Past modda her satirda birim fiyat / toplam tutar toggle calisiyor
+- Sidebar'da inline form yok, sadece 2 temiz buton
+- Mevcut test'ler geciyor (45/45), lint clean, build basarili
+- Transaction log'lari her ilac borcu icin ayri olusturuluyor
+
+**Notes:**
+Commit: `64d793c`. Mevcut `addDrugDebtOperations` ve `addPastDrugDebtOperations` backend'de korundu (testlerde kullaniliyor) ama App.jsx context'ten referanslari kaldirildi. PastDebtModal'daki `priceMode` (Birim/Toplam toggle) coklu satirda karmasiklik yaratacagi icin kaldirildi; her satirda sadece birim fiyat girisi var.
