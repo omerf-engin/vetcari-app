@@ -1,4 +1,4 @@
-import React, { createContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useState, useCallback, useMemo, useRef } from 'react';
 import ToastContainer from '../components/ui/ToastContainer';
 import ConfirmModal from '../components/ui/ConfirmModal';
 
@@ -26,12 +26,12 @@ export function ToastProvider({ children }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const toast = {
+  const toast = useMemo(() => ({
     error: (msg) => addToast('error', msg),
     warning: (msg) => addToast('warning', msg),
     success: (msg) => addToast('success', msg),
     info: (msg) => addToast('info', msg),
-  };
+  }), [addToast]);
 
   const confirm = useCallback((title, message) => {
     return new Promise((resolve) => {
@@ -50,8 +50,10 @@ export function ToastProvider({ children }) {
     setConfirmState(null);
   }, []);
 
+  const contextValue = useMemo(() => ({ toast, confirm }), [toast, confirm]);
+
   return (
-    <ToastContext.Provider value={{ toast, confirm }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {confirmState?.isOpen && (

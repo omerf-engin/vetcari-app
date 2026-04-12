@@ -90,11 +90,13 @@ describe('Validasyon', () => {
   });
 
   it('hizmet borcu silinirken iptal logu yazar', async () => {
-    await deleteServiceDebtOperations('sd1');
+    await deleteServiceDebtOperations('sd1', 'uid1');
     expect(mockGetDoc).toHaveBeenCalled();
     expect(mockBatch.commit).toHaveBeenCalled();
     const sets = mockBatch.operations.filter((op) => op.type === 'set');
-    expect(sets.some((op) => op.data?.title === 'Hizmet Borcu İptali')).toBe(true);
+    const cancelLog = sets.find((op) => op.data?.title === 'Hizmet Borcu İptali');
+    expect(cancelLog).toBeDefined();
+    expect(cancelLog.data.userId).toBe('uid1');
     expect(mockBatch.operations.some((op) => op.type === 'delete')).toBe(true);
   });
 

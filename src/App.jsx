@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import Header from './components/layout/Header';
 import DashboardView from './components/dashboard/DashboardView';
 import CustomersView from './components/customers/CustomersView';
@@ -32,10 +32,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
 
-  const handleError = (err, context) => {
+  const handleError = useCallback((err, context) => {
     console.error(`[${context}]`, err);
     toast.error(`İşlem sırasında bir hata oluştu: ${err.message || 'Bilinmeyen hata'}`);
-  };
+  }, [toast]);
 
   const handleAddCustomer = async (name) => {
     const trimmedInfo = name.trim().toLowerCase();
@@ -55,7 +55,7 @@ export default function App() {
       toast.warning(`"${newName}" adında bir müşteri zaten kayıtlı!`);
       return;
     }
-    try { await updateCustomerName(customerId, newName, currentUser.uid); }
+    try { await updateCustomerName(customerId, newName); }
     catch (err) { handleError(err, 'İsim Güncelleme'); }
   };
 
@@ -114,7 +114,7 @@ export default function App() {
       "Bu ilacı kalıcı olarak silmek istediğinize emin misiniz? Müşterilerin geçmiş ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir."
     );
     if (ok) {
-      try { await deleteDrug(drugId, currentUser.uid); }
+      try { await deleteDrug(drugId); }
       catch (err) { handleError(err, 'İlaç Silme'); }
     }
   };
@@ -124,26 +124,26 @@ export default function App() {
     catch (err) { handleError(err, 'Fiyat Güncelleme'); }
   };
 
-  const toggleDebtLockHandler = async (debtId) => {
+  const toggleDebtLockHandler = useCallback(async (debtId) => {
     const debt = drugDebts.find(d => d.id === debtId);
     if (!debt) return;
     try { await toggleDebtLock(debt, currentUser.uid); }
     catch (err) { handleError(err, 'Kilit Değiştirme'); }
-  };
+  }, [drugDebts, currentUser, handleError]);
 
-  const handleDrugReturn = async (debt, returnQty) => {
+  const handleDrugReturn = useCallback(async (debt, returnQty) => {
     const customer = customers.find(c => c.id === debt.customerId);
     if (!customer) return;
     try { await returnDrug(debt, returnQty, customer.balance, currentUser.uid); }
     catch (err) { handleError(err, 'İade İşlemi'); }
-  };
+  }, [customers, currentUser, handleError]);
 
-  const addServiceDebt = async (customerId, desc, amount) => {
+  const addServiceDebt = useCallback(async (customerId, desc, amount) => {
     try { await addServiceDebtOperations(customerId, desc, amount, currentUser.uid); }
     catch (err) { handleError(err, 'Hizmet Borcu Ekleme'); }
-  };
+  }, [currentUser, handleError]);
 
-  const deleteServiceDebt = async (debtId) => {
+  const deleteServiceDebt = useCallback(async (debtId) => {
     const ok = await confirm(
       "Hizmet Kaydı İptali",
       "Bu hizmet kaydını iptal etmek istediğinize emin misiniz? Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir."
@@ -152,9 +152,9 @@ export default function App() {
       try { await deleteServiceDebtOperations(debtId, currentUser.uid); }
       catch (err) { handleError(err, 'Hizmet Borcu Silme'); }
     }
-  };
+  }, [confirm, currentUser, handleError]);
 
-  const addBulkDrugDebt = async (customerId, items, date, paidAmount, paidDate, applyInflation) => {
+  const addBulkDrugDebt = useCallback(async (customerId, items, date, paidAmount, paidDate, applyInflation) => {
     const resolvedItems = items.map(item => {
       const drug = drugs.find(d => String(d.id) === String(item.drugId));
       if (!drug) return null;
@@ -163,19 +163,19 @@ export default function App() {
     if (resolvedItems.length === 0) return;
     try { await addBulkDrugDebtOperations(customerId, resolvedItems, date, paidAmount, paidDate, applyInflation, currentUser.uid); }
     catch (err) { handleError(err, 'Toplu İlaç Borcu'); }
-  };
+  }, [drugs, currentUser, handleError]);
 
-  const addPastServiceDebt = async (customerId, desc, amount, date, paidAmount, paidDate) => {
+  const addPastServiceDebt = useCallback(async (customerId, desc, amount, date, paidAmount, paidDate) => {
     try { await addPastServiceDebtOperations(customerId, desc, amount, date, paidAmount, paidDate, currentUser.uid); }
     catch (err) { handleError(err, 'Geçmiş Hizmet Borcu'); }
-  };
+  }, [currentUser, handleError]);
 
-  const applyPayment = async (customerId, receivedAmount, distributionArr) => {
+  const applyPayment = useCallback(async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
     try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts, currentUser.uid); toast.success('Tahsilat başarıyla uygulandı'); }
     catch (err) { handleError(err, 'Tahsilat'); }
-  };
+  }, [customers, serviceDebts, drugDebts, currentUser, toast, handleError]);
 
   const customerProviderValue = useMemo(() => {
     if (!selectedCustomerId) return null;
