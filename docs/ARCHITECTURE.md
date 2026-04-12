@@ -66,6 +66,30 @@ Tahsilat veya iade sonrası bir borcun güncel TL karşılığı **≤ 10 TL** i
 - Aktif ilaç borcu olan ilaçlar **silinemez** (kullanıcıya uyarı gösterilir)
 - Yalnızca hiçbir müşteride borcu kalmamış ilaçlar silinebilir
 
+### Geçmiş Tarihli Borç Girişi
+
+Veteriner geçmişte kağıt/hafızadan takip ettiği borçları sisteme girebilir:
+
+- **Tarih geçersizleştirme (`dateOverride`):** Borç `date` alanı seçilen geçmiş tarihe yazılır; `timestamp` ise gerçek oluşturma zamanını (bugün) tutar. Ekstre görüntüsü `date`'i gösterir, sıralama `timestamp`'e göre yapılır.
+- **Kısmi tahsilat:** `paidAmount > 0` ise eski birim fiyat üzerinden adet/tutar düşülür; tahsilat logunun `date`'i `paidDate` ile override edilir.
+- **Enflasyon seçeneği:** `applyInflation = true` ve ilacın güncel fiyatı girilen birim fiyattan yüksekse `maxPrice` güncellenir, borç bugünkü fiyata taşınır.
+- **Süpürücü:** Kısmi tahsilat sonrası kalan ≤ 10 TL ise borç otomatik silinir.
+
+### Toplu İlaç Borcu (Bulk)
+
+Tek işlemde birden fazla ilaç borcu eklenebilir (`addBulkDrugDebtOperations`):
+
+- Tek `writeBatch` ile N ilaç borcu + N transaction log yazılır (atomik)
+- Kısmi tahsilat toplam tutara orantılı olarak her satıra dağıtılır; son satır yuvarlama farkını alır
+- Enflasyon ve süpürücü satır bazında uygulanır
+- Bugün veya geçmiş tarih modunda çalışır (`date` parametresi)
+
+### Ekstre Sıralama Kuralı
+
+Ekstre her zaman `timestamp` alanına göre azalan sırada (`desc`) gösterilir:
+- Aynı gün içinde dahi sonraki işlem üstte yer alır (LIFO)
+- `dateOverride` ile görüntülenen tarih farklı olsa bile sıralama `timestamp` ile belirlenir
+
 ---
 
 ## 3. Mimari Diyagram
@@ -161,18 +185,26 @@ vetcari-app/
 │   │   └── useCustomer.js            # CustomerContext sarmalayici hook
 │   │
 │   ├── services/
-│   │   ├── firebase.js              # Firebase init, offline cache
-│   │   └── firestoreOperations.js   # Tüm Firestore CRUD + batch
+│   │   ├── firebase.js                     # Firebase init, offline cache
+│   │   ├── firestoreOperations.js          # Tüm Firestore CRUD + batch
+│   │   └── firestoreOperations.test.js     # Business logic unit testleri (Vitest)
 │   │
-│   ├── test/                        # Vitest yardımcıları
+│   ├── test/
+│   │   ├── firebaseMock.js          # Firestore mock (writeBatch, addDoc, vb.)
+│   │   └── setup.js                 # Vitest global setup
+│   │
 │   ├── utils/
-│   │   └── formatters.js
+│   │   ├── formatters.js
+│   │   └── formatters.test.js       # Formatlayıcı unit testleri (Vitest)
 │   │
 │   ├── App.jsx                      # activeTab ile sekme yönetimi
 │   ├── main.jsx
 │   └── index.css
 │
-├── docs/
+├── docs/                            # ARCHITECTURE, ROADMAP, TASK, DEPLOYMENT
+├── scripts/
+│   ├── backupFirestore.js           # Firestore export scripti (Node.js + Admin SDK)
+│   └── migrateUserId.js             # userId migration scripti (TASK-014)
 ├── index.html
 ├── tailwind.config.js
 ├── vite.config.js
@@ -245,13 +277,18 @@ erDiagram
 ```
 /customers/{customerId}
 /drugs/{drugId}
-/serviceDebts/{debtId}          → customerId alanı ile filtreleme
-/drugDebts/{debtId}             → customerId + drugId alanları ile filtreleme
-/transactions/{transactionId}   → debtId alanı ile filtreleme
+/serviceDebts/{debtId}          → customerId + userId alanları ile filtreleme
+/drugDebts/{debtId}             → customerId + drugId + userId alanları ile filtreleme
+/transactions/{transactionId}   → debtId + userId alanları ile filtreleme
 ```
 
 > **Not:** Alt koleksiyon (subcollection) yerine düz (flat) yapı tercih edilmiştir.  
 > Nedeni: Dashboard'da tüm borçları tek seferde çekmek gerekiyor — alt koleksiyonlarda bu "collection group query" gerektirir ve daha karmaşıktır.
+
+### Firestore Sorgu Notları
+
+- `transactions` koleksiyonu `where('userId', '==', uid)` + `orderBy('timestamp', 'desc')` sorgusu kullanır. Bu **composite index** gerektirir — Firebase Console'dan oluşturulması gerekir.
+- Diğer 4 koleksiyon (`customers`, `drugs`, `serviceDebts`, `drugDebts`) yalnızca `where('userId', '==', uid)` ile sorgulanır, tek alan index yeterlidir.
 
 ---
 
