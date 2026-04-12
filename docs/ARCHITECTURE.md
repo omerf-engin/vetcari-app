@@ -1,8 +1,8 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.4  
+> **Sürüm:** 1.5  
 > **Son güncelleme:** 12 Nisan 2026  
-> **Durum:** Geliştirme aşamasında
+> **Durum:** Geliştirme aşamasında (Faz 11 planlama)
 
 ---
 
@@ -11,7 +11,7 @@
 VetCari, veteriner klinikleri için geliştirilmiş **cari hesap takip** uygulamasıdır.  
 Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon korumalı ilaç borç takibi** sağlamaktır.
 
-### Temel Özellikler
+### Mevcut Özellikler
 - Müşteri cari hesap yönetimi (borç/alacak/avans)
 - Enflasyon korumalı ilaç borç takibi (fiyat sabitleme, otomatik güncelleme)
 - Hizmet borçları (sabit TL cinsinden)
@@ -22,6 +22,11 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 - Geçmiş tarihli borç girişi (özel fiyat, kısmi tahsilat, enflasyon seçeneği)
 - Toplu ilaç borcu ekleme (tek seferde N ilaç, orantılı tahsilat dağıtımı)
 - Çok kullanıcı desteği (her kullanıcı kendi izole veritabanında çalışır)
+
+### Planlanan Özellikler (Faz 11)
+- **Dönemsel finansal raporlama** (TASK-020): Dashboard'da tarih aralığı filtresi ile tahsilat/borç özeti
+- **PDF ve CSV ekstre dışa aktarma** (TASK-021): Müşteriye yazılı hesap özeti üretme (`@react-pdf/renderer` + `Blob`)
+- **İlaç stok takibi** (TASK-022): `drugs` koleksiyonuna `stock`/`minStock` alanı, otomatik düşüm, kritik eşik uyarısı
 
 ---
 

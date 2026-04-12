@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Clock, Check, Trash2 } from 'lucide-react';
+import { Plus, Clock, Check, Trash2, ChevronDown } from 'lucide-react';
 import { useCustomer } from '../../hooks/useCustomer';
 import { fmtTL, fmtQty } from '../../utils/formatters';
 
@@ -23,6 +23,8 @@ export default function DebtModal({ mode, onClose }) {
   const [dPaid, setDPaid] = useState('');
   const [dPaidDate, setDPaidDate] = useState(today);
   const [applyInflation, setApplyInflation] = useState(false);
+  const [showServicePayment, setShowServicePayment] = useState(false);
+  const [showDrugPayment, setShowDrugPayment] = useState(false);
 
   // Escape key
   useEffect(() => {
@@ -207,20 +209,34 @@ export default function DebtModal({ mode, onClose }) {
               </div>
               {isPast && (
                 <>
-                  <div>
-                    <label className={labelCls}>Yapılmış Tahsilat (₺) <span className="text-slate-400 normal-case font-normal">— opsiyonel</span></label>
-                    <input type="number" step="0.1" min="0" value={sPaid} onChange={e => setSPaid(e.target.value)} placeholder="0" className={inputCls} />
-                  </div>
-                  {serviceCalc && serviceCalc.paid > 0 && (
-                    <div>
-                      <label className={labelCls}>Tahsilat Tarihi</label>
-                      <input type="date" value={sPaidDate} onChange={e => setSPaidDate(e.target.value)} max={today} className={inputCls} />
-                    </div>
-                  )}
-                  {serviceCalc && serviceCalc.paid > 0 && (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
-                      <span className="font-semibold text-emerald-800">Kalan Borç:</span>{' '}
-                      <span className="text-emerald-700 font-bold">{fmtTL(serviceCalc.remaining)}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setShowServicePayment(p => !p); if (showServicePayment) setSPaid(''); }}
+                    className="w-full flex items-center justify-between text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showServicePayment ? 'rotate-180' : ''}`} />
+                      Kısmi Tahsilat Ekle (Opsiyonel)
+                    </span>
+                  </button>
+                  {showServicePayment && (
+                    <div className="space-y-3 pl-1">
+                      <div>
+                        <label className={labelCls}>Yapılmış Tahsilat (₺)</label>
+                        <input type="number" step="0.1" min="0" value={sPaid} onChange={e => setSPaid(e.target.value)} placeholder="0" className={inputCls} />
+                      </div>
+                      {serviceCalc && serviceCalc.paid > 0 && (
+                        <div>
+                          <label className={labelCls}>Tahsilat Tarihi</label>
+                          <input type="date" value={sPaidDate} onChange={e => setSPaidDate(e.target.value)} max={today} className={inputCls} />
+                        </div>
+                      )}
+                      {serviceCalc && serviceCalc.paid > 0 && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm">
+                          <span className="font-semibold text-emerald-800">Kalan Borç:</span>{' '}
+                          <span className="text-emerald-700 font-bold">{fmtTL(serviceCalc.remaining)}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
@@ -337,43 +353,57 @@ export default function DebtModal({ mode, onClose }) {
               {/* Geçmiş mod: kısmi tahsilat */}
               {isPast && (
                 <>
-                  <div>
-                    <label className={labelCls}>Yapılmış Tahsilat (₺) <span className="text-slate-400 normal-case font-normal">— opsiyonel, tüm satırlara orantılı dağıtılır</span></label>
-                    <input type="number" step="0.1" min="0" value={dPaid} onChange={e => setDPaid(e.target.value)} placeholder="0" className={inputCls} />
-                  </div>
-
-                  {drugCalc.paid > 0 && drugCalc.distributions && (
-                    <>
+                  <button
+                    type="button"
+                    onClick={() => { setShowDrugPayment(p => !p); if (showDrugPayment) setDPaid(''); }}
+                    className="w-full flex items-center justify-between text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showDrugPayment ? 'rotate-180' : ''}`} />
+                      Kısmi Tahsilat Ekle (Opsiyonel)
+                    </span>
+                  </button>
+                  {showDrugPayment && (
+                    <div className="space-y-3 pl-1">
                       <div>
-                        <label className={labelCls}>Tahsilat Tarihi</label>
-                        <input type="date" value={dPaidDate} onChange={e => setDPaidDate(e.target.value)} max={today} className={inputCls} />
+                        <label className={labelCls}>Yapılmış Tahsilat (₺) <span className="text-slate-400 normal-case font-normal">— tüm satırlara orantılı dağıtılır</span></label>
+                        <input type="number" step="0.1" min="0" value={dPaid} onChange={e => setDPaid(e.target.value)} placeholder="0" className={inputCls} />
                       </div>
 
-                      {/* Orantılı dağılım preview */}
-                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm space-y-1.5">
-                        <p className="font-semibold text-emerald-800 mb-2">Tahsilat Dağılımı</p>
-                        {drugCalc.distributions.filter(d => d.valid).map(d => (
-                          <div key={d.id} className="flex justify-between text-emerald-700">
-                            <span>{d.drug?.name || '?'}: -{fmtTL(d.paidShare)}</span>
-                            <span className={d.swept ? 'line-through text-slate-400' : 'font-bold'}>
-                              {d.swept ? 'Süpürüldü' : `Kalan: ${fmtQty(d.remainQty)} adet (${fmtTL(d.remainTl)})`}
-                            </span>
+                      {drugCalc.paid > 0 && drugCalc.distributions && (
+                        <>
+                          <div>
+                            <label className={labelCls}>Tahsilat Tarihi</label>
+                            <input type="date" value={dPaidDate} onChange={e => setDPaidDate(e.target.value)} max={today} className={inputCls} />
                           </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
 
-                  {/* Enflasyon */}
-                  {drugCalc.hasInflation && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                      <label className="flex items-start gap-2 cursor-pointer">
-                        <input type="checkbox" checked={applyInflation} onChange={e => setApplyInflation(e.target.checked)} className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
-                        <div className="text-sm">
-                          <span className="font-semibold text-amber-800">Tüm satırlara enflasyon uygula</span>
-                          <p className="text-amber-700 mt-0.5">Girilen birim fiyat, güncel fiyattan düşük olan satırlarda güncel fiyat uygulanır.</p>
+                          {/* Orantılı dağılım preview */}
+                          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm space-y-1.5">
+                            <p className="font-semibold text-emerald-800 mb-2">Tahsilat Dağılımı</p>
+                            {drugCalc.distributions.filter(d => d.valid).map(d => (
+                              <div key={d.id} className="flex justify-between text-emerald-700">
+                                <span>{d.drug?.name || '?'}: -{fmtTL(d.paidShare)}</span>
+                                <span className={d.swept ? 'line-through text-slate-400' : 'font-bold'}>
+                                  {d.swept ? 'Süpürüldü' : `Kalan: ${fmtQty(d.remainQty)} adet (${fmtTL(d.remainTl)})`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {/* Enflasyon */}
+                      {drugCalc.hasInflation && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" checked={applyInflation} onChange={e => setApplyInflation(e.target.checked)} className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
+                            <div className="text-sm">
+                              <span className="font-semibold text-amber-800">Tüm satırlara enflasyon uygula</span>
+                              <p className="text-amber-700 mt-0.5">Girilen birim fiyat, güncel fiyattan düşük olan satırlarda güncel fiyat uygulanır.</p>
+                            </div>
+                          </label>
                         </div>
-                      </label>
+                      )}
                     </div>
                   )}
                 </>

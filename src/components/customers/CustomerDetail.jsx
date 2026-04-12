@@ -151,21 +151,33 @@ export default function CustomerDetail({ onBack }) {
                         <p className="font-bold text-red-600 text-xl">{fmtTL(d.tlValue)}</p>
                       </div>
 
-                      <div className="flex sm:flex-col gap-1.5 border-l border-slate-200 pl-4">
-                        <div className="flex gap-1.5">
-                          <button onClick={() => setHistoryDebtId(d.id)} title="Borç Geçmişini (Ekstre) Gör" className="p-2 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors flex items-center justify-center">
-                            <History className="w-4 h-4" />
-                          </button>
-
-                          <button onClick={() => onToggleLock(d.id)} title={d.isFixed ? "Kilidi Aç (Zamlardan Etkilenir)" : "Fiyatı Sabitle (Zamlardan Etkilenmez)"} className={`p-2 rounded-md transition-colors flex items-center justify-center ${d.isFixed ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                            {d.isFixed ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        <div className="flex gap-1.5 mt-1 sm:mt-0">
-                          <button onClick={() => { setReturnModalDebt(d); setReturnInputQty('1'); }} title="İade Al / Adet Düş" className="p-2 w-full rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 transition-colors flex items-center justify-center gap-2 font-medium text-sm">
-                            <Undo className="w-4 h-4" /> İade Al
-                          </button>
-                        </div>
+                      <div className="flex gap-2 border-l border-slate-200 pl-4 ml-2 flex-shrink-0">
+                        <button
+                          title="Borç Geçmişini Gör"
+                          onClick={() => setHistoryDebtId(d.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                        >
+                          <History className="w-3.5 h-3.5" /> Geçmiş
+                        </button>
+                        <button
+                          onClick={() => onToggleLock(d.id)}
+                          title={d.isFixed ? "Kilidi Aç" : "Fiyatı Sabitle"}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                            d.isFixed
+                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {d.isFixed ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                          {d.isFixed ? 'Sabit' : 'Serbest'}
+                        </button>
+                        <button
+                          onClick={() => { setReturnModalDebt(d); setReturnInputQty('1'); }}
+                          title="İade Al / Adet Düş"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                        >
+                          <Undo className="w-3.5 h-3.5" /> İade
+                        </button>
                       </div>
                     </div>
                   </li>

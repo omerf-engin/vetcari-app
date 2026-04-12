@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, Edit2, Trash2, Check, X } from 'lucide-react';
+import { Users, UserPlus, Edit2, Trash2, Check, X, SearchX } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 
 export default function CustomersView({ customers, serviceDebts, drugDebts, onSelect, onAddCustomer, onDeleteCustomer, onUpdateCustomerName }) {
@@ -46,9 +46,24 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCustomers.length === 0 && (
-          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-10 text-slate-500">Müşteri bulunamadı.</div>
-        )}
+        {customers.length === 0 ? (
+          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 text-slate-500">
+            <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <p className="font-semibold text-slate-600">Henüz müşteri eklenmemiş</p>
+            <p className="text-sm mt-1 mb-4">İlk müşterinizi eklemek için aşağıdaki butonu kullanın.</p>
+            <button
+              onClick={() => setIsAdding(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors mx-auto"
+            >
+              <UserPlus className="w-4 h-4" /> İlk Müşteriyi Ekle
+            </button>
+          </div>
+        ) : filteredCustomers.length === 0 ? (
+          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 text-slate-400">
+            <SearchX className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+            <p>&ldquo;<strong className="text-slate-600">{searchTerm}</strong>&rdquo; ile eşleşen müşteri bulunamadı.</p>
+          </div>
+        ) : null}
         {filteredCustomers.map(c => {
           const totalDebt = calculateTotalDebt(c.id);
           const netBalance = c.balance - totalDebt;
@@ -66,7 +81,7 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
                 ) : (
                   <>
                     <h3 className="text-lg font-semibold text-slate-800 group-hover:text-indigo-600 pr-4">{c.name}</h3>
-                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10" onClick={e => e.stopPropagation()}>
+                    <div className="flex gap-1.5 z-10" onClick={e => e.stopPropagation()}>
                        <button onClick={() => { setEditingId(c.id); setTempName(c.name); }} title="İsmi Düzenle" className="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
                        <button onClick={() => onDeleteCustomer(c.id, totalDebt, c.balance)} title="Müşteriyi Sil" className="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>

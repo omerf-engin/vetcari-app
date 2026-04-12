@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { TrendingUp, Lock, KeyRound } from 'lucide-react';
+import { Stethoscope, Mail, KeyRound } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../services/firebase';
+import { version } from '../../../package.json';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -28,7 +29,7 @@ export default function Login() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col items-center p-8 border-t-8 border-t-indigo-600">
         <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mb-4 shadow-sm">
-          <TrendingUp className="w-8 h-8" />
+          <Stethoscope className="w-8 h-8" />
         </div>
         <h1 className="text-2xl font-bold text-slate-800 tracking-tight text-center">VetCari Akıllı Defter</h1>
         <p className="text-sm text-slate-500 mb-8 text-center mt-2">Finansal dökümlerinizi güvenle saklayın.</p>
@@ -51,7 +52,7 @@ export default function Login() {
                 className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 pl-11 focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 font-medium text-slate-800" 
                 placeholder="ornek@vetcari.com" 
               />
-              <Lock className="w-5 h-5 text-slate-400 absolute left-4 top-3.5" />
+              <Mail className="w-5 h-5 text-slate-400 absolute left-4 top-3.5" />
             </div>
           </div>
           <div>
@@ -79,7 +80,7 @@ export default function Login() {
           </button>
         </form>
       </div>
-      <div className="fixed bottom-6 text-xs text-slate-400 font-medium">VetCari Akıllı Defter v1.0.0</div>
+      <div className="fixed bottom-6 text-xs text-slate-400 font-medium">{`VetCari Akıllı Defter v${version}`}</div>
     </div>
   );
 }

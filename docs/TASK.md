@@ -600,3 +600,82 @@ _8 — Test Kapsamasi:_
 
 **Notes:**
 Commit 1: `d897da2` — ana degisiklikler. Commit 2: `9d79cf9` — review sonrasi memoize duzeltmeleri (ToastContext + useCallback stabilizasyonu).
+
+---
+
+## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P2 |
+| **Depends on** | TASK-019 |
+
+**Deliverables:**
+- Dashboard'a tarih aralik secici: "Bu Ay", "Son 30 Gun", "Ozel Aralik" secenekleri
+- Secilen doneme gore `transactions` koleksiyonundan toplam tahsilat, yeni borc ve net degisim hesaplama
+- Mevcut "en cok borcu olan musteriler" listesini donemsel filtre ile guncelleme
+- Rapor verileri tablo/kart gorunumunde (harici grafik kutuphanesi kullanilmayacak)
+
+**Acceptance Criteria:**
+- "Bu Ay" secildiginde yalnizca o ayin tahsilat ve borc kayitlari gosterilir
+- Ozel aralik seciminde baslangic > bitis tarihi girilirse uyari gosterilir
+- `transactions` koleksiyonu query'si server-side `where` + `orderBy` ile yapilir (client-side filtreleme yok)
+- Mevcut dashboard widget'lari (toplam aktif borc, musteri sayisi) donemden etkilenmez; sadece yeni rapor alani filtreye duyarlidir
+- Test: doneme gore aggregation hesabi icin en az 2 unit test eklenir
+
+**Notes:**
+Veri zaten mevcut; yeni Firestore koleksiyonu gerekmez. `transactions` uzerinde composite index gerekebilir (`userId` + `timestamp`).
+
+---
+
+## TASK-021: PDF ve CSV Ekstre Disa Aktarma
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P2 |
+| **Depends on** | TASK-019 |
+
+**Deliverables:**
+- CustomerDetail sidebar'a "Ekstreyi Indir" butonu (PDF ve CSV secenekleri)
+- PDF: `@react-pdf/renderer` ile musteri adi, borc ozeti ve tarih sirali islem listesi
+- CSV: harici kutuphane olmadan `Blob` + `URL.createObjectURL` ile tarayici indirmesi
+- Isteğe bagli tarih aralik filtresi (varsayilan: tum islemler)
+
+**Acceptance Criteria:**
+- PDF; musteri adi, toplam borc, toplam tahsilat ve her islemin tarihi/aciklamasi/tutarini icerir
+- CSV; her satir bir islem, sutunlar: Tarih, Tur, Aciklama, Tutar
+- Tarih aralik filtresi uygulandiginda sadece o araliktaki islemler disa aktarilir
+- Bos ekstre (hic islem yoksa) durumunda kullaniciya toast ile bilgi verilir
+- PDF gorunumu Turkce tarih formatiyla (GG.AA.YYYY) render edilir
+
+**Notes:**
+`@react-pdf/renderer` bundle boyutunu ~200 KB arttirir; lazy import ile ilk yuklenme etkisi en aza indirilmeli. CSV export harici kutuphane gerektirmez; oncelikle CSV implemente edilebilir.
+
+---
+
+## TASK-022: Ilac Stok Takibi
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P3 |
+| **Depends on** | TASK-019 |
+
+**Deliverables:**
+- `drugs` Firestore koleksiyonuna `stock` (mevcut adet) ve `minStock` (kritik esik) alanlari eklenmesi
+- DrugsView'e her ilac icin stok giriş/duzenle alani
+- `addBulkDrugDebtOperations` icinde borc yazilirken ilgili ilacin stogunun otomatik dusurulmesi
+- Dashboard'a "Stok Kritik Ilaclar" widget'i (stok <= minStock olan ilaclar)
+
+**Acceptance Criteria:**
+- Ilac ekleme/duzenleme ekraninda `stock` ve `minStock` alanlari vardir; negatif giris engellenir
+- Ilac borcu kaydedildiginde stok miktari borcun toplam adedi kadar azalir (writeBatch icinde atomik)
+- Stok 0'a duserse kullaniciya uyari toast'i gosterilir ama islem engellenmez (uyari modunda kalir)
+- Dashboard widget'i sadece en az 1 ilac kritik esigi asmissa gosterilir
+- `stock` alani olmayan mevcut ilac kayitlari sorunsuz calisir (migration gerekmez, alan opsiyonel)
+- Test: stok dusurme ve kritik esik kontrolu icin en az 3 unit test eklenir
+
+**Notes:**
+Firestore migration gerekmez; `stock` alani yoksa `undefined` → stok takibi devre disi sayilir. Bu sayede mevcut veriler etkilenmez. En yuksek is yuklu task; Firestore write path degisiyor.

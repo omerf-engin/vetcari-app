@@ -1,6 +1,6 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 12 Nisan 2026 (Task #19 / Faz 10 mimari iyilestirme)
+> Son guncelleme: 12 Nisan 2026 (Task #22 / Faz 11 planlama)
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -142,10 +142,17 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 11: Gelecek (Nice-to-Have)
+## Faz 11: Raporlama ve Disa Aktarma — PLANLANDI
+
+- [ ] Donemsel finansal raporlama (Dashboard'a tarih filtresi + tahsilat/borc ozeti)
+- [ ] PDF ve CSV ekstre disa aktarma (musteriye yazili hesap ozeti)
+- [ ] Ilac stok takibi (otomatik stok dusumu, kritik esik uyarisi)
+
+> Ilgili tasklar: TASK-020, TASK-021, TASK-022
+
+---
+
+## Faz 12: Gelecek (Nice-to-Have)
 
 - [ ] Responsive ince ayarlar (mobil test)
-- [ ] Disa aktarma (CSV / PDF ekstre)
-- [ ] Tarih bazli raporlama
 - [ ] PWA destegi (telefona kurulabilir uygulama)
-- [ ] Ilac stok takibi

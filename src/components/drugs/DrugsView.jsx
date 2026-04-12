@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pill, Plus, Save, TrendingUp, Trash2 } from 'lucide-react';
+import { Pill, Plus, Save, Edit2, Trash2 } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 
 export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDrug }) {
@@ -38,7 +38,7 @@ export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDru
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50">
           {!isAdding ? (
-            <button onClick={() => setIsAdding(true)} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"><Plus className="w-4 h-4" /> Sisteme Yeni İlaç Tanımla</button>
+            <button onClick={() => setIsAdding(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"><Plus className="w-4 h-4" /> Yeni İlaç Ekle</button>
           ) : (
             <form onSubmit={handleAddSubmit} className="flex flex-col sm:flex-row gap-3 w-full">
               <input type="text" placeholder="İlaç Adı" value={newDrugName} onChange={(e) => setNewDrugName(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" autoFocus required />
@@ -82,7 +82,7 @@ export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDru
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-3">
-                        <button onClick={() => { setEditingId(drug.id); setTempPrice(drug.price); }} className="text-indigo-600 hover:text-indigo-800 flex items-center justify-end gap-1.5 font-semibold transition-colors"><TrendingUp className="w-4 h-4" /> Fiyatı Güncelle</button>
+                        <button onClick={() => { setEditingId(drug.id); setTempPrice(drug.price); }} className="text-indigo-600 hover:text-indigo-800 flex items-center justify-end gap-1.5 font-semibold transition-colors"><Edit2 className="w-4 h-4" /> Fiyatı Güncelle</button>
                         <button onClick={() => onDeleteDrug(drug.id)} title="İlacı Sistemden Sil" className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )}

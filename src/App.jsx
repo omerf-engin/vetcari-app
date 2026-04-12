@@ -235,6 +235,7 @@ export default function App() {
             serviceDebts={serviceDebts}
             drugDebts={drugDebts}
             onNavigate={(tab) => setActiveTab(tab)}
+            onSelectCustomer={(id) => { setSelectedCustomerId(id); setActiveTab('customerDetail'); }}
           />
         )}
 
