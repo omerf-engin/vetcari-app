@@ -22,7 +22,7 @@ export default function DebtModal({ mode, onClose }) {
   const [rows, setRows] = useState([{ id: crypto.randomUUID(), drugId: drugs[0]?.id || '', qty: '1', priceMode: 'unit', unitPrice: drugs[0]?.price ? String(drugs[0].price) : '' }]);
   const [dPaid, setDPaid] = useState('');
   const [dPaidDate, setDPaidDate] = useState(today);
-  const [applyInflation, setApplyInflation] = useState(false);
+  const [applyInflation, setApplyInflation] = useState(true);
   const [showServicePayment, setShowServicePayment] = useState(false);
   const [showDrugPayment, setShowDrugPayment] = useState(false);
 
@@ -391,19 +391,19 @@ export default function DebtModal({ mode, onClose }) {
                           </div>
                         </>
                       )}
+                    </div>
+                  )}
 
-                      {/* Enflasyon */}
-                      {drugCalc.hasInflation && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                          <label className="flex items-start gap-2 cursor-pointer">
-                            <input type="checkbox" checked={applyInflation} onChange={e => setApplyInflation(e.target.checked)} className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
-                            <div className="text-sm">
-                              <span className="font-semibold text-amber-800">Tüm satırlara enflasyon uygula</span>
-                              <p className="text-amber-700 mt-0.5">Girilen birim fiyat, güncel fiyattan düşük olan satırlarda güncel fiyat uygulanır.</p>
-                            </div>
-                          </label>
+                  {/* Enflasyon — kısmi tahsilattan bağımsız, her zaman görünür */}
+                  {drugCalc.hasInflation && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" checked={applyInflation} onChange={e => setApplyInflation(e.target.checked)} className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
+                        <div className="text-sm">
+                          <span className="font-semibold text-amber-800">Tüm satırlara enflasyon uygula</span>
+                          <p className="text-amber-700 mt-0.5">Girilen birim fiyat, güncel fiyattan düşük olan satırlarda güncel fiyat uygulanır.</p>
                         </div>
-                      )}
+                      </label>
                     </div>
                   )}
                 </>
