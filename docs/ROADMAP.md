@@ -153,8 +153,9 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] Geçmiş borç modalında tahsilat alanları collapsible toggle'a alındı
 - [x] CustomersView ve Dashboard boş durumlar iyileştirildi (ikon + CTA)
 - [x] DrugsView "Yeni İlaç Ekle" birincil buton stiline kavuştu
+- [x] Bug fix: gecmis borc enflasyon checkbox'i kismi tahsilattan bagimsiz her zaman gorunur + varsayilan secili (TASK-025)
 
-> Ilgili tasklar: TASK-024
+> Ilgili tasklar: TASK-024, TASK-025
 
 ---
 

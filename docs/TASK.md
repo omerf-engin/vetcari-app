@@ -639,6 +639,35 @@ Commit 1: `fcd3e6e` — 11 UI/UX sorununun implementasyonu. Commit 2: `69ea6c4` 
 
 ---
 
+## TASK-025: Gecmis Borc Enflasyon Checkbox Gorunmeme Bugu (Bug Fix)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-024 |
+
+**Problem:**
+Gecmis borc ekleme modalinda (ilac sekmesi) kullanici girdigi birim fiyat, ilacin guncel fiyatindan dusuk olsa bile ekstreye "Enflasyon Guncellemesi" logu otomatik yazilmiyordu. Kullanici kismi tahsilat toggle'ini acmadigi surece enflasyon checkbox'i UI'da hic gorunmuyordu.
+
+**Root Cause:**
+TASK-024 kapsaminda tahsilat alanlari collapsible toggle'a alindiginda (Kismi Tahsilat Ekle), "Tum satirlara enflasyon uygula" checkbox'i yanlislikla bu toggle'in `{showDrugPayment && (...)}` blogu icine yerlesmisti. Kullanici kismi tahsilat eklemezse checkbox render edilmiyor, `applyInflation` `false` kaliyor ve `addBulkDrugDebtOperations` icindeki `applyInflation && item.drug.price > item.unitPrice` kosulu tetiklenmiyordu.
+
+**Fix:**
+1. `DebtModal.jsx` — Enflasyon checkbox blogu `showDrugPayment` icerisinden cikarilip `isPast` blogunun ust seviyesine tasindi. Artik `drugCalc.hasInflation` true oldugu surece (yani herhangi bir satirda girilen birim fiyat < guncel ilac fiyati), kismi tahsilat acik olsun olmasin checkbox her zaman gorunuyor.
+2. `applyInflation` state varsayilani `false` → `true`. Gecmis borc eklendiginde enflasyon uygulamasi opt-out davranisina gecti (kullanici istemezse kapatabilir).
+
+**Kabul Kriterleri:**
+- Gecmis borc ekleme: guncel fiyati 100 TL olan ilac icin 80 TL birim fiyat girildiginde "Tum satirlara enflasyon uygula" checkbox'i goruntuleniyor (kismi tahsilat acik/kapali farketmez)
+- Checkbox varsayilan olarak isaretli geliyor
+- Kaydedildiginde ekstrede "Gecmis Ilac Borcu" + "Enflasyon Guncellemesi" transaction loglari birlikte yer aliyor
+- Lint: 0 error 0 warning, Test: 48/48, Build: basarili
+
+**Notes:**
+Commit: `89e14e5`. Tek dosya degisikligi (`DebtModal.jsx`), 12/12 satir diff. Backend (`addBulkDrugDebtOperations`) dokunulmadi; bug yalnizca UI katmaninda idi.
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |
