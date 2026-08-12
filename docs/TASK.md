@@ -672,7 +672,7 @@ Commit: `89e14e5`. Tek dosya degisikligi (`DebtModal.jsx`), 12/12 satir diff. Ba
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P1 |
 | **Depends on** | TASK-017, TASK-025 |
 
@@ -687,21 +687,28 @@ Commit: `89e14e5`. Tek dosya degisikligi (`DebtModal.jsx`), 12/12 satir diff. Ba
 - Migration yok: `batchId` alani olmayan mevcut kayitlar `batchId ?? doc.id` fallback'i ile tek kalemlik grup sayilir
 
 **2. Grup seviyesi backend operasyonlari (`firestoreOperations.js`)**
-- `toggleBatchLockOperations(debts, userId)` — gruptaki tum dokumanlarin `isFixed` degerini tek `writeBatch` icinde hedef degere set eder, her borc icin ayri log yazar. Karisik durumda (bazisi sabit, bazisi serbest) hedef deger `true` (hepsini sabitle)
-- `returnBatchOperations(debts, userId)` — grubun tamamini iade eder: her dokuman silinir, her kalem icin `Grup Iadesi` logu yazilir. Kismi iade kalem bazinda kalir (mevcut `returnDrug` degismez). Avans (`balance`) yazilmaz — grup iadesi yalnizca acik borcu sifirlar
-- Her iki operasyon da tek `writeBatch` ile atomik olmali
+- `toggleBatchLockOperations(debts, userId)` — gruptaki tum dokumanlarin `isFixed` degerini tek `writeBatch` icinde hedef degere set eder. Hepsi sabitse tumu serbest birakilir, aksi halde (karisik veya hepsi serbest) tumu sabitlenir. **Zaten hedef durumda olan kalemler atlanir** — ekstreye gereksiz log dusmez
+- `returnBatchOperations(items, customerBalance, userId)` — `[{ debt, returnQty }]` listesiyle **kalem secimli** toplu iade. Kismi iade, tam iade, supurucu ve fazla iade (avans) kurallari tekli iadeyle aynidir; avanslar birikimli hesaplanip tek `customers` update'i yazilir
+- Tekli `returnDrug` ile ortak mantik `applyReturnToBatch` yardimcisina cikarildi (kod catallanmasi yok)
+- Her iki operasyon da tek `writeBatch` ile atomik
 
 **3. CustomerDetail — gruplanmis kart**
 - `extreDDebts` uzerinde `batchId` bazli `useMemo` gruplama; gruplar `date` desc, esitlikte `createdAt` desc sirali
 - Kart katlanabilir, **varsayilan kapali**. Ozet satiri: tarih · N kalem · grup toplami (TL) · chevron
 - Grupta en az bir kalem `isFixed` ise ozet satirinda SABIT rozeti
 - Acildiginda kalem satirlari (ilac adi, kalan adet, baz fiyat, guncel tutar) ve kalem eylemleri (Gecmis / Sabit / Iade) bugunku haliyle korunur
-- Grup eylemleri kart basliginda: **Tumunu Sabitle / Serbest Birak**, **Grubu Iade Et** (confirm modali zorunlu), **Grup Ekstresi**
+- Grup eylemleri kart basliginda: **Tumunu Sabitle / Serbest Birak**, **Toplu Iade**, **Grup Ekstresi**
 - Tek kalemlik grup da ayni kart formatinda gosterilir ("1 kalem")
+- Yeni `BatchReturnModal.jsx`: gruptaki kalemler checkbox + adet input ile listelenir, "Tumunu sec", canli toplam onizlemesi, mevcut borctan fazla girildiginde avans uyarisi. Mevcut tek-kalem iade modali degistirilmedi
 
 **4. HistoryModal — `variant='batch'`**
 - Gruptaki tum `debtId`'lerin loglari tek pencerede, kalem basliklariyla (ilac adi) kumelenmis
-- Mevcut `variant='customer'` gruplama mantigi (`logGroups`) yeniden kullanilir; `sourceLabel` ilac adi olur
+- Kumeleme anahtari `log.groupKey ?? log.debtId`, baslik `log.groupLabel ?? log.sourceLabel` olarak genellestirildi
+- Cok kalemli gruplarda her log kartinda kaynak ilac adi gosterilir (`showSourceLabels`)
+
+**4b. Genel ekstre (`variant='customer'`) islem gruplamasi**
+- Loglar artik islem basliklari altinda toplanir: cok kalemli islemde `12.08.2026 · 3 kalemlik islem`, tek kalemlikte ilac adi
+- Hizmet borclari kendi basliklarinda; cozumlenemeyen (silinmis borc) loglari `Kapali / silinmis borclar` grubunda
 
 **5. PaymentModal — gorsel gruplama**
 - Dagitim listesi ayni `batchId` gruplari altinda gosterilir; grup basliginda grup toplami ve gruba dusen toplam dagitim yer alir
@@ -713,27 +720,29 @@ Commit: `89e14e5`. Tek dosya degisikligi (`DebtModal.jsx`), 12/12 satir diff. Ba
 - Tek modalda 3 ilac girildiginde CustomerDetail'de 3 ayri kart degil, "3 kalem" yazan tek katlanmis kart gorunur
 - Farkli zamanlarda girilen borclar ayri kartlarda kalir; ayni gun icinde iki ayri giris iki ayri kart uretir (`createdAt` ayrimi)
 - `batchId` alani olmayan eski kayitlar hatasiz sekilde tek kalemlik kart olarak render edilir (konsol hatasi yok)
-- "Tumunu Sabitle" sonrasi gruptaki her kalem `isFixed: true` olur ve her biri icin ekstrede ayri log bulunur
-- "Grubu Iade Et" onaylandiginda gruptaki tum `drugDebts` dokumanlari silinir, musteri `balance` degeri degismez
+- "Tumunu Sabitle" sonrasi gruptaki her kalem `isFixed: true` olur ve durumu degisen her kalem icin ekstrede log bulunur
+- Toplu Iade modalinda secilen kalemler iade edilir, secilmeyenlere dokunulmaz; fazla iade girildiginde avans birikimli yazilir
 - Grup Ekstresi penceresi gruptaki tum kalemlerin loglarini ilac adina gore kumelenmis gosterir
 - PaymentModal'da gruplama yalnizca gorseldir: ayni tutar icin dagitim sonuclari gruplama oncesiyle birebir ayni kalir
 - Toplam borc hesaplari (`totalDrugDebt`, `netDebt`, Dashboard widget'lari) gruplama sonrasi degismez
 - Lint: 0 error 0 warning · Test: mevcut testler + yeni testler gecer · Build: basarili
 
-### Test Plani (en az 6 yeni unit test)
+### Test Plani
 
-1. `addBulkDrugDebtOperations` — tek cagrida yazilan tum dokumanlar ayni `batchId`'ye sahip
-2. `addBulkDrugDebtOperations` — iki ayri cagri farkli `batchId` uretir
-3. `addBulkDrugDebtOperations` — supurulen (10 TL alti) kalem yazilmaz ama grubun kalan kalemleri ayni `batchId`'yi korur
-4. `toggleBatchLockOperations` — karisik `isFixed` durumunda hepsi `true` olur, log sayisi kalem sayisina esit
-5. `returnBatchOperations` — tum dokumanlar silinir, `customers` dokumani guncellenmez
-6. Gruplama yardimcisi — `batchId` olmayan kayitlar tek kalemlik gruplara ayrilir, siralama `date`+`createdAt` desc
+`src/utils/debtGrouping.test.js` (yeni, 9 test) — ayni batchId tek grupta toplanir · legacy kayitlar tek kalemlik gruplara ayrilir · karisik veri · `date` desc siralama · esitlikte `createdAt` desc · `createdAt` yoksa hata vermez · grup toplami 0.01 TL hassasiyetinde · `tlValue` kullanimi · `hasFixed`/`allFixed` bayraklari
+
+`src/services/firestoreOperations.test.js` (genisletme) — tek cagrida ortak `batchId`+`createdAt` · iki cagri farkli `batchId` · supurulen kalem yazilmaz, kalanlar `batchId`'yi korur · bugun/gecmis log basliklari · `toggleBatchLockOperations` karisik ve hepsi-sabit senaryolari · `returnBatchOperations` secili kalem, coklu kalem, supurucu, birikimli avans, avanssiz durum, bos liste
+
+Kaldirilan `addPastDrugDebtOperations` testleri (ozel birim fiyat, enflasyon, kismi tahsilat, supurucu, validasyon) `addBulkDrugDebtOperations` uzerine tasindi.
+
+**Sonuc:** Test 48 → 72 · Lint 0 error 0 warning · Build basarili
 
 **Notes:**
-- `addDrugDebtOperations` (`firestoreOperations.js:244`) ve `addPastDrugDebtOperations` (`:423`) artik UI'dan cagrilmiyor, yalnizca testlerde referans ediliyor. Bu fonksiyonlar `batchId` yazmayacagi icin ileride yeniden baglanirsa gruplamayi bozar — bu task kapsaminda ya `batchId` destegi eklenmeli ya da testleriyle birlikte kaldirilmali. Onerilen: kaldirmak (olu kod)
+- Commitler: `1160632` (veri modeli + grup operasyonlari + testler), `484edb8` (CustomerDetail karti + toplu iade + ekstre gruplamasi), `fd6052e` (PaymentModal)
+- Olu kod kaldirildi: `addDrugDebtOperations` ve `addPastDrugDebtOperations` UI'dan cagrilmiyordu ve `batchId` yazmadiklari icin ileride yeniden baglanirlarsa gruplamayi sessizce bozarlardi. `addBulkDrugDebtOperations`'in onceden hic testi yoktu; tasima ile canli kod yolunun kapsami artti
 - Firestore index gerekmez; gruplama tamamen client-side, `useFirestore` zaten tum `drugDebts` kayitlarini `onSnapshot` ile cekiyor
 - Hizmet borclari (`serviceDebts`) bu task kapsami disinda — girisleri zaten tek kalem. Ileride hizmete de toplu giris gelirse ayni `batchId` deseni uygulanabilir
-- Onerilen commit bolumlemesi: (1) veri modeli + backend operasyonlar + testler, (2) CustomerDetail gruplanmis kart + HistoryModal batch variant, (3) PaymentModal gruplama
+- **Acik temizlik:** Tek-kalem iade modali (CustomerDetail icinde inline) ile `BatchReturnModal` benzer isi yapiyor; regresyon riski almamak icin birlestirilmedi. Ileride tek modalda toplanabilir
 
 ---
 

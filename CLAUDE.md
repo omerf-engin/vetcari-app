@@ -31,7 +31,7 @@ Custom hooks:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections with error callbacks (connection drop sets `dataLoading=false` instead of infinite spinner), returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
-- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onAddServiceDebt, onDeleteServiceDebt, onApplyPayment, onAddPastServiceDebt, onAddBulkDrugDebt }` from `CustomerContext`
+- `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onToggleBatchLock, onReturnBatch, onAddServiceDebt, onDeleteServiceDebt, onApplyPayment, onAddPastServiceDebt, onAddBulkDrugDebt }` from `CustomerContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
 
@@ -46,6 +46,8 @@ Custom hooks:
 - Payment distribution spreads a payment across multiple debts. Both service and drug debt payments write `Tahsilat` transaction logs. Rounding uses `Math.round(x * 100) / 100` (0.01 TL precision) consistently across modal and backend
 - Past-dated debts can be entered with custom pricing, partial payment deduction, and optional inflation application
 - Transaction logs use `dateOverride` for past dates while `timestamp` tracks actual creation time
+- Drug debts written in the same `addBulkDrugDebtOperations` call share a `batchId` (+ `createdAt`), grouping them as one transaction across CustomerDetail, HistoryModal and PaymentModal. Records without `batchId` (pre-TASK-026) fall back to their doc id as a single-item group — no migration needed. Grouping logic lives in `utils/debtGrouping.js`
+- PaymentModal grouping is render-only: the distribution waterfall carries rounding remainder in array order, so `distribution`, `extreDDebts` order and `manualOverrides` keys must never be reordered or re-keyed
 
 ## Component layout
 

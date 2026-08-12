@@ -95,6 +95,18 @@ Tek işlemde birden fazla ilaç borcu eklenebilir (`addBulkDrugDebtOperations`):
 - Enflasyon ve süpürücü satır bazında uygulanır
 - Bugün veya geçmiş tarih modunda çalışır (`date` parametresi)
 
+### İşlem Bazlı Gruplama (batchId)
+
+Aynı `addBulkDrugDebtOperations` çağrısında yazılan tüm `drugDebts` dokümanları ortak bir `batchId` ve `createdAt` taşır. Bu sayede "bu borçlar aynı işlemde açıldı" bilgisi kalıcılaşır.
+
+- **Gruplama:** `groupDrugDebtsByBatch` (`utils/debtGrouping.js`) saf fonksiyonu; anahtar `batchId || doc.id`
+- **Geriye dönük uyumluluk:** `batchId` alanı olmayan eski kayıtlar kendi doküman id'leriyle tek kalemlik gruplara düşer — migration gerekmez
+- **Sıralama:** Gruplar `date` desc, aynı tarihte `createdAt` desc
+- **Grup operasyonları:** `toggleBatchLockOperations` (hepsi sabitse tümünü serbest bırakır, aksi halde tümünü sabitler; yalnızca durumu değişen kalemlere log yazar) ve `returnBatchOperations` (kalem seçimli toplu iade; avanslar birikimli hesaplanıp tek `customers` update'i yazılır)
+- **Ortak iade mantığı:** Tekli (`returnDrug`) ve toplu iade aynı `applyReturnToBatch` yardımcısını kullanır — süpürücü ve fazla iade kuralları çatallanmaz
+- **Görünüm:** CustomerDetail'de katlanabilir kart (varsayılan kapalı), HistoryModal'da `variant='batch'` işlem ekstresi, genel ekstrede işlem başlıkları, PaymentModal'da grup başlıklı dağıtım tablosu
+- **Tahsilat kısıtı:** PaymentModal'daki gruplama yalnızca render katmanındadır. Otomatik dağıtım şelalesi dizi sırasına göre yuvarlama artığı taşıdığı için `distribution` hesabı, `extreDDebts` sırası ve `manualOverrides` anahtarları değiştirilmez; satırlar id üzerinden okunur
+
 ### Ekstre Sıralama Kuralı
 
 Ekstre her zaman `timestamp` alanına göre azalan sırada (`desc`) gösterilir:
@@ -275,6 +287,8 @@ erDiagram
         number maxPrice "Baz fiyat (₺)"
         boolean isFixed "Zam koruması aktif mi"
         string date "Borç tarihi (YYYY-MM-DD)"
+        string batchId "Aynı işlemde açılan borçların ortak kimliği (eski kayıtlarda yok)"
+        number createdAt "Gerçek oluşturma zamanı (ms) — aynı gün içindeki işlemleri ayırır"
         string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 

@@ -159,13 +159,18 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10+++: Islem Bazli Borc Gruplama — PLANLANDI
+## Faz 10+++: Islem Bazli Borc Gruplama — TAMAMLANDI
 
-- [ ] `drugDebts` dokumanlarina `batchId` + `createdAt` alanlari (migration gerekmez, fallback'li)
-- [ ] Grup seviyesi backend operasyonlari: toplu sabitleme, grup iadesi (atomik writeBatch)
-- [ ] CustomerDetail: ayni islemde girilen kalemler tek katlanabilir kart altinda (varsayilan kapali)
-- [ ] HistoryModal `variant='batch'`: grup ekstresi tek pencerede
-- [ ] PaymentModal: dagitim listesi gorsel olarak gruplanir (dagitim mantigi degismez)
+- [x] `drugDebts` dokumanlarina `batchId` + `createdAt` alanlari (migration gerekmez, fallback'li)
+- [x] Grup seviyesi backend operasyonlari: toplu sabitleme, kalem secimli toplu iade (atomik writeBatch)
+- [x] Ortak `applyReturnToBatch` yardimcisi — tekli ve toplu iade ayni kod yolunu kullanir
+- [x] CustomerDetail: ayni islemde girilen kalemler tek katlanabilir kart altinda (varsayilan kapali)
+- [x] Yeni BatchReturnModal: kalem secimli toplu iade, canli tutar onizlemesi
+- [x] HistoryModal `variant='batch'`: islem ekstresi tek pencerede
+- [x] Genel ekstre islem basliklari altinda gruplandi
+- [x] PaymentModal: dagitim listesi gorsel olarak gruplandi (dagitim mantigi degismedi)
+- [x] Olu kod temizligi: addDrugDebtOperations, addPastDrugDebtOperations kaldirildi
+- [x] Test 48 → 72
 
 > Ilgili tasklar: TASK-026
 
