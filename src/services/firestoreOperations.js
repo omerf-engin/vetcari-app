@@ -265,28 +265,6 @@ export const returnBatchOperations = async (items, customerBalance, userId) => {
   await batch.commit();
 };
 
-export const addServiceDebtOperations = async (customerId, desc, amount, userId) => {
-  if (amount <= 0) return;
-  const trimmed = desc.trim();
-  if (!trimmed) return;
-  const batch = writeBatch(db);
-  const debtRef = doc(collection(db, 'serviceDebts'));
-  const dateStr = new Date().toISOString().split('T')[0];
-  batch.set(debtRef, {
-    customerId,
-    desc: trimmed,
-    amount,
-    date: dateStr,
-    userId
-  });
-  const logRef = doc(collection(db, 'transactions'));
-  batch.set(
-    logRef,
-    createLog(debtRef.id, 'Hizmet Borcu', `${trimmed} — ${fmtTL(amount)} tutarında hizmet borcu eklendi.`, 'info', customerId, undefined, userId)
-  );
-  await batch.commit();
-};
-
 export const deleteServiceDebtOperations = async (debtId, userId) => {
   const debtRef = doc(db, 'serviceDebts', debtId);
   const snap = await getDoc(debtRef);
@@ -313,26 +291,63 @@ export const deleteServiceDebtOperations = async (debtId, userId) => {
 };
 
 /**
- * Aynı işlemde girilen ilaç kalemlerini tek atomik yazımda borç olarak açar.
- * Gruptaki tüm dokümanlar ortak bir `batchId` taşır; `createdAt` aynı güne düşen
- * iki ayrı işlemi kronolojik olarak ayırt etmek için yazılır.
+ * Bir hizmet borcunu verilen batch'e ekler (bugün veya geçmiş tarihli).
+ * @returns {boolean} batch'e bir şey yazıldıysa true
  */
-export const addBulkDrugDebtOperations = async (customerId, items, date, paidAmount, paidDate, applyInflation, userId) => {
-  if (!items || items.length === 0) return;
-  const batch = writeBatch(db);
-  const isToday = date === new Date().toISOString().split('T')[0];
-  const batchId = doc(collection(db, 'drugDebts')).id;
-  const createdAt = Date.now();
+const appendServiceDebtToBatch = (batch, ctx) => {
+  const { customerId, desc, amount, date, isToday, paidAmount = 0, paidDate, batchId, createdAt, userId } = ctx;
 
-  const grandTotal = items.reduce((sum, it) => sum + Math.round(it.qty * it.unitPrice * 100) / 100, 0);
-  if (grandTotal <= 0) return;
-  if (paidAmount > 0 && paidAmount >= grandTotal) return;
+  if (!(amount > 0)) return false;
+  const trimmed = (desc || '').trim();
+  if (!trimmed) return false;
+  if (paidAmount >= amount) return false;
+
+  const debtRef = doc(collection(db, 'serviceDebts'));
+  let finalAmount = amount;
+  let isSwept = false;
+
+  const logRef1 = doc(collection(db, 'transactions'));
+  batch.set(logRef1, createLog(debtRef.id, isToday ? 'Hizmet Borcu' : 'Geçmiş Hizmet Borcu', `${trimmed} — ${fmtTL(amount)} tutarında hizmet borcu eklendi.`, 'info', customerId, undefined, userId, isToday ? undefined : date));
+
+  if (paidAmount > 0) {
+    finalAmount = Math.round((amount - paidAmount) * 100) / 100;
+    if (finalAmount < 0) finalAmount = 0;
+    const logRef2 = doc(collection(db, 'transactions'));
+    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. Kalan borç: ${fmtTL(finalAmount)}.`, 'success', customerId, undefined, userId, paidDate));
+
+    if (finalAmount <= 10) {
+      isSwept = true;
+      const logRef3 = doc(collection(db, 'transactions'));
+      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId));
+    }
+  }
+
+  if (!isSwept) {
+    batch.set(debtRef, { customerId, desc: trimmed, amount: finalAmount, date, batchId, createdAt, userId });
+  }
+
+  return true;
+};
+
+/**
+ * Aynı işlemde girilen ilaç kalemlerini verilen batch'e ekler.
+ * Kısmi tahsilat toplam tutara orantılı dağıtılır; son geçerli satır yuvarlama farkını alır.
+ * @returns {boolean} batch'e bir şey yazıldıysa true
+ */
+const appendDrugItemsToBatch = (batch, ctx) => {
+  const { customerId, items, date, isToday, paidAmount = 0, paidDate, applyInflation, batchId, createdAt, userId } = ctx;
+
+  const valid = (items || []).filter(it => it?.drug && it.qty > 0 && it.unitPrice > 0);
+  if (valid.length === 0) return false;
+
+  const grandTotal = valid.reduce((sum, it) => sum + Math.round(it.qty * it.unitPrice * 100) / 100, 0);
+  if (grandTotal <= 0) return false;
+  if (paidAmount > 0 && paidAmount >= grandTotal) return false;
 
   let paidRemaining = paidAmount || 0;
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.qty <= 0 || item.unitPrice <= 0) continue;
+  for (let i = 0; i < valid.length; i++) {
+    const item = valid[i];
 
     const debtRef = doc(collection(db, 'drugDebts'));
     const itemTotal = Math.round(item.qty * item.unitPrice * 100) / 100;
@@ -344,7 +359,7 @@ export const addBulkDrugDebtOperations = async (customerId, items, date, paidAmo
     batch.set(logRef1, createLog(debtRef.id, isToday ? 'Borç Açıldı' : 'Geçmiş İlaç Borcu', `${fmtQty(item.qty)} adet × ${fmtTL(item.unitPrice)} = ${fmtTL(itemTotal)} borç eklendi.`, 'info', customerId, item.drug.id, userId, isToday ? undefined : date));
 
     if (paidRemaining > 0 && grandTotal > 0) {
-      const isLast = i === items.length - 1;
+      const isLast = i === valid.length - 1;
       const share = isLast ? paidRemaining : Math.round((itemTotal / grandTotal) * paidAmount * 100) / 100;
       const actualShare = Math.min(share, itemTotal, paidRemaining);
 
@@ -379,6 +394,67 @@ export const addBulkDrugDebtOperations = async (customerId, items, date, paidAmo
     }
   }
 
+  return true;
+};
+
+/**
+ * Bir ziyarette girilen hizmet ve ilaç kalemlerini **tek atomik yazımda** borç olarak açar.
+ * Yazılan tüm dokümanlar (hizmet + ilaç) ortak bir `batchId` taşır; `createdAt` aynı güne
+ * düşen iki ayrı işlemi kronolojik olarak ayırt eder.
+ *
+ * Bölümler birbirinden bağımsız doğrulanır: geçersiz bir hizmet girişi, geçerli ilaç
+ * kalemlerinin yazılmasını engellemez. Hiçbir bölüm yazmadıysa commit edilmez.
+ *
+ * @param {object} payload
+ * @param {string} payload.date — işlem tarihi (YYYY-MM-DD); bugünse "bugünkü borç" logları yazılır
+ * @param {{desc: string, amount: number, paidAmount?: number, paidDate?: string}|null} payload.service
+ * @param {Array<{drug: object, qty: number, unitPrice: number}>} payload.drugItems
+ */
+export const addDebtTransactionOperations = async (customerId, payload, userId) => {
+  const {
+    date,
+    service = null,
+    drugItems = [],
+    drugPaidAmount = 0,
+    drugPaidDate = null,
+    applyInflation = false
+  } = payload || {};
+
+  const today = new Date().toISOString().split('T')[0];
+  const effectiveDate = date || today;
+  const common = {
+    customerId,
+    date: effectiveDate,
+    isToday: effectiveDate === today,
+    batchId: doc(collection(db, 'drugDebts')).id,
+    createdAt: Date.now(),
+    userId
+  };
+
+  const batch = writeBatch(db);
+  let wrote = false;
+
+  if (service) {
+    wrote = appendServiceDebtToBatch(batch, {
+      ...common,
+      desc: service.desc,
+      amount: service.amount,
+      paidAmount: service.paidAmount || 0,
+      paidDate: service.paidDate
+    }) || wrote;
+  }
+
+  if (drugItems.length > 0) {
+    wrote = appendDrugItemsToBatch(batch, {
+      ...common,
+      items: drugItems,
+      paidAmount: drugPaidAmount,
+      paidDate: drugPaidDate,
+      applyInflation
+    }) || wrote;
+  }
+
+  if (!wrote) return;
   await batch.commit();
 };
 
@@ -439,40 +515,6 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
 
   currentBalance = Math.round(currentBalance * 100) / 100;
   batch.update(doc(db, 'customers', customer.id), { balance: currentBalance });
-
-  await batch.commit();
-};
-
-export const addPastServiceDebtOperations = async (customerId, desc, amount, date, paidAmount, paidDate, userId) => {
-  if (amount <= 0) return;
-  if (paidAmount >= amount) return;
-  const trimmed = desc.trim();
-  if (!trimmed) return;
-
-  const batch = writeBatch(db);
-  const debtRef = doc(collection(db, 'serviceDebts'));
-  let finalAmount = amount;
-  let isSwept = false;
-
-  const logRef1 = doc(collection(db, 'transactions'));
-  batch.set(logRef1, createLog(debtRef.id, 'Geçmiş Hizmet Borcu', `${trimmed} — ${fmtTL(amount)} tutarında hizmet borcu eklendi.`, 'info', customerId, undefined, userId, date));
-
-  if (paidAmount > 0) {
-    finalAmount = Math.round((amount - paidAmount) * 100) / 100;
-    if (finalAmount < 0) finalAmount = 0;
-    const logRef2 = doc(collection(db, 'transactions'));
-    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. Kalan borç: ${fmtTL(finalAmount)}.`, 'success', customerId, undefined, userId, paidDate));
-
-    if (finalAmount <= 10) {
-      isSwept = true;
-      const logRef3 = doc(collection(db, 'transactions'));
-      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId));
-    }
-  }
-
-  if (!isSwept) {
-    batch.set(debtRef, { customerId, desc: trimmed, amount: finalAmount, date, userId });
-  }
 
   await batch.commit();
 };

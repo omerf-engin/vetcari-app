@@ -20,11 +20,9 @@ import {
   toggleBatchLockOperations,
   returnDrug,
   returnBatchOperations,
-  addServiceDebtOperations,
   deleteServiceDebtOperations,
-  addBulkDrugDebtOperations,
-  applyPaymentOperations,
-  addPastServiceDebtOperations
+  addDebtTransactionOperations,
+  applyPaymentOperations
 } from './services/firestoreOperations';
 
 export default function App() {
@@ -154,11 +152,6 @@ export default function App() {
     catch (err) { handleError(err, 'Toplu İade'); }
   }, [customers, currentUser, toast, handleError]);
 
-  const addServiceDebt = useCallback(async (customerId, desc, amount) => {
-    try { await addServiceDebtOperations(customerId, desc, amount, currentUser.uid); }
-    catch (err) { handleError(err, 'Hizmet Borcu Ekleme'); }
-  }, [currentUser, handleError]);
-
   const deleteServiceDebt = useCallback(async (debtId) => {
     const ok = await confirm(
       "Hizmet Kaydı İptali",
@@ -170,21 +163,20 @@ export default function App() {
     }
   }, [confirm, currentUser, handleError]);
 
-  const addBulkDrugDebt = useCallback(async (customerId, items, date, paidAmount, paidDate, applyInflation) => {
-    const resolvedItems = items.map(item => {
-      const drug = drugs.find(d => String(d.id) === String(item.drugId));
+  /** Bir ziyarette girilen hizmet ve ilaç kalemlerini tek atomik işlem olarak yazar. */
+  const addDebtTransaction = useCallback(async (customerId, payload) => {
+    const resolvedItems = (payload.drugItems || []).map(row => {
+      const drug = drugs.find(d => String(d.id) === String(row.drugId));
       if (!drug) return null;
-      return { drug, qty: item.qty, unitPrice: item.unitPrice };
+      return { drug, qty: row.qty, unitPrice: row.unitPrice };
     }).filter(Boolean);
-    if (resolvedItems.length === 0) return;
-    try { await addBulkDrugDebtOperations(customerId, resolvedItems, date, paidAmount, paidDate, applyInflation, currentUser.uid); }
-    catch (err) { handleError(err, 'Toplu İlaç Borcu'); }
-  }, [drugs, currentUser, handleError]);
 
-  const addPastServiceDebt = useCallback(async (customerId, desc, amount, date, paidAmount, paidDate) => {
-    try { await addPastServiceDebtOperations(customerId, desc, amount, date, paidAmount, paidDate, currentUser.uid); }
-    catch (err) { handleError(err, 'Geçmiş Hizmet Borcu'); }
-  }, [currentUser, handleError]);
+    if (!payload.service && resolvedItems.length === 0) return;
+
+    try {
+      await addDebtTransactionOperations(customerId, { ...payload, drugItems: resolvedItems }, currentUser.uid);
+    } catch (err) { handleError(err, 'Borç Ekleme'); }
+  }, [drugs, currentUser, handleError]);
 
   const applyPayment = useCallback(async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
@@ -208,15 +200,13 @@ export default function App() {
       transactions: custTransactions,
       onToggleLock: toggleDebtLockHandler, onReturnDrug: handleDrugReturn,
       onToggleBatchLock: toggleBatchLockHandler, onReturnBatch: handleBatchReturn,
-      onAddServiceDebt: (desc, amt) => addServiceDebt(selectedCustomerId, desc, amt),
       onDeleteServiceDebt: deleteServiceDebt,
-      onAddBulkDrugDebt: (items, date, paidAmount, paidDate, applyInflation) => addBulkDrugDebt(selectedCustomerId, items, date, paidAmount, paidDate, applyInflation),
+      onAddDebtTransaction: (payload) => addDebtTransaction(selectedCustomerId, payload),
       onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
-      onAddPastServiceDebt: (desc, amount, date, paidAmount, paidDate) => addPastServiceDebt(selectedCustomerId, desc, amount, date, paidAmount, paidDate),
     };
   }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
       toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
-      addServiceDebt, deleteServiceDebt, addBulkDrugDebt, applyPayment, addPastServiceDebt]);
+      deleteServiceDebt, addDebtTransaction, applyPayment]);
 
   if (loading) {
     return (

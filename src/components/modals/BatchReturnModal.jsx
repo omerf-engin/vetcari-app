@@ -4,12 +4,15 @@ import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 
 /**
  * Aynı işlemde açılmış ilaç borçlarından seçilenleri toplu iade eder.
- * @param {object} group — groupDrugDebtsByBatch çıktısındaki bir grup (items zenginleştirilmiş satırlar)
+ * Hizmet kalemleri iade edilmez (kendi Sil butonuyla iptal edilir), bu yüzden listelenmez.
+ * @param {object} group — groupDebtsByBatch çıktısındaki bir grup
  * @param {(items: Array<{debt: object, returnQty: number}>) => void} onConfirm
  */
 export default function BatchReturnModal({ group, onConfirm, onClose }) {
+  const drugItems = useMemo(() => group.items.filter(i => i.type === 'drug'), [group.items]);
+
   const [rows, setRows] = useState(() =>
-    group.items.map(d => ({ id: d.id, selected: false, qty: String(d.qty) }))
+    drugItems.map(d => ({ id: d.id, selected: false, qty: String(d.qty) }))
   );
 
   useEffect(() => {
@@ -40,7 +43,7 @@ export default function BatchReturnModal({ group, onConfirm, onClose }) {
 
     rows.forEach(row => {
       if (!row.selected) return;
-      const debt = group.items.find(d => d.id === row.id);
+      const debt = drugItems.find(d => d.id === row.id);
       const qty = parseFloat(row.qty);
       if (!debt || !(qty > 0)) { invalid = true; return; }
       sel.push({ debt, returnQty: qty });
@@ -48,7 +51,7 @@ export default function BatchReturnModal({ group, onConfirm, onClose }) {
     });
 
     return { selection: sel, totalTl: Math.round(total * 100) / 100, hasInvalid: invalid };
-  }, [rows, group.items]);
+  }, [rows, drugItems]);
 
   const canSubmit = selection.length > 0 && !hasInvalid;
 
@@ -73,7 +76,7 @@ export default function BatchReturnModal({ group, onConfirm, onClose }) {
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-3">
-          {group.items.map(debt => {
+          {drugItems.map(debt => {
             const row = rows.find(r => r.id === debt.id);
             const qty = parseFloat(row.qty);
             const invalid = row.selected && !(qty > 0);

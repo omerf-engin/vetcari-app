@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { CreditCard, Check } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
-import { groupDrugDebtsByBatch } from '../../utils/debtGrouping';
+import { groupDebtsByBatch } from '../../utils/debtGrouping';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function PaymentModal({ onClose }) {
@@ -94,8 +94,7 @@ export default function PaymentModal({ onClose }) {
   // Gruplama yalnizca gorunum katmanindadir: dagitim hesabi ve `extreDDebts`
   // dizi sirasi degismez, satir degerleri id uzerinden okunur.
   const distById = useMemo(() => new Map(distribution.map(d => [d.id, d])), [distribution]);
-  const debtGroups = useMemo(() => groupDrugDebtsByBatch(extreDDebts), [extreDDebts]);
-  const serviceRows = useMemo(() => distribution.filter(d => d.type === 'service'), [distribution]);
+  const debtGroups = useMemo(() => groupDebtsByBatch(serviceDebts, extreDDebts), [serviceDebts, extreDDebts]);
 
   const handleOverride = (id, val) => {
     if (val === '' || val === null || val === undefined) {
@@ -170,15 +169,6 @@ export default function PaymentModal({ onClose }) {
                 {distribution.length === 0 && (
                   <tbody>
                     <tr><td colSpan="3" className="p-8 text-center text-slate-500 bg-slate-50/50">Kapatılacak borç bulunmuyor. Alınan para doğrudan avansa yazılacak.</td></tr>
-                  </tbody>
-                )}
-
-                {serviceRows.length > 0 && (
-                  <tbody className="divide-y divide-slate-100">
-                    <tr className="bg-slate-100/70 border-y border-slate-200">
-                      <td colSpan="3" className="px-5 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Hizmet Borçları</td>
-                    </tr>
-                    {serviceRows.map(renderRow)}
                   </tbody>
                 )}
 

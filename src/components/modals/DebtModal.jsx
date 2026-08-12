@@ -3,23 +3,27 @@ import { Plus, Clock, Check, Trash2, ChevronDown } from 'lucide-react';
 import { useCustomer } from '../../hooks/useCustomer';
 import { fmtTL, fmtQty } from '../../utils/formatters';
 
+const emptyRow = () => ({ id: crypto.randomUUID(), drugId: '', qty: '1', priceMode: 'unit', unitPrice: '' });
+
 export default function DebtModal({ mode, onClose }) {
-  const { drugs, onAddServiceDebt, onAddPastServiceDebt, onAddBulkDrugDebt } = useCustomer();
+  const { drugs, onAddDebtTransaction } = useCustomer();
   const isPast = mode === 'past';
 
   const [tab, setTab] = useState('service');
   const today = new Date().toISOString().split('T')[0];
 
+  // İşlem tarihi — hizmet ve ilaç ortak (tek işlem = tek tarih)
+  const [date, setDate] = useState(today);
+
   // Hizmet state
-  const [sDate, setSDate] = useState(today);
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState('');
   const [sPaid, setSPaid] = useState('');
   const [sPaidDate, setSPaidDate] = useState(today);
 
-  // İlaç state
-  const [dDate, setDDate] = useState(today);
-  const [rows, setRows] = useState([{ id: crypto.randomUUID(), drugId: drugs[0]?.id || '', qty: '1', priceMode: 'unit', unitPrice: drugs[0]?.price ? String(drugs[0].price) : '' }]);
+  // İlaç state — ilk satır bilinçli olarak boş; ön seçim, yalnızca hizmet
+  // girmek isteyen kullanıcıya istemeden ilaç borcu yazardı
+  const [rows, setRows] = useState([emptyRow()]);
   const [dPaid, setDPaid] = useState('');
   const [dPaidDate, setDPaidDate] = useState(today);
   const [applyInflation, setApplyInflation] = useState(true);
@@ -33,12 +37,11 @@ export default function DebtModal({ mode, onClose }) {
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  // Borç tarihi değiştiğinde tahsilat tarihini de güncelle (hizmet ve ilaç)
-  useEffect(() => { setSPaidDate(sDate); }, [sDate]);
-  useEffect(() => { setDPaidDate(dDate); }, [dDate]);
+  // Borç tarihi değiştiğinde tahsilat tarihlerini de güncelle
+  useEffect(() => { setSPaidDate(date); setDPaidDate(date); }, [date]);
 
   // Row management
-  const addRow = () => setRows(prev => [...prev, { id: crypto.randomUUID(), drugId: '', qty: '1', priceMode: 'unit', unitPrice: '' }]);
+  const addRow = () => setRows(prev => [...prev, emptyRow()]);
   const removeRow = (rowId) => setRows(prev => prev.filter(r => r.id !== rowId));
   const updateRow = (rowId, field, value) => {
     setRows(prev => prev.map(r => {
@@ -78,14 +81,17 @@ export default function DebtModal({ mode, onClose }) {
         up = priceInput;
         total = Math.round(q * up * 100) / 100;
       }
-      return { ...r, drug, qty: q, unitPrice: up, total, valid: q > 0 && up > 0 && !!drug };
+      // "Dolu" (ilaç seçilmiş) satırlar geçerlilikten ayrı tutulur:
+      // hiç dokunulmamış satırlar tamamen yok sayılır
+      return { ...r, drug, qty: q, unitPrice: up, total, filled: !!r.drugId, valid: q > 0 && up > 0 && !!drug };
     });
 
-    const grandTotal = parsed.reduce((s, r) => s + r.total, 0);
+    const filled = parsed.filter(r => r.filled);
+    const grandTotal = filled.reduce((s, r) => s + r.total, 0);
     const paid = parseFloat(dPaid) || 0;
 
     // Duplikat kontrolü
-    const drugIds = parsed.filter(r => r.drugId).map(r => r.drugId);
+    const drugIds = filled.map(r => r.drugId);
     const duplicates = new Set(drugIds.filter((id, i) => drugIds.indexOf(id) !== i));
 
     // Orantılı dağılım (geçmiş mod, paid > 0)
@@ -107,47 +113,60 @@ export default function DebtModal({ mode, onClose }) {
     }
 
     // Enflasyon gösterimi
-    const hasInflation = parsed.some(r => r.drug && r.unitPrice > 0 && r.drug.price > r.unitPrice);
+    const hasInflation = filled.some(r => r.drug && r.unitPrice > 0 && r.drug.price > r.unitPrice);
 
-    return { parsed, grandTotal, paid, duplicates, distributions, hasInflation };
+    return { parsed, filled, grandTotal, paid, duplicates, distributions, hasInflation };
   }, [rows, drugs, isPast, dPaid]);
 
-  // Validasyon
+  // --- Dolu mu / geçerli mi ---
+  const serviceFilled = Boolean(desc.trim() || amount);
+  const drugFilled = drugCalc.filled.length > 0;
+
   const isServiceValid = serviceCalc && serviceCalc.amount > 0 && desc.trim()
-    && (!isPast || sDate)
     && (!isPast || (serviceCalc.paid >= 0 && serviceCalc.paid < serviceCalc.amount));
 
   const isDrugValid = useMemo(() => {
-    if (drugCalc.parsed.length === 0) return false;
-    if (!drugCalc.parsed.every(r => r.valid)) return false;
+    if (drugCalc.filled.length === 0) return false;
+    if (!drugCalc.filled.every(r => r.valid)) return false;
     if (drugCalc.duplicates.size > 0) return false;
     if (isPast && drugCalc.paid >= drugCalc.grandTotal) return false;
     if (drugCalc.paid < 0) return false;
-    if (isPast && !dDate) return false;
     return true;
-  }, [drugCalc, isPast, dDate]);
+  }, [drugCalc, isPast]);
 
-  const canSubmit = tab === 'service' ? isServiceValid : isDrugValid;
+  // En az bir bölüm dolu olmalı ve dolu olan her bölüm geçerli olmalı
+  const canSubmit =
+    (serviceFilled || drugFilled)
+    && (!serviceFilled || isServiceValid)
+    && (!drugFilled || isDrugValid)
+    && (!isPast || !!date);
 
-  // Submit
+  const summaryTotal =
+    (serviceFilled && isServiceValid ? serviceCalc.amount : 0) +
+    (drugFilled && isDrugValid ? drugCalc.grandTotal : 0);
+
+  // Submit — hizmet ve ilaç tek atomik işlemde yazılır
   const handleSubmit = () => {
-    if (tab === 'service') {
-      if (!isPast) {
-        onAddServiceDebt(desc, parseFloat(amount));
-      } else {
-        const paid = parseFloat(sPaid) || 0;
-        onAddPastServiceDebt(desc, parseFloat(amount), sDate, paid, paid > 0 ? sPaidDate : null);
-      }
-    } else {
-      const items = drugCalc.parsed.filter(r => r.valid).map(r => ({
-        drugId: r.drugId, qty: r.qty, unitPrice: r.unitPrice
-      }));
-      const date = isPast ? dDate : today;
-      const paid = isPast ? drugCalc.paid : 0;
-      const paidDate = isPast && paid > 0 ? dPaidDate : null;
-      const inflation = isPast ? applyInflation : false;
-      onAddBulkDrugDebt(items, date, paid, paidDate, inflation);
-    }
+    const sPaidVal = isPast ? (parseFloat(sPaid) || 0) : 0;
+    const dPaidVal = isPast ? drugCalc.paid : 0;
+
+    onAddDebtTransaction({
+      date: isPast ? date : today,
+      service: serviceFilled && isServiceValid
+        ? {
+            desc,
+            amount: parseFloat(amount),
+            paidAmount: sPaidVal,
+            paidDate: sPaidVal > 0 ? sPaidDate : null
+          }
+        : null,
+      drugItems: drugFilled && isDrugValid
+        ? drugCalc.filled.filter(r => r.valid).map(r => ({ drugId: r.drugId, qty: r.qty, unitPrice: r.unitPrice }))
+        : [],
+      drugPaidAmount: dPaidVal,
+      drugPaidDate: dPaidVal > 0 ? dPaidDate : null,
+      applyInflation: isPast ? applyInflation : false
+    });
     onClose();
   };
 
@@ -177,28 +196,36 @@ export default function DebtModal({ mode, onClose }) {
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
 
-          {/* Tab toggle */}
+          {/* İşlem tarihi — her iki bölüm için ortak */}
+          {isPast && (
+            <div>
+              <label className={labelCls}>İşlem Tarihi</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} max={today} className={inputCls} />
+            </div>
+          )}
+
+          {/* Tab toggle — her iki bölüm de aynı işleme yazılır, dolu olanlar işaretlenir */}
           <div className="flex bg-slate-100 p-1.5 rounded-lg">
             <button
-              className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all ${tab === 'service' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
+              className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5 ${tab === 'service' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
               onClick={() => { setTab('service'); setShowDrugPayment(false); }}
-            >Hizmet (TL)</button>
+            >
+              Hizmet (TL)
+              {serviceFilled && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="Bu bölümde kayıt var" />}
+            </button>
             <button
-              className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all ${tab === 'drug' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
+              className={`flex-1 text-sm py-2 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5 ${tab === 'drug' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
               onClick={() => { setTab('drug'); setShowServicePayment(false); }}
               disabled={drugs.length === 0}
-            >İlaç (Adet)</button>
+            >
+              İlaç (Adet)
+              {drugFilled && <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">{drugCalc.filled.length}</span>}
+            </button>
           </div>
 
           {/* ========== Hizmet sekmesi ========== */}
           {tab === 'service' && (
             <div className="space-y-4">
-              {isPast && (
-                <div>
-                  <label className={labelCls}>Tarih</label>
-                  <input type="date" value={sDate} onChange={e => setSDate(e.target.value)} max={today} className={inputCls} />
-                </div>
-              )}
               <div>
                 <label className={labelCls}>Açıklama</label>
                 <input type="text" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Örn: Muayene" className={inputCls} />
@@ -247,13 +274,6 @@ export default function DebtModal({ mode, onClose }) {
           {/* ========== İlaç sekmesi ========== */}
           {tab === 'drug' && (
             <div className="space-y-4">
-              {isPast && (
-                <div>
-                  <label className={labelCls}>Tarih</label>
-                  <input type="date" value={dDate} onChange={e => setDDate(e.target.value)} max={today} className={inputCls} />
-                </div>
-              )}
-
               {/* İlaç satırları */}
               <div className="space-y-3">
                 {rows.map((row, idx) => {
@@ -344,7 +364,7 @@ export default function DebtModal({ mode, onClose }) {
               {drugCalc.grandTotal > 0 && (
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-indigo-800">{drugCalc.parsed.filter(r => r.valid).length} kalem ilaç</span>
+                    <span className="text-indigo-800">{drugCalc.filled.filter(r => r.valid).length} kalem ilaç</span>
                     <span className="font-bold text-indigo-800">{fmtTL(drugCalc.grandTotal)}</span>
                   </div>
                 </div>
@@ -412,16 +432,35 @@ export default function DebtModal({ mode, onClose }) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-5 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 rounded-b-2xl">
-          <button onClick={onClose} className="px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-200 transition-colors">İptal</button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md disabled:opacity-50 flex items-center gap-2"
-          >
-            <Check className="w-5 h-5" /> Kaydet
-          </button>
+        {/* Footer — iki bölümün birlikte yazılacağı özeti */}
+        <div className="p-5 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 rounded-b-2xl">
+          <div className="text-center sm:text-left min-w-0">
+            {canSubmit ? (
+              <>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Kaydedilecek</p>
+                <p className="text-sm font-semibold text-slate-700">
+                  {[
+                    serviceFilled && isServiceValid ? '1 hizmet' : null,
+                    drugFilled && isDrugValid ? `${drugCalc.filled.filter(r => r.valid).length} ilaç kalemi` : null
+                  ].filter(Boolean).join(' + ')}
+                  <span className="text-slate-400"> · </span>
+                  <span className="font-bold text-indigo-700">{fmtTL(summaryTotal)}</span>
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400 italic">Hizmet veya ilaç bilgisi girin</p>
+            )}
+          </div>
+          <div className="flex gap-3 w-full sm:w-auto">
+            <button onClick={onClose} className="flex-1 sm:flex-none px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-200 transition-colors">İptal</button>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Check className="w-5 h-5" /> Kaydet
+            </button>
+          </div>
         </div>
       </div>
     </div>

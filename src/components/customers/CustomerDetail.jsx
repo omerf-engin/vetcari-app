@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2, Clock, ChevronDown, ChevronRight } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
-import { groupDrugDebtsByBatch } from '../../utils/debtGrouping';
+import { groupDebtsByBatch } from '../../utils/debtGrouping';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
 import DebtModal from '../modals/DebtModal';
@@ -44,7 +44,7 @@ export default function CustomerDetail({ onBack }) {
     drugName: drugs.find(x => x.id === d.drugId)?.name || 'Bilinmeyen İlaç'
   })), [drugDebts, drugs]);
 
-  const debtGroups = useMemo(() => groupDrugDebtsByBatch(extreDDebts), [extreDDebts]);
+  const debtGroups = useMemo(() => groupDebtsByBatch(serviceDebts, extreDDebts), [serviceDebts, extreDDebts]);
 
   // Modallar id tutar; grup verisi her zaman guncel snapshot'tan cozulur
   const batchReturnGroup = useMemo(
@@ -63,20 +63,17 @@ export default function CustomerDetail({ onBack }) {
     debtGroups.forEach((g) => g.items.forEach((it) => groupByDebtId.set(it.id, g)));
 
     return logs.map((log) => {
-      const svc = serviceDebts.find((d) => d.id === log.debtId);
-      if (svc) {
-        return { ...log, sourceLabel: `Hizmet: ${svc.desc}`, groupKey: log.debtId, groupLabel: `Hizmet: ${svc.desc}` };
-      }
-
       const group = groupByDebtId.get(log.debtId);
       if (group) {
-        const drugDebt = group.items.find((it) => it.id === log.debtId);
-        const sourceLabel = `İlaç: ${drugDebt.drugName}`;
+        const item = group.items.find((it) => it.id === log.debtId);
+        const sourceLabel = item.type === 'service'
+          ? `Hizmet: ${item.desc}`
+          : `İlaç: ${item.drugName}`;
         return {
           ...log,
           sourceLabel,
           groupKey: group.batchId,
-          // Tek kalemlik işlemde ilaç adı, çok kalemlide işlem başlığı daha okunaklı
+          // Tek kalemlik işlemde kalem adı, çok kalemlide işlem başlığı daha okunaklı
           groupLabel: group.itemCount > 1
             ? `${fmtDate(group.date)} · ${group.itemCount} kalemlik işlem`
             : sourceLabel
@@ -89,7 +86,7 @@ export default function CustomerDetail({ onBack }) {
       }
       return { ...log, sourceLabel: 'Kapalı / silinmiş borç', groupKey: '__closed__', groupLabel: 'Kapalı / silinmiş borçlar' };
     });
-  }, [debtGroups, serviceDebts, drugs]);
+  }, [debtGroups, drugs]);
 
   const customerAggregateLogs = useMemo(() => {
     const debtIds = new Set([
@@ -152,33 +149,12 @@ export default function CustomerDetail({ onBack }) {
         <div className="lg:col-span-2 space-y-6">
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 font-semibold text-slate-700">Sabit Hizmet Borçları (TL)</div>
-            {serviceDebts.length === 0 ? (
-              <p className="p-5 text-slate-400 text-sm italic text-center">Aktif hizmet borcu bulunmuyor.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {serviceDebts.map(d => (
-                  <li key={d.id} className="p-4 flex justify-between items-center hover:bg-slate-50/80 transition-colors">
-                    <div>
-                      <p className="font-semibold text-slate-800">{d.desc}</p>
-                      <p className="text-xs text-slate-400 mt-1">{fmtDate(d.date)}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-slate-700 text-lg">{fmtTL(d.amount)}</span>
-                      <button onClick={() => onDeleteServiceDebt(d.id)} title="Borcu Sil / İptal Et" className="text-slate-300 hover:text-rose-500 transition-colors bg-white hover:bg-rose-50 p-1.5 rounded-md border border-transparent hover:border-rose-100"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 font-semibold text-slate-700 flex justify-between items-center">
-              <span>İlaç Borçları (Enflasyon Korumalı)</span>
+              <span>İşlemler</span>
+              <span className="text-xs font-medium text-slate-400 normal-case">İlaç borçları enflasyon korumalıdır</span>
             </div>
             {debtGroups.length === 0 ? (
-              <p className="p-5 text-slate-400 text-sm italic text-center">Aktif ilaç borcu bulunmuyor.</p>
+              <p className="p-5 text-slate-400 text-sm italic text-center">Aktif borç bulunmuyor.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {debtGroups.map(group => {
@@ -213,23 +189,28 @@ export default function CustomerDetail({ onBack }) {
                       {isOpen && (
                         <>
                           <div className="px-5 pb-3 flex flex-wrap gap-2 border-b border-slate-100">
-                            <button
-                              onClick={() => onToggleBatchLock(group.items)}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                                group.allFixed
-                                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              }`}
-                            >
-                              {group.allFixed ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-                              {group.allFixed ? 'Tümünü Serbest Bırak' : 'Tümünü Sabitle'}
-                            </button>
-                            <button
-                              onClick={() => setBatchReturnId(group.batchId)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
-                            >
-                              <Undo className="w-3.5 h-3.5" /> Toplu İade
-                            </button>
+                            {/* Kilit ve iade yalnızca ilaç kalemleri için anlamlı */}
+                            {group.hasDrug && (
+                              <>
+                                <button
+                                  onClick={() => onToggleBatchLock(group.items.filter(i => i.type === 'drug'))}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                                    group.allFixed
+                                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  {group.allFixed ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                                  {group.allFixed ? 'Tümünü Serbest Bırak' : 'Tümünü Sabitle'}
+                                </button>
+                                <button
+                                  onClick={() => setBatchReturnId(group.batchId)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                                >
+                                  <Undo className="w-3.5 h-3.5" /> Toplu İade
+                                </button>
+                              </>
+                            )}
                             <button
                               onClick={() => setHistoryBatchId(group.batchId)}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
@@ -239,55 +220,77 @@ export default function CustomerDetail({ onBack }) {
                           </div>
 
                           <ul className="divide-y divide-slate-100 bg-slate-50/30">
-                            {group.items.map(d => (
+                            {group.items.map(d => d.type === 'service' ? (
+                              <li key={d.id} className="p-5 hover:bg-slate-50/80 transition-colors flex justify-between items-center gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-full font-bold tracking-wide">HİZMET</span>
+                                    <p className="font-bold text-slate-800 text-lg">{d.desc}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 flex-shrink-0">
+                                  <div className="text-right">
+                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Tutar</p>
+                                    <p className="font-bold text-red-600 text-xl">{fmtTL(d.amount)}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => onDeleteServiceDebt(d.id)}
+                                    title="Borcu Sil / İptal Et"
+                                    className="text-slate-300 hover:text-rose-500 transition-colors bg-white hover:bg-rose-50 p-2 rounded-md border border-transparent hover:border-rose-100 border-l border-l-slate-200 ml-2"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </li>
+                            ) : (
                               <li key={d.id} className="p-5 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-slate-800 text-lg">{d.drugName}</p>
-                        {d.isFixed && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-amber-200"><Lock className="w-3 h-3" /> SABİT</span>}
-                      </div>
-                      <div className="text-sm text-slate-600 mt-1 flex items-center gap-2">
-                        <span>Kalan: <strong className="text-slate-800">{fmtQty(d.qty)} Adet</strong></span>
-                        <span className="text-slate-300">|</span>
-                        <span>Baz Fiyat: {fmtTL(d.maxPrice)}</span>
-                      </div>
-                    </div>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-bold text-slate-800 text-lg">{d.drugName}</p>
+                                    {d.isFixed && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border border-amber-200"><Lock className="w-3 h-3" /> SABİT</span>}
+                                  </div>
+                                  <div className="text-sm text-slate-600 mt-1 flex items-center gap-2">
+                                    <span>Kalan: <strong className="text-slate-800">{fmtQty(d.qty)} Adet</strong></span>
+                                    <span className="text-slate-300">|</span>
+                                    <span>Baz Fiyat: {fmtTL(d.maxPrice)}</span>
+                                  </div>
+                                </div>
 
-                    <div className="flex items-center gap-5 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 mt-2 sm:mt-0">
-                      <div className="text-right">
-                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Güncel Tutar</p>
-                        <p className="font-bold text-red-600 text-xl">{fmtTL(d.tlValue)}</p>
-                      </div>
+                                <div className="flex items-center gap-5 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 mt-2 sm:mt-0">
+                                  <div className="text-right">
+                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Güncel Tutar</p>
+                                    <p className="font-bold text-red-600 text-xl">{fmtTL(d.tlValue)}</p>
+                                  </div>
 
-                      <div className="flex gap-2 border-l border-slate-200 pl-4 ml-2 flex-shrink-0">
-                        <button
-                          title="Borç Geçmişini Gör"
-                          onClick={() => setHistoryDebtId(d.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
-                        >
-                          <History className="w-3.5 h-3.5" /> Geçmiş
-                        </button>
-                        <button
-                          onClick={() => onToggleLock(d.id)}
-                          title={d.isFixed ? "Kilidi Aç" : "Fiyatı Sabitle"}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                            d.isFixed
-                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {d.isFixed ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                          {d.isFixed ? 'Sabit' : 'Serbest'}
-                        </button>
-                        <button
-                          onClick={() => { setReturnModalDebt(d); setReturnInputQty('1'); }}
-                          title="İade Al / Adet Düş"
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
-                        >
-                          <Undo className="w-3.5 h-3.5" /> İade
-                        </button>
-                      </div>
-                    </div>
+                                  <div className="flex gap-2 border-l border-slate-200 pl-4 ml-2 flex-shrink-0">
+                                    <button
+                                      title="Borç Geçmişini Gör"
+                                      onClick={() => setHistoryDebtId(d.id)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                                    >
+                                      <History className="w-3.5 h-3.5" /> Geçmiş
+                                    </button>
+                                    <button
+                                      onClick={() => onToggleLock(d.id)}
+                                      title={d.isFixed ? "Kilidi Aç" : "Fiyatı Sabitle"}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                                        d.isFixed
+                                          ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                      }`}
+                                    >
+                                      {d.isFixed ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                                      {d.isFixed ? 'Sabit' : 'Serbest'}
+                                    </button>
+                                    <button
+                                      onClick={() => { setReturnModalDebt(d); setReturnInputQty('1'); }}
+                                      title="İade Al / Adet Düş"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                                    >
+                                      <Undo className="w-3.5 h-3.5" /> İade
+                                    </button>
+                                  </div>
+                                </div>
                               </li>
                             ))}
                           </ul>
