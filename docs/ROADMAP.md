@@ -176,6 +176,19 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
+## Faz 10++++: Hizmet + Ilac Tek Islemde — PLANLANDI
+
+- [ ] `serviceDebts` dokumanlarina `batchId` + `createdAt`
+- [ ] Birlesik atomik operasyon: `addDebtTransactionOperations` (hizmet + ilac tek writeBatch)
+- [ ] `groupDebtsByBatch`: karma kalem tipleri (`type: 'service' | 'drug'`)
+- [ ] DebtModal tek gonderim; on-secili ilac satiri kaldirilir, sessiz veri kaybi giderilir
+- [ ] CustomerDetail: iki ayri bolum tek "Islemler" listesinde birlesir
+- [ ] PaymentModal: hizmet satirlari da batch gruplarina taşinir
+
+> Ilgili tasklar: TASK-027
+
+---
+
 ## Faz 10++: TypeScript Migrasyonu — PLANLANDI
 
 - [ ] Altyapi: tsconfig.json, vite.config.ts, typescript-eslint

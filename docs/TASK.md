@@ -746,6 +746,78 @@ Kaldirilan `addPastDrugDebtOperations` testleri (ozel birim fiyat, enflasyon, ki
 
 ---
 
+## TASK-027: Hizmet + Ilac Tek Islemde (Karma Batch)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P1 |
+| **Depends on** | TASK-026 |
+
+**Problem:**
+`DebtModal` sekmeleri birbirini disliyor: `handleSubmit` (`DebtModal.jsx:133`) yalnizca aktif sekmeyi yaziyor, `canSubmit` de (`:130`) yalnizca aktif sekmeye bakiyor. Bir "Kaydet" = ya tek hizmet borcu ya N ilac borcu. Gercek bir ziyaret ise genelde "muayene + 2 ilac" — bunlar tek islem olmali.
+
+Iki yan sorun:
+1. **Sessiz veri kaybi:** iki sekmenin state'i ayri tutuluyor ve ikisi de modal acikken duruyor. Hizmet sekmesi doldurulup Ilac sekmesine gecilip Kaydet'e basilirsa girilen hizmet borcu uyarisiz atiliyor
+2. **`serviceDebts` dokumanlarinda `batchId` yok** — ayni anda girilseler bile TASK-026 gruplamasi onlari kapsamiyor
+
+### Deliverables
+
+**1. Veri modeli**
+- `serviceDebts` dokumanlarina da `batchId` + `createdAt` (ayni fallback: alan yoksa `doc.id`, migration yok)
+- Tek gonderimde yazilan hizmet ve ilac borclari **ayni `batchId`'yi** paylasir
+
+**2. Backend — birlesik atomik operasyon (`firestoreOperations.js`)**
+- `applyReturnToBatch` deseni izlenir: mevcut yazim mantiklari batch'e ekleyen yardimcilara cikarilir
+  - `appendServiceDebtToBatch(batch, ctx)` — bugun/gecmis ayrimi, kismi tahsilat, supurucu
+  - `appendDrugItemsToBatch(batch, ctx)` — mevcut `addBulkDrugDebtOperations` govdesi
+- Yeni tek giris noktasi: `addDebtTransactionOperations(customerId, { service, drugItems, date, applyInflation }, userId)` — tek `batchId` + `createdAt` uretir, **tek `writeBatch`** ile hepsini yazar
+- `addServiceDebtOperations`, `addPastServiceDebtOperations`, `addBulkDrugDebtOperations` kaldirilir (tek cagiran DebtModal'di); testleri yeni operasyona tasinir
+
+**3. Gruplama yardimcisi**
+- `groupDrugDebtsByBatch` → `groupDebtsByBatch(serviceDebts, drugDebts)`
+- Her kalem `type: 'service' | 'drug'` ayirt edicisi tasir; grup toplami ikisini birlestirir
+- Grup meta: `itemCount`, `total`, `hasFixed`/`allFixed` (yalnizca ilac kalemleri uzerinden), `hasService`, `hasDrug`
+
+**4. DebtModal — tek gonderim**
+- Tek "Kaydet" her iki sekmedeki **dolu** veriyi birlikte yazar
+- **Kritik:** ilk ilac satiri artik on-secili gelmez (`drugId: ''`). Bugunku on-secim, yalnizca hizmet borcu girmek isteyen kullaniciya istemeden ilac borcu yazar
+- "Dolu" tespiti gecerlilikten ayrilir: tamamen bos ilac satirlari yok sayilir, yalnizca ilac secilmis satirlar valide edilir
+- `canSubmit` = en az bir bolum dolu **ve** dolu olan her bolum gecerli
+- Gecmis modda tek tarih alani (`sDate`/`dDate` birlestirilir) — tek islem tek tarih. Kismi tahsilat bolum bazinda kalir (hesaplari farkli)
+- Kaydet butonu ustunde ne yazilacaginin ozeti ("1 hizmet + 2 ilac kalemi · 3.450 ₺")
+
+**5. CustomerDetail — tek "Islemler" listesi**
+- Ayri "Sabit Hizmet Borclari" ve "Ilac Borclari" bolumleri **tek listede birlesir**; her kart bir islem
+- Kart icinde hizmet kalemi ve ilac kalemleri birlikte; her kalem kendi eylemlerini korur (hizmet: Sil · ilac: Gecmis/Sabit/Iade)
+- Grup eylemleri kalem tipine gore kosullu: "Tumunu Sabitle" ve "Toplu Iade" yalnizca ilac kalemi varsa gorunur
+- `BatchReturnModal` yalnizca ilac kalemlerini listeler (hizmet borcu iade edilmez, iptal edilir)
+- Eski (batchId'siz) hizmet borclari da tek kalemlik islem karti olur
+
+**6. PaymentModal**
+- Hizmet satirlari da kendi batch gruplarina taşinir; sabit "Hizmet Borclari" basligi kalkar
+- **Dagitim hesabi yine degismez** (TASK-026 kisiti gecerli): selale once tum hizmet borclarini, sonra ilaclari kapatiyor; gruplama yalnizca gorsel. Grup basligindaki "Dusulecek" artik hizmet + ilac toplamini gosterir
+
+### Acceptance Criteria
+
+- Hizmet ve ilac ayni modalda doldurulup tek Kaydet ile yazilir; ikisi ayni `batchId`'yi tasir ve **tek kartta** gorunur
+- Yalnizca hizmet girilirse ilac borcu yazilmaz (on-secili satir sorunu cozulmus olmali)
+- Yalnizca ilac girilirse hizmet borcu yazilmaz
+- Iki bolum de doluysa **tek `writeBatch`** ile atomik yazilir (biri basarisiz olursa hicbiri yazilmaz)
+- Sekme degistirince veri kaybi yok — her iki bolumun ozeti Kaydet oncesi gorunur
+- Eski (batchId'siz) hizmet ve ilac borclari tek kalemlik islem karti olarak hatasiz render edilir
+- Karma grupta "Tumunu Sabitle" yalnizca ilac kalemlerini etkiler; hizmet kalemi degismez
+- Toplam borc hesaplari (`grossDebt`, `netDebt`, Dashboard) degismez
+- PaymentModal'da ayni tutar icin dagitim sonuclari degisiklik oncesiyle birebir ayni
+- Lint 0/0 · Test gecer · Build basarili
+
+**Notes:**
+- En riskli parca CustomerDetail'in iki bolumden tek listeye gecisi; hizmet borclarinin silme akisi (`onDeleteServiceDebt`) korunmali
+- `groupDebtsByBatch` degisimi PaymentModal ve CustomerDetail'i ayni anda etkiler; once yardimci + testleri, sonra ekranlar
+- Onerilen commit bolumlemesi: (1) veri modeli + birlesik operasyon + gruplama yardimcisi + testler, (2) DebtModal tek gonderim, (3) CustomerDetail tek islem listesi, (4) PaymentModal, (5) docs
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |
