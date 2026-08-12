@@ -750,7 +750,7 @@ Kaldirilan `addPastDrugDebtOperations` testleri (ozel birim fiyat, enflasyon, ki
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P1 |
 | **Depends on** | TASK-026 |
 
@@ -811,10 +811,14 @@ Iki yan sorun:
 - PaymentModal'da ayni tutar icin dagitim sonuclari degisiklik oncesiyle birebir ayni
 - Lint 0/0 · Test gecer · Build basarili
 
+**Sonuc:** Test 72 → 84 · Lint 0 error 0 warning · Build basarili · Commit `4443028`
+
+Tarayicida gecici test musterisiyle dogrulanan senaryolar: karma islem (muayene + 2 ilac tek kartta, 22.312 TL) · yalnizca hizmet girisi ilac borcu yazmiyor · ayni gun ikinci islem ayri kart (`createdAt` ayrimi) · sekme degistirince veri kaybi yok, footer ozeti iki bolumu birlikte sayiyor · Toplu Iade hizmet kalemini listelemiyor · Tumunu Sabitle yalnizca ilac kalemlerini etkiliyor · hizmet-only grupta kilit/iade butonlari gizli · tahsilat selalesi korunuyor (500 hizmet tam kapandi, kalan 9.500 ilaclara orantili: 8710,8 + 789,2) · genel ekstre tek islem basligi altinda.
+
 **Notes:**
-- En riskli parca CustomerDetail'in iki bolumden tek listeye gecisi; hizmet borclarinin silme akisi (`onDeleteServiceDebt`) korunmali
-- `groupDebtsByBatch` degisimi PaymentModal ve CustomerDetail'i ayni anda etkiler; once yardimci + testleri, sonra ekranlar
-- Onerilen commit bolumlemesi: (1) veri modeli + birlesik operasyon + gruplama yardimcisi + testler, (2) DebtModal tek gonderim, (3) CustomerDetail tek islem listesi, (4) PaymentModal, (5) docs
+- Yardimci fonksiyonlar `applyReturnToBatch` desenini izliyor: yazim mantigi batch'e ekleyen saf yardimcilarda, commit tek yerde
+- `appendDrugItemsToBatch` gecerli satirlari once filtreliyor; eski kodda son satir gecersizse yuvarlama artigi son gecerli satira aktarilmiyordu (latent bug, UI zaten filtreledigi icin pratikte tetiklenmiyordu)
+- Bilinen ayri sorun (bu task kapsami disinda): `new Date().toISOString()` UTC dondugu icin yerel saat 00:00-03:00 arasinda girilen borclar bir onceki gunun tarihine yaziliyor. TASK-028 adayi
 
 ---
 

@@ -97,15 +97,17 @@ Tek işlemde birden fazla ilaç borcu eklenebilir (`addBulkDrugDebtOperations`):
 
 ### İşlem Bazlı Gruplama (batchId)
 
-Aynı `addBulkDrugDebtOperations` çağrısında yazılan tüm `drugDebts` dokümanları ortak bir `batchId` ve `createdAt` taşır. Bu sayede "bu borçlar aynı işlemde açıldı" bilgisi kalıcılaşır.
+Bir ziyarette girilen hizmet ve ilaç kalemleri **tek atomik yazımda** açılır ve ortak bir `batchId` + `createdAt` taşır. Bu sayede "bu borçlar aynı işlemde açıldı" bilgisi kalıcılaşır.
 
-- **Gruplama:** `groupDrugDebtsByBatch` (`utils/debtGrouping.js`) saf fonksiyonu; anahtar `batchId || doc.id`
-- **Geriye dönük uyumluluk:** `batchId` alanı olmayan eski kayıtlar kendi doküman id'leriyle tek kalemlik gruplara düşer — migration gerekmez
+- **Tek giriş noktası:** `addDebtTransactionOperations(customerId, { date, service, drugItems, drugPaidAmount, drugPaidDate, applyInflation }, userId)`. Yazım mantıkları `appendServiceDebtToBatch` / `appendDrugItemsToBatch` yardımcılarında; her biri kendi bölümünü bağımsız doğrular, geçersiz hizmet girişi geçerli ilaç kalemlerini engellemez. Hiçbiri yazmazsa commit edilmez
+- **Gruplama:** `groupDebtsByBatch(serviceDebts, drugDebts)` (`utils/debtGrouping.js`) saf fonksiyonu; anahtar `batchId || \`${type}:${doc.id}\``. Tip öneki, iki koleksiyonun doküman id'lerinin çakışmasını engeller
+- **Kalem tipi:** Her kalem `type: 'service' | 'drug'` taşır; `hasFixed` / `allFixed` yalnızca ilaç kalemleri üzerinden hesaplanır
+- **Geriye dönük uyumluluk:** `batchId` alanı olmayan eski kayıtlar tek kalemlik gruplara düşer — migration gerekmez
 - **Sıralama:** Gruplar `date` desc, aynı tarihte `createdAt` desc
-- **Grup operasyonları:** `toggleBatchLockOperations` (hepsi sabitse tümünü serbest bırakır, aksi halde tümünü sabitler; yalnızca durumu değişen kalemlere log yazar) ve `returnBatchOperations` (kalem seçimli toplu iade; avanslar birikimli hesaplanıp tek `customers` update'i yazılır)
+- **Grup operasyonları:** `toggleBatchLockOperations` (hepsi sabitse tümünü serbest bırakır, aksi halde tümünü sabitler; yalnızca durumu değişen kalemlere log yazar) ve `returnBatchOperations` (kalem seçimli toplu iade; avanslar birikimli hesaplanıp tek `customers` update'i yazılır). İkisi de yalnızca ilaç kalemleri için anlamlıdır — hizmet borcu iade edilmez, `deleteServiceDebtOperations` ile iptal edilir
 - **Ortak iade mantığı:** Tekli (`returnDrug`) ve toplu iade aynı `applyReturnToBatch` yardımcısını kullanır — süpürücü ve fazla iade kuralları çatallanmaz
-- **Görünüm:** CustomerDetail'de katlanabilir kart (varsayılan kapalı), HistoryModal'da `variant='batch'` işlem ekstresi, genel ekstrede işlem başlıkları, PaymentModal'da grup başlıklı dağıtım tablosu
-- **Tahsilat kısıtı:** PaymentModal'daki gruplama yalnızca render katmanındadır. Otomatik dağıtım şelalesi dizi sırasına göre yuvarlama artığı taşıdığı için `distribution` hesabı, `extreDDebts` sırası ve `manualOverrides` anahtarları değiştirilmez; satırlar id üzerinden okunur
+- **Görünüm:** CustomerDetail'de tek "İşlemler" listesi, katlanabilir kart (varsayılan kapalı), kalem satırı `type`'a göre dallanır; HistoryModal'da `variant='batch'` işlem ekstresi; genel ekstrede işlem başlıkları; PaymentModal'da grup başlıklı dağıtım tablosu
+- **Tahsilat kısıtı:** PaymentModal'daki gruplama yalnızca render katmanındadır. Şelale önce tüm hizmet borçlarını, sonra ilaçları kapatmaya devam eder. Otomatik dağıtım dizi sırasına göre yuvarlama artığı taşıdığı için `distribution` hesabı, `extreDDebts` sırası ve `manualOverrides` anahtarları değiştirilmez; satırlar id üzerinden okunur
 
 ### Ekstre Sıralama Kuralı
 
@@ -276,6 +278,8 @@ erDiagram
         string desc "Hizmet açıklaması"
         number amount "Borç tutarı (₺)"
         string date "Borç tarihi (YYYY-MM-DD)"
+        string batchId "Aynı işlemde açılan borçların ortak kimliği (eski kayıtlarda yok)"
+        number createdAt "Gerçek oluşturma zamanı (ms)"
         string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 

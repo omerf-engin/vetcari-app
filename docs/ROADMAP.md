@@ -176,14 +176,16 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10++++: Hizmet + Ilac Tek Islemde — PLANLANDI
+## Faz 10++++: Hizmet + Ilac Tek Islemde — TAMAMLANDI
 
-- [ ] `serviceDebts` dokumanlarina `batchId` + `createdAt`
-- [ ] Birlesik atomik operasyon: `addDebtTransactionOperations` (hizmet + ilac tek writeBatch)
-- [ ] `groupDebtsByBatch`: karma kalem tipleri (`type: 'service' | 'drug'`)
-- [ ] DebtModal tek gonderim; on-secili ilac satiri kaldirilir, sessiz veri kaybi giderilir
-- [ ] CustomerDetail: iki ayri bolum tek "Islemler" listesinde birlesir
-- [ ] PaymentModal: hizmet satirlari da batch gruplarina taşinir
+- [x] `serviceDebts` dokumanlarina `batchId` + `createdAt`
+- [x] Birlesik atomik operasyon: `addDebtTransactionOperations` (hizmet + ilac tek writeBatch)
+- [x] `groupDebtsByBatch`: karma kalem tipleri (`type: 'service' | 'drug'`)
+- [x] DebtModal tek gonderim; on-secili ilac satiri kaldirildi, sessiz veri kaybi giderildi
+- [x] CustomerDetail: iki ayri bolum tek "Islemler" listesinde birlesti
+- [x] PaymentModal: hizmet satirlari da batch gruplarina tasindi
+- [x] Olu kod temizligi: addServiceDebtOperations, addPastServiceDebtOperations, addBulkDrugDebtOperations
+- [x] Test 72 → 84
 
 > Ilgili tasklar: TASK-027
 
