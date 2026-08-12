@@ -39,11 +39,15 @@ const {
   returnDrug,
   applyPaymentOperations,
   addServiceDebtOperations,
-  addDrugDebtOperations,
+  addBulkDrugDebtOperations,
+  toggleBatchLockOperations,
+  returnBatchOperations,
   deleteServiceDebtOperations,
   addPastServiceDebtOperations,
-  addPastDrugDebtOperations,
 } = await import('./firestoreOperations');
+
+/** Toplu ilac borcu testleri icin kisayol: tek kalemlik item listesi */
+const item = (drug, qty, unitPrice) => ({ drug, qty, unitPrice });
 
 // =============================================
 // VALIDASYON TESTLERI
@@ -101,7 +105,12 @@ describe('Validasyon', () => {
   });
 
   it('negatif miktarla ilac borcu eklemez', async () => {
-    await addDrugDebtOperations('cust1', { id: 'd1', price: 50 }, -2);
+    await addBulkDrugDebtOperations('cust1', [item({ id: 'd1', price: 50 }, -2, 50)], '2026-08-12', 0, null, false, 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+
+  it('bos kalem listesiyle islem yapmaz', async () => {
+    await addBulkDrugDebtOperations('cust1', [], '2026-08-12', 0, null, false, 'uid1');
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 });
@@ -381,22 +390,98 @@ describe('Waterfall Tahsilat Dagitimi', () => {
 // ILAC BORCU EKLEME TESTLERI
 // =============================================
 
-describe('Ilac Borcu Ekleme', () => {
+const TODAY = new Date().toISOString().split('T')[0];
+const debtSets = () => mockBatch.operations.filter(op => op.type === 'set' && op.data.isFixed !== undefined);
+
+describe('Ilac Borcu Ekleme (Toplu)', () => {
   it('ilac borcu ekler ve log yazar', async () => {
     const drug = { id: 'drug1', price: 120 };
 
-    await addDrugDebtOperations('cust1', drug, 5);
+    await addBulkDrugDebtOperations('cust1', [item(drug, 5, 120)], TODAY, 0, null, false, 'uid1');
 
     expect(mockBatch.commit).toHaveBeenCalled();
     const sets = mockBatch.operations.filter(op => op.type === 'set');
     expect(sets.length).toBe(2); // borc + log
 
-    const debtOp = sets[0];
+    const debtOp = debtSets()[0];
     expect(debtOp.data.customerId).toBe('cust1');
     expect(debtOp.data.drugId).toBe('drug1');
     expect(debtOp.data.qty).toBe(5);
     expect(debtOp.data.maxPrice).toBe(120);
     expect(debtOp.data.isFixed).toBe(false);
+
+    const log = mockBatch.operations.find(op => op.data?.title === 'Borç Açıldı');
+    expect(log).toBeDefined();
+  });
+
+  it('tek cagridaki tum kalemler ayni batchId ve createdAt tasir', async () => {
+    const items = [
+      item({ id: 'drug1', price: 100 }, 2, 100),
+      item({ id: 'drug2', price: 200 }, 1, 200),
+      item({ id: 'drug3', price: 50 }, 4, 50)
+    ];
+
+    await addBulkDrugDebtOperations('cust1', items, TODAY, 0, null, false, 'uid1');
+
+    const debts = debtSets();
+    expect(debts.length).toBe(3);
+
+    const batchIds = new Set(debts.map(op => op.data.batchId));
+    expect(batchIds.size).toBe(1);
+    expect([...batchIds][0]).toBeTruthy();
+
+    const createdAts = new Set(debts.map(op => op.data.createdAt));
+    expect(createdAts.size).toBe(1);
+    expect(typeof [...createdAts][0]).toBe('number');
+  });
+
+  it('iki ayri cagri farkli batchId uretir', async () => {
+    const drug = { id: 'drug1', price: 100 };
+
+    await addBulkDrugDebtOperations('cust1', [item(drug, 2, 100)], TODAY, 0, null, false, 'uid1');
+    const first = debtSets()[0].data.batchId;
+
+    mockBatch.operations.length = 0;
+    await addBulkDrugDebtOperations('cust1', [item(drug, 3, 100)], TODAY, 0, null, false, 'uid1');
+    const second = debtSets()[0].data.batchId;
+
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first).not.toBe(second);
+  });
+
+  it('supurulen kalem yazilmaz, kalan kalemler ayni batchId yi korur', async () => {
+    // Toplam 2000 TL, 1960 TL tahsilat oransal dagitilir (kalanlar: 20 / 10 / 10 TL).
+    // 10 TL ve alti supurulur → yalnizca ilk kalem yazilir.
+    const items = [
+      item({ id: 'drug1', price: 100 }, 10, 100), // 1000 → kalan 20 TL
+      item({ id: 'drug2', price: 100 }, 5, 100),  // 500  → kalan 10 TL (supurulur)
+      item({ id: 'drug3', price: 100 }, 5, 100)   // 500  → kalan 10 TL (supurulur)
+    ];
+
+    await addBulkDrugDebtOperations('cust1', items, '2026-01-20', 1960, '2026-01-25', false, 'uid1');
+
+    const debts = debtSets();
+    expect(debts.length).toBe(1);
+    expect(debts[0].data.drugId).toBe('drug1');
+    expect(debts[0].data.qty).toBe(0.2);
+    expect(debts[0].data.batchId).toBeTruthy();
+
+    const sweepLogs = mockBatch.operations.filter(op => op.data?.title === 'Süpürücü (Silindi)');
+    expect(sweepLogs.length).toBe(2);
+  });
+
+  it('bugunun tarihinde Borc Acildi, gecmis tarihte Gecmis Ilac Borcu logu yazar', async () => {
+    const drug = { id: 'drug1', price: 100 };
+
+    await addBulkDrugDebtOperations('cust1', [item(drug, 2, 100)], TODAY, 0, null, false, 'uid1');
+    expect(mockBatch.operations.some(op => op.data?.title === 'Borç Açıldı')).toBe(true);
+
+    mockBatch.operations.length = 0;
+    await addBulkDrugDebtOperations('cust1', [item(drug, 2, 100)], '2026-01-20', 0, null, false, 'uid1');
+    const pastLog = mockBatch.operations.find(op => op.data?.title === 'Geçmiş İlaç Borcu');
+    expect(pastLog).toBeDefined();
+    expect(pastLog.data.date).toBe('2026-01-20'); // dateOverride
   });
 });
 
@@ -451,13 +536,13 @@ describe('Gecmis Hizmet Borcu', () => {
 describe('Gecmis Ilac Borcu', () => {
   it('ozel birim fiyatla ilac borcu olusturur', async () => {
     const drug = { id: 'drug1', price: 90 };
-    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-01-20', 0, null, false, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 4, 75)], '2026-01-20', 0, null, false, 'uid1');
 
     expect(mockBatch.commit).toHaveBeenCalled();
     const sets = mockBatch.operations.filter(op => op.type === 'set');
     expect(sets.length).toBe(2); // borc + log
 
-    const debtOp = sets.find(op => op.data.isFixed !== undefined);
+    const debtOp = debtSets()[0];
     expect(debtOp.data.qty).toBe(4);
     expect(debtOp.data.maxPrice).toBe(75);
     expect(debtOp.data.date).toBe('2026-01-20');
@@ -466,22 +551,21 @@ describe('Gecmis Ilac Borcu', () => {
   it('tahsilatli ilac borcu: adet kusuratli olabilir', async () => {
     const drug = { id: 'drug1', price: 90 };
     // 4 adet × 75 = 300, 100 TL tahsilat → 100/75 = 1.33 adet düşülür, kalan 2.67
-    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-02-15', 100, '2026-02-25', false, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 4, 75)], '2026-02-15', 100, '2026-02-25', false, 'uid1');
 
-    const sets = mockBatch.operations.filter(op => op.type === 'set');
-    const debtOp = sets.find(op => op.data.isFixed !== undefined);
+    const debtOp = debtSets()[0];
     expect(debtOp.data.qty).toBe(2.67); // 4 - 1.33
     expect(debtOp.data.maxPrice).toBe(75); // enflasyon yok
   });
 
   it('enflasyon uygulandiginda maxPrice guncellenir', async () => {
     const drug = { id: 'drug1', price: 90 };
-    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-02-15', 0, null, true, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 4, 75)], '2026-02-15', 0, null, true, 'uid1');
 
     const sets = mockBatch.operations.filter(op => op.type === 'set');
     expect(sets.length).toBe(3); // borc + log + enflasyon log
 
-    const debtOp = sets.find(op => op.data.isFixed !== undefined);
+    const debtOp = debtSets()[0];
     expect(debtOp.data.maxPrice).toBe(90); // guncel fiyat
     expect(debtOp.data.qty).toBe(4); // adet degismez
   });
@@ -489,10 +573,9 @@ describe('Gecmis Ilac Borcu', () => {
   it('tahsilat + enflasyon kombine: once tahsilat sonra enflasyon', async () => {
     const drug = { id: 'drug1', price: 90 };
     // 4×75=300, 100 tahsilat → kalan 2.67 adet, sonra enflasyon 90 TL/adet
-    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-02-15', 100, '2026-02-25', true, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 4, 75)], '2026-02-15', 100, '2026-02-25', true, 'uid1');
 
-    const sets = mockBatch.operations.filter(op => op.type === 'set');
-    const debtOp = sets.find(op => op.data.isFixed !== undefined);
+    const debtOp = debtSets()[0];
     expect(debtOp.data.qty).toBe(2.67);
     expect(debtOp.data.maxPrice).toBe(90);
   });
@@ -500,35 +583,167 @@ describe('Gecmis Ilac Borcu', () => {
   it('supurucu: tahsilat sonrasi kalan <= 10 TL ise borc olusturulmaz', async () => {
     const drug = { id: 'drug1', price: 90 };
     // 2×50=100, 95 tahsilat → kalan 0.1 adet (5 TL) ≤ 10
-    await addPastDrugDebtOperations('cust1', drug, 2, 50, '2026-03-01', 95, '2026-03-05', false, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 2, 50)], '2026-03-01', 95, '2026-03-05', false, 'uid1');
 
     const sets = mockBatch.operations.filter(op => op.type === 'set');
-    const debtOps = sets.filter(op => op.data.isFixed !== undefined);
-    expect(debtOps.length).toBe(0); // borc olusturulmadi
+    expect(debtSets().length).toBe(0); // borc olusturulmadi
     expect(sets.length).toBe(3); // 3 log (olusturma + tahsilat + supurucu)
   });
 
   it('guncel fiyat <= birim fiyat ise enflasyon uygulanmaz', async () => {
     const drug = { id: 'drug1', price: 60 }; // guncel fiyat < birim fiyat
-    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-02-15', 0, null, true, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 4, 75)], '2026-02-15', 0, null, true, 'uid1');
 
     const sets = mockBatch.operations.filter(op => op.type === 'set');
     expect(sets.length).toBe(2); // sadece borc + log (enflasyon logu yok)
 
-    const debtOp = sets.find(op => op.data.isFixed !== undefined);
+    const debtOp = debtSets()[0];
     expect(debtOp.data.maxPrice).toBe(75); // degismedi
   });
 
   it('validasyon: qty <= 0 ise islem yapmaz', async () => {
     const drug = { id: 'drug1', price: 90 };
-    await addPastDrugDebtOperations('cust1', drug, 0, 75, '2026-01-20', 0, null, false, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 0, 75)], '2026-01-20', 0, null, false, 'uid1');
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 
-  it('validasyon: paidAmount >= totalDebt ise islem yapmaz', async () => {
+  it('validasyon: paidAmount >= grandTotal ise islem yapmaz', async () => {
     const drug = { id: 'drug1', price: 90 };
     // 4 × 75 = 300, tahsilat 300 → tam odeme, borc olusturulmamali
-    await addPastDrugDebtOperations('cust1', drug, 4, 75, '2026-01-20', 300, '2026-01-25', false, 'uid1');
+    await addBulkDrugDebtOperations('cust1', [item(drug, 4, 75)], '2026-01-20', 300, '2026-01-25', false, 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================
+// GRUP (BATCH) OPERASYONLARI TESTLERI
+// =============================================
+
+const batchDebt = (over = {}) => ({
+  id: 'debt1', customerId: 'cust1', drugId: 'drug1',
+  qty: 5, maxPrice: 100, isFixed: false, batchId: 'b1', ...over
+});
+
+describe('Grup Kilidi (toggleBatchLockOperations)', () => {
+  it('karisik durumda tum kalemleri sabitler, log yalnizca degisenler icin yazilir', async () => {
+    const debts = [
+      batchDebt({ id: 'a', isFixed: true }),
+      batchDebt({ id: 'b', isFixed: false }),
+      batchDebt({ id: 'c', isFixed: false })
+    ];
+
+    await toggleBatchLockOperations(debts, 'uid1');
+
+    const updates = mockBatch.operations.filter(op => op.type === 'update');
+    expect(updates.length).toBe(2); // zaten sabit olan 'a' atlandi
+    expect(updates.every(op => op.data.isFixed === true)).toBe(true);
+
+    const logs = mockBatch.operations.filter(op => op.type === 'set');
+    expect(logs.length).toBe(2);
+    expect(logs.every(op => op.data.title === 'Fiyat Sabitlendi')).toBe(true);
+    expect(logs[0].data.userId).toBe('uid1');
+  });
+
+  it('hepsi sabitse tum kalemleri serbest birakir', async () => {
+    const debts = [
+      batchDebt({ id: 'a', isFixed: true }),
+      batchDebt({ id: 'b', isFixed: true })
+    ];
+
+    await toggleBatchLockOperations(debts, 'uid1');
+
+    const updates = mockBatch.operations.filter(op => op.type === 'update');
+    expect(updates.length).toBe(2);
+    expect(updates.every(op => op.data.isFixed === false)).toBe(true);
+
+    const logs = mockBatch.operations.filter(op => op.type === 'set');
+    expect(logs.every(op => op.data.title === 'Sabitleme Kaldırıldı')).toBe(true);
+  });
+
+  it('bos listede islem yapmaz', async () => {
+    await toggleBatchLockOperations([], 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+});
+
+describe('Grup Iadesi (returnBatchOperations)', () => {
+  it('yalnizca secili kalemleri iade eder, digerlerine dokunmaz', async () => {
+    const a = batchDebt({ id: 'a', qty: 5, maxPrice: 100 });
+    const b = batchDebt({ id: 'b', qty: 4, maxPrice: 100 });
+
+    // 'a'dan 2 adet iade (kalan 3 adet = 300 TL), 'b' secilmedi
+    await returnBatchOperations([{ debt: a, returnQty: 2 }], 0, 'uid1');
+
+    expect(mockBatch.commit).toHaveBeenCalled();
+    const updates = mockBatch.operations.filter(op => op.type === 'update');
+    expect(updates.length).toBe(1);
+    expect(updates[0].data.qty).toBe(3);
+
+    expect(mockBatch.operations.filter(op => op.type === 'delete').length).toBe(0);
+    expect(b.qty).toBe(4); // dokunulmadi
+  });
+
+  it('birden fazla kalemi tek batch icinde iade eder', async () => {
+    const items = [
+      { debt: batchDebt({ id: 'a', qty: 5, maxPrice: 100 }), returnQty: 5 }, // tam iade → delete
+      { debt: batchDebt({ id: 'b', qty: 4, maxPrice: 100 }), returnQty: 1 }  // kismi → update
+    ];
+
+    await returnBatchOperations(items, 0, 'uid1');
+
+    expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    expect(mockBatch.operations.filter(op => op.type === 'delete').length).toBe(1);
+    const updates = mockBatch.operations.filter(op => op.type === 'update');
+    expect(updates.length).toBe(1);
+    expect(updates[0].data.qty).toBe(3);
+
+    const returnLogs = mockBatch.operations.filter(op => op.data?.title === 'İade İşlemi');
+    expect(returnLogs.length).toBe(2);
+  });
+
+  it('kalan 10 TL altina duserse supurucu devreye girer', async () => {
+    const a = batchDebt({ id: 'a', qty: 5, maxPrice: 100 });
+
+    // 4.95 adet iade → kalan 0.05 adet = 5 TL ≤ 10
+    await returnBatchOperations([{ debt: a, returnQty: 4.95 }], 0, 'uid1');
+
+    expect(mockBatch.operations.filter(op => op.type === 'delete').length).toBe(1);
+    expect(mockBatch.operations.some(op => op.data?.title === 'Süpürücü (Silindi)')).toBe(true);
+  });
+
+  it('fazla iadede tek customers update yazar ve avanslar birikir', async () => {
+    const items = [
+      { debt: batchDebt({ id: 'a', qty: 2, maxPrice: 100 }), returnQty: 3 }, // 1 fazla → 100 TL
+      { debt: batchDebt({ id: 'b', qty: 1, maxPrice: 50 }), returnQty: 3 }   // 2 fazla → 100 TL
+    ];
+
+    await returnBatchOperations(items, 25, 'uid1');
+
+    const customerUpdates = mockBatch.operations.filter(
+      op => op.type === 'update' && op.data.balance !== undefined
+    );
+    expect(customerUpdates.length).toBe(1);
+    expect(customerUpdates[0].data.balance).toBe(225); // 25 + 100 + 100
+
+    const refundLogs = mockBatch.operations.filter(op => op.data?.title === 'Fazla İade (Avans)');
+    expect(refundLogs.length).toBe(2);
+  });
+
+  it('fazla iade yoksa customers dokumanina dokunmaz', async () => {
+    const a = batchDebt({ id: 'a', qty: 5, maxPrice: 100 });
+    await returnBatchOperations([{ debt: a, returnQty: 2 }], 500, 'uid1');
+
+    const customerUpdates = mockBatch.operations.filter(
+      op => op.type === 'update' && op.data.balance !== undefined
+    );
+    expect(customerUpdates.length).toBe(0);
+  });
+
+  it('bos veya gecersiz listede islem yapmaz', async () => {
+    await returnBatchOperations([], 0, 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+
+    await returnBatchOperations([{ debt: batchDebt(), returnQty: 0 }], 0, 'uid1');
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 });

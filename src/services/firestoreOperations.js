@@ -155,10 +155,12 @@ export const toggleDebtLock = async (debt, userId) => {
   await batch.commit();
 };
 
-export const returnDrug = async (debt, returnQty, customerBalance, userId) => {
-  if (returnQty <= 0) return;
-  const batch = writeBatch(db);
-
+/**
+ * Tek bir ilaç borcunun iade işlemini verilen batch'e yazar.
+ * Hem tekli (`returnDrug`) hem toplu (`returnBatchOperations`) iade bu yardımcıyı kullanır.
+ * @returns {number} Avansa yazılması gereken fazla iade tutarı (yoksa 0)
+ */
+const applyReturnToBatch = (batch, debt, returnQty, userId) => {
   if (returnQty <= debt.qty) {
     let finalQty = Math.round((debt.qty - returnQty) * 100) / 100;
     const remainingTl = finalQty * debt.maxPrice;
@@ -180,15 +182,84 @@ export const returnDrug = async (debt, returnQty, customerBalance, userId) => {
       batch.set(logRef2, createLog(debt.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için sistem borcu sıfırladı.`, 'success', debt.customerId, debt.drugId, userId));
     }
 
-  } else {
-    const excessQty = returnQty - debt.qty;
-    const refundTl = Math.round(excessQty * debt.maxPrice * 100) / 100;
+    return 0;
+  }
 
-    batch.delete(doc(db, 'drugDebts', debt.id));
-    batch.update(doc(db, 'customers', debt.customerId), { balance: customerBalance + refundTl });
+  const excessQty = returnQty - debt.qty;
+  const refundTl = Math.round(excessQty * debt.maxPrice * 100) / 100;
+
+  batch.delete(doc(db, 'drugDebts', debt.id));
+
+  const logRef = doc(collection(db, 'transactions'));
+  batch.set(logRef, createLog(debt.id, 'Fazla İade (Avans)', `Tüm borç kapatıldı. Artan ${fmtQty(excessQty)} adet karşılığı ${fmtTL(refundTl)} avans yazıldı.`, 'success', debt.customerId, debt.drugId, userId));
+
+  return refundTl;
+};
+
+/**
+ * Aynı işlemdeki tüm ilaç borçlarının fiyat kilidini tek atomik yazımda değiştirir.
+ * Hepsi sabitse tümü serbest bırakılır; aksi halde (karışık veya hepsi serbest) tümü sabitlenir.
+ * Zaten hedef durumda olan kalemlere dokunulmaz, ekstreye gereksiz log düşmez.
+ */
+export const toggleBatchLockOperations = async (debts, userId) => {
+  if (!debts || debts.length === 0) return;
+
+  const target = !debts.every(d => d.isFixed);
+  const changed = debts.filter(d => Boolean(d.isFixed) !== target);
+  if (changed.length === 0) return;
+
+  const batch = writeBatch(db);
+
+  changed.forEach(debt => {
+    batch.update(doc(db, 'drugDebts', debt.id), { isFixed: target });
 
     const logRef = doc(collection(db, 'transactions'));
-    batch.set(logRef, createLog(debt.id, 'Fazla İade (Avans)', `Tüm borç kapatıldı. Artan ${fmtQty(excessQty)} adet karşılığı ${fmtTL(refundTl)} avans yazıldı.`, 'success', debt.customerId, debt.drugId, userId));
+    batch.set(logRef, createLog(
+      debt.id,
+      target ? 'Fiyat Sabitlendi' : 'Sabitleme Kaldırıldı',
+      target ? 'Borç donduruldu, zamlardan etkilenmeyecek.' : 'Borç tekrar zamlara açık hale geldi.',
+      'neutral',
+      debt.customerId,
+      debt.drugId,
+      userId
+    ));
+  });
+
+  await batch.commit();
+};
+
+export const returnDrug = async (debt, returnQty, customerBalance, userId) => {
+  if (returnQty <= 0) return;
+  const batch = writeBatch(db);
+
+  const refundTl = applyReturnToBatch(batch, debt, returnQty, userId);
+  if (refundTl > 0) {
+    batch.update(doc(db, 'customers', debt.customerId), { balance: customerBalance + refundTl });
+  }
+
+  await batch.commit();
+};
+
+/**
+ * Aynı işlemde (batch) açılmış birden fazla ilaç borcunu tek atomik yazımda iade eder.
+ * @param {Array<{debt: object, returnQty: number}>} items — kullanıcının seçtiği kalemler
+ */
+export const returnBatchOperations = async (items, customerBalance, userId) => {
+  const valid = (items || []).filter(it => it?.debt && it.returnQty > 0);
+  if (valid.length === 0) return;
+
+  const batch = writeBatch(db);
+  let totalRefund = 0;
+  let customerId = null;
+
+  for (const { debt, returnQty } of valid) {
+    totalRefund += applyReturnToBatch(batch, debt, returnQty, userId);
+    customerId = debt.customerId;
+  }
+
+  totalRefund = Math.round(totalRefund * 100) / 100;
+  if (totalRefund > 0 && customerId) {
+    batch.update(doc(db, 'customers', customerId), { balance: Math.round((customerBalance + totalRefund) * 100) / 100 });
   }
 
   await batch.commit();
@@ -241,31 +312,17 @@ export const deleteServiceDebtOperations = async (debtId, userId) => {
   await batch.commit();
 };
 
-export const addDrugDebtOperations = async (customerId, drug, qty, userId) => {
-  if (qty <= 0) return;
-  const batch = writeBatch(db);
-  const debtRef = doc(collection(db, 'drugDebts'));
-
-  batch.set(debtRef, {
-    customerId,
-    drugId: drug.id,
-    qty,
-    maxPrice: drug.price,
-    isFixed: false,
-    date: new Date().toISOString().split('T')[0],
-    userId
-  });
-
-  const logRef = doc(collection(db, 'transactions'));
-  batch.set(logRef, createLog(debtRef.id, 'Borç Açıldı', `${fmtQty(qty)} Adet eklendi. (Birim fiyat: ${fmtTL(drug.price)}. Toplam Borç: ${fmtTL(qty * drug.price)})`, 'info', customerId, drug.id, userId));
-
-  await batch.commit();
-};
-
+/**
+ * Aynı işlemde girilen ilaç kalemlerini tek atomik yazımda borç olarak açar.
+ * Gruptaki tüm dokümanlar ortak bir `batchId` taşır; `createdAt` aynı güne düşen
+ * iki ayrı işlemi kronolojik olarak ayırt etmek için yazılır.
+ */
 export const addBulkDrugDebtOperations = async (customerId, items, date, paidAmount, paidDate, applyInflation, userId) => {
   if (!items || items.length === 0) return;
   const batch = writeBatch(db);
   const isToday = date === new Date().toISOString().split('T')[0];
+  const batchId = doc(collection(db, 'drugDebts')).id;
+  const createdAt = Date.now();
 
   const grandTotal = items.reduce((sum, it) => sum + Math.round(it.qty * it.unitPrice * 100) / 100, 0);
   if (grandTotal <= 0) return;
@@ -318,7 +375,7 @@ export const addBulkDrugDebtOperations = async (customerId, items, date, paidAmo
     }
 
     if (!isSwept) {
-      batch.set(debtRef, { customerId, drugId: item.drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, userId });
+      batch.set(debtRef, { customerId, drugId: item.drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, batchId, createdAt, userId });
     }
   }
 
@@ -420,47 +477,3 @@ export const addPastServiceDebtOperations = async (customerId, desc, amount, dat
   await batch.commit();
 };
 
-export const addPastDrugDebtOperations = async (customerId, drug, qty, unitPrice, date, paidAmount, paidDate, applyInflation, userId) => {
-  if (qty <= 0 || unitPrice <= 0) return;
-  const totalDebt = Math.round(qty * unitPrice * 100) / 100;
-  if (paidAmount >= totalDebt) return;
-
-  const batch = writeBatch(db);
-  const debtRef = doc(collection(db, 'drugDebts'));
-  let finalQty = qty;
-  let finalMaxPrice = unitPrice;
-  let isSwept = false;
-
-  const logRef1 = doc(collection(db, 'transactions'));
-  batch.set(logRef1, createLog(debtRef.id, 'Geçmiş İlaç Borcu', `${fmtQty(qty)} adet × ${fmtTL(unitPrice)} = ${fmtTL(totalDebt)} borç eklendi.`, 'info', customerId, drug.id, userId, date));
-
-  if (paidAmount > 0) {
-    const qtyToDeduct = Math.round((paidAmount / unitPrice) * 100) / 100;
-    finalQty = Math.round((qty - qtyToDeduct) * 100) / 100;
-    if (finalQty < 0) finalQty = 0;
-    const remainingTl = Math.round(finalQty * unitPrice * 100) / 100;
-
-    const logRef2 = doc(collection(db, 'transactions'));
-    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. ${fmtQty(qtyToDeduct)} adet düşüldü. Kalan: ${fmtQty(finalQty)} adet (${fmtTL(remainingTl)}).`, 'success', customerId, drug.id, userId, paidDate));
-
-    if (remainingTl <= 10) {
-      isSwept = true;
-      const logRef3 = doc(collection(db, 'transactions'));
-      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, drug.id, userId));
-    }
-  }
-
-  if (!isSwept && applyInflation && drug.price > unitPrice) {
-    finalMaxPrice = drug.price;
-    const oldRemaining = Math.round(finalQty * unitPrice * 100) / 100;
-    const newRemaining = Math.round(finalQty * drug.price * 100) / 100;
-    const logRef4 = doc(collection(db, 'transactions'));
-    batch.set(logRef4, createLog(debtRef.id, 'Enflasyon Güncellemesi', `Birim fiyat ${fmtTL(unitPrice)} → ${fmtTL(drug.price)} olarak güncellendi. Kalan borç ${fmtTL(oldRemaining)} → ${fmtTL(newRemaining)}.`, 'warning', customerId, drug.id, userId));
-  }
-
-  if (!isSwept) {
-    batch.set(debtRef, { customerId, drugId: drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, userId });
-  }
-
-  await batch.commit();
-};
