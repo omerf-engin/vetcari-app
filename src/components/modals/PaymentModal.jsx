@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { CreditCard, Check } from 'lucide-react';
-import { fmtTL, fmtQty } from '../../utils/formatters';
+import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
+import { groupDrugDebtsByBatch } from '../../utils/debtGrouping';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function PaymentModal({ onClose }) {
@@ -90,6 +91,12 @@ export default function PaymentModal({ onClose }) {
     return newDist;
   }, [amountReceived, customer.balance, serviceDebts, extreDDebts, manualOverrides]);
 
+  // Gruplama yalnizca gorunum katmanindadir: dagitim hesabi ve `extreDDebts`
+  // dizi sirasi degismez, satir degerleri id uzerinden okunur.
+  const distById = useMemo(() => new Map(distribution.map(d => [d.id, d])), [distribution]);
+  const debtGroups = useMemo(() => groupDrugDebtsByBatch(extreDDebts), [extreDDebts]);
+  const serviceRows = useMemo(() => distribution.filter(d => d.type === 'service'), [distribution]);
+
   const handleOverride = (id, val) => {
     if (val === '' || val === null || val === undefined) {
       setManualOverrides((prev) => {
@@ -103,6 +110,19 @@ export default function PaymentModal({ onClose }) {
     if (Number.isNaN(num)) return;
     setManualOverrides((prev) => ({ ...prev, [id]: num }));
   };
+
+  const renderRow = (item) => (
+    <tr key={item.id} className={`transition-colors ${item.deduct > 0 ? 'bg-indigo-50/40' : 'hover:bg-slate-50'}`}>
+      <td className="px-5 py-4">
+        <span className="font-bold text-slate-800 text-base">{item.desc}</span>
+        <div className="text-xs font-medium text-slate-500 mt-1">{item.type === 'service' ? 'Sabit Hizmet Borcu' : `İlaç (Kalan: ${fmtQty(item.qty)} Adet)`}</div>
+      </td>
+      <td className="px-5 py-4 text-right font-bold text-slate-600 text-base">{fmtTL(item.original)}</td>
+      <td className="px-5 py-3">
+        <input type="number" step="0.1" min="0" value={item.deduct === 0 ? '' : item.deduct} onChange={(e) => handleOverride(item.id, e.target.value)} placeholder="0.0" className={`w-full border-2 rounded-lg px-3 py-2 text-right font-bold text-lg focus:outline-none transition-colors ${item.deduct > 0 ? 'border-indigo-400 text-indigo-700 bg-white focus:ring-4 focus:ring-indigo-500/20' : 'border-slate-200 text-slate-500 bg-slate-50 focus:border-indigo-400 focus:bg-white'}`} />
+      </td>
+    </tr>
+  );
 
   const received = parseFloat(amountReceived) || 0;
   const totalDistributed = distribution.reduce((sum, item) => sum + item.deduct, 0);
@@ -147,23 +167,50 @@ export default function PaymentModal({ onClose }) {
                     <th className="px-5 py-3.5 font-bold uppercase tracking-wider text-xs w-48 text-right">Düşülecek Tutar (₺)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {distribution.length === 0 && (
+                {distribution.length === 0 && (
+                  <tbody>
                     <tr><td colSpan="3" className="p-8 text-center text-slate-500 bg-slate-50/50">Kapatılacak borç bulunmuyor. Alınan para doğrudan avansa yazılacak.</td></tr>
-                  )}
-                  {distribution.map(item => (
-                    <tr key={item.id} className={`transition-colors ${item.deduct > 0 ? 'bg-indigo-50/40' : 'hover:bg-slate-50'}`}>
-                      <td className="px-5 py-4">
-                        <span className="font-bold text-slate-800 text-base">{item.desc}</span>
-                        <div className="text-xs font-medium text-slate-500 mt-1">{item.type === 'service' ? 'Sabit Hizmet Borcu' : `İlaç (Kalan: ${fmtQty(item.qty)} Adet)`}</div>
-                      </td>
-                      <td className="px-5 py-4 text-right font-bold text-slate-600 text-base">{fmtTL(item.original)}</td>
-                      <td className="px-5 py-3">
-                        <input type="number" step="0.1" min="0" value={item.deduct === 0 ? '' : item.deduct} onChange={(e) => handleOverride(item.id, e.target.value)} placeholder="0.0" className={`w-full border-2 rounded-lg px-3 py-2 text-right font-bold text-lg focus:outline-none transition-colors ${item.deduct > 0 ? 'border-indigo-400 text-indigo-700 bg-white focus:ring-4 focus:ring-indigo-500/20' : 'border-slate-200 text-slate-500 bg-slate-50 focus:border-indigo-400 focus:bg-white'}`} />
-                      </td>
+                  </tbody>
+                )}
+
+                {serviceRows.length > 0 && (
+                  <tbody className="divide-y divide-slate-100">
+                    <tr className="bg-slate-100/70 border-y border-slate-200">
+                      <td colSpan="3" className="px-5 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Hizmet Borçları</td>
                     </tr>
-                  ))}
-                </tbody>
+                    {serviceRows.map(renderRow)}
+                  </tbody>
+                )}
+
+                {debtGroups.map(group => {
+                  const groupDeduct = Math.round(
+                    group.items.reduce((sum, d) => sum + (distById.get(d.id)?.deduct ?? 0), 0) * 100
+                  ) / 100;
+
+                  return (
+                    <tbody key={group.batchId} className="divide-y divide-slate-100">
+                      <tr className="bg-slate-100/70 border-y border-slate-200">
+                        <td colSpan="3" className="px-5 py-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+                            <span className="font-bold text-slate-500 uppercase tracking-wider">
+                              {fmtDate(group.date)} · {group.itemCount} kalem
+                            </span>
+                            <span className="font-semibold text-slate-500">
+                              Grup toplamı: <strong className="text-slate-700">{fmtTL(group.total)}</strong>
+                              {groupDeduct > 0 && (
+                                <> · Düşülecek: <strong className="text-indigo-700">{fmtTL(groupDeduct)}</strong></>
+                              )}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.items.map(d => {
+                        const item = distById.get(d.id);
+                        return item ? renderRow(item) : null;
+                      })}
+                    </tbody>
+                  );
+                })}
               </table>
             </div>
           </div>
