@@ -159,6 +159,18 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
+## Faz 10+++: Islem Bazli Borc Gruplama — PLANLANDI
+
+- [ ] `drugDebts` dokumanlarina `batchId` + `createdAt` alanlari (migration gerekmez, fallback'li)
+- [ ] Grup seviyesi backend operasyonlari: toplu sabitleme, grup iadesi (atomik writeBatch)
+- [ ] CustomerDetail: ayni islemde girilen kalemler tek katlanabilir kart altinda (varsayilan kapali)
+- [ ] HistoryModal `variant='batch'`: grup ekstresi tek pencerede
+- [ ] PaymentModal: dagitim listesi gorsel olarak gruplanir (dagitim mantigi degismez)
+
+> Ilgili tasklar: TASK-026
+
+---
+
 ## Faz 10++: TypeScript Migrasyonu — PLANLANDI
 
 - [ ] Altyapi: tsconfig.json, vite.config.ts, typescript-eslint
