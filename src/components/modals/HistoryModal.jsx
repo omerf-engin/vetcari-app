@@ -22,32 +22,42 @@ const sortLogsInternal = (arr) => [...arr].sort((a, b) => {
 });
 
 /**
- * @param {'debt'|'customer'} [variant='debt'] — debt: tek borç ekstresi (varsayılan, mevcut davranış). customer: müşteri genel ekstre.
+ * @param {'debt'|'customer'|'batch'} [variant='debt'] — debt: tek borç ekstresi (varsayılan, mevcut davranış).
+ *        customer: müşteri genel ekstre. batch: aynı işlemde açılmış borçların ekstresi.
  * @param {object} [debtInfo] — variant debt iken ilaç satırı bilgisi (drugName).
  * @param {string} [customerName] — variant customer iken müşteri adı.
+ * @param {object} [batchInfo] — variant batch iken işlem bilgisi (date, itemCount, total).
  */
-export default function HistoryModal({ variant = 'debt', debtInfo, customerName, logs, onClose }) {
-  const isCustomer = variant === 'customer';
+export default function HistoryModal({ variant = 'debt', debtInfo, customerName, batchInfo, logs, onClose }) {
+  const isGrouped = variant === 'customer' || variant === 'batch';
 
-  const sortedLogs = useMemo(() => isCustomer ? [] : sortLogsInternal(logs), [logs, isCustomer]);
+  const sortedLogs = useMemo(() => isGrouped ? [] : sortLogsInternal(logs), [logs, isGrouped]);
 
-  // Genel ekstre: logları debtId'ye göre kümele, kümeleri en eski tarihlerine göre sırala
+  // Kümeleme: log.groupKey verilmişse ona göre (işlem bazlı), aksi halde debtId bazında
   const logGroups = useMemo(() => {
-    if (!isCustomer) return null;
+    if (!isGrouped) return null;
     const map = new Map();
     for (const log of logs) {
-      const key = log.debtId || '__unknown__';
+      const key = log.groupKey || log.debtId || '__unknown__';
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(log);
     }
-    const groups = [...map.entries()].map(([debtId, group]) => {
+    const groups = [...map.entries()].map(([groupKey, group]) => {
       const sorted = sortLogsInternal(group);
       const oldestDate = group.reduce((min, l) => (l.date && l.date < min) ? l.date : min, group[0].date || '9999');
-      return { debtId, label: group[0].sourceLabel || 'Bilinmeyen Borç', logs: sorted, oldestDate };
+      const distinctSources = new Set(group.map((l) => l.sourceLabel).filter(Boolean));
+      return {
+        groupKey,
+        label: group[0].groupLabel || group[0].sourceLabel || 'Bilinmeyen Borç',
+        logs: sorted,
+        oldestDate,
+        // Bir işlemde birden fazla kalem varsa her log'un hangi ilaca ait olduğu belirtilir
+        showSourceLabels: distinctSources.size > 1
+      };
     });
     groups.sort((a, b) => b.oldestDate.localeCompare(a.oldestDate));
     return groups;
-  }, [logs, isCustomer]);
+  }, [logs, isGrouped]);
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -65,10 +75,12 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
     }
   };
 
-  const title = isCustomer ? 'Genel Ekstre' : 'Borç Ekstresi (Log)';
-  const subtitle = isCustomer
+  const title = variant === 'customer' ? 'Genel Ekstre' : variant === 'batch' ? 'İşlem Ekstresi' : 'Borç Ekstresi (Log)';
+  const subtitle = variant === 'customer'
     ? (customerName ? `${customerName} — Tüm borç hareketleri` : 'Tüm borç hareketleri')
-    : (debtInfo?.drugName || 'İlaç Borcu');
+    : variant === 'batch'
+      ? `${fmtDate(batchInfo?.date)} — ${batchInfo?.itemCount ?? 0} kalemlik işlem`
+      : (debtInfo?.drugName || 'İlaç Borcu');
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -85,10 +97,10 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
         <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
           {logs.length === 0 ? (
             <p className="text-center text-slate-400 py-8">Bu kayıt için henüz bir geçmiş bulunmuyor.</p>
-          ) : isCustomer && logGroups ? (
+          ) : isGrouped && logGroups ? (
             <div className="space-y-6">
               {logGroups.map((group) => (
-                <div key={group.debtId}>
+                <div key={group.groupKey}>
                   <div className="flex items-center gap-2 mb-3 px-1">
                     <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{group.label}</span>
                     <div className="flex-1 h-px bg-indigo-200/60"></div>
@@ -102,6 +114,9 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
                           </span>
                           <time className="text-xs text-slate-400 font-medium">{fmtDate(log.date)}</time>
                         </div>
+                        {group.showSourceLabels && log.sourceLabel && (
+                          <p className="text-[11px] font-semibold text-slate-400 mb-1">{log.sourceLabel}</p>
+                        )}
                         <div className="text-sm text-slate-700 leading-relaxed font-medium">
                           {log.message}
                         </div>

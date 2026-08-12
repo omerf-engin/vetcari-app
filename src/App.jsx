@@ -17,7 +17,9 @@ import {
   deleteDrug,
   updateDrugPrice,
   toggleDebtLock,
+  toggleBatchLockOperations,
   returnDrug,
+  returnBatchOperations,
   addServiceDebtOperations,
   deleteServiceDebtOperations,
   addBulkDrugDebtOperations,
@@ -131,12 +133,26 @@ export default function App() {
     catch (err) { handleError(err, 'Kilit Değiştirme'); }
   }, [drugDebts, currentUser, handleError]);
 
+  const toggleBatchLockHandler = useCallback(async (debts) => {
+    if (!debts || debts.length === 0) return;
+    try { await toggleBatchLockOperations(debts, currentUser.uid); }
+    catch (err) { handleError(err, 'Toplu Kilit Değiştirme'); }
+  }, [currentUser, handleError]);
+
   const handleDrugReturn = useCallback(async (debt, returnQty) => {
     const customer = customers.find(c => c.id === debt.customerId);
     if (!customer) return;
     try { await returnDrug(debt, returnQty, customer.balance, currentUser.uid); }
     catch (err) { handleError(err, 'İade İşlemi'); }
   }, [customers, currentUser, handleError]);
+
+  const handleBatchReturn = useCallback(async (items) => {
+    if (!items || items.length === 0) return;
+    const customer = customers.find(c => c.id === items[0].debt.customerId);
+    if (!customer) return;
+    try { await returnBatchOperations(items, customer.balance, currentUser.uid); toast.success('İade işlemi uygulandı'); }
+    catch (err) { handleError(err, 'Toplu İade'); }
+  }, [customers, currentUser, toast, handleError]);
 
   const addServiceDebt = useCallback(async (customerId, desc, amount) => {
     try { await addServiceDebtOperations(customerId, desc, amount, currentUser.uid); }
@@ -191,6 +207,7 @@ export default function App() {
       serviceDebts: custServiceDebts, drugDebts: custDrugDebts,
       transactions: custTransactions,
       onToggleLock: toggleDebtLockHandler, onReturnDrug: handleDrugReturn,
+      onToggleBatchLock: toggleBatchLockHandler, onReturnBatch: handleBatchReturn,
       onAddServiceDebt: (desc, amt) => addServiceDebt(selectedCustomerId, desc, amt),
       onDeleteServiceDebt: deleteServiceDebt,
       onAddBulkDrugDebt: (items, date, paidAmount, paidDate, applyInflation) => addBulkDrugDebt(selectedCustomerId, items, date, paidAmount, paidDate, applyInflation),
@@ -198,8 +215,8 @@ export default function App() {
       onAddPastServiceDebt: (desc, amount, date, paidAmount, paidDate) => addPastServiceDebt(selectedCustomerId, desc, amount, date, paidAmount, paidDate),
     };
   }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
-      toggleDebtLockHandler, handleDrugReturn, addServiceDebt, deleteServiceDebt,
-      addBulkDrugDebt, applyPayment, addPastServiceDebt]);
+      toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
+      addServiceDebt, deleteServiceDebt, addBulkDrugDebt, applyPayment, addPastServiceDebt]);
 
   if (loading) {
     return (
