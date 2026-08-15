@@ -826,7 +826,7 @@ Tarayicida gecici test musterisiyle dogrulanan senaryolar: karma islem (muayene 
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P1 |
 | **Depends on** | — |
 
@@ -851,8 +851,22 @@ Somut ornek: 13 Agustos 00:45'te girilen bir borc, ekstreye ve `date` alanina **
 - Yardimci fonksiyon icin en az 2 unit test (gece yarisi sinirini sabit tarihle dogrulayan)
 - `toISOString()` kullanimi icin repo genelinde arama yapilir, kalan olmaz
 
+**Sonuc:** Test 84 → 90 · Lint 0 error 0 warning · Build basarili
+
+**Yapilanlar:**
+- Yeni `src/utils/dates.js`: `toLocalDateStr(date)` (yerel `getFullYear/getMonth/getDate` ile `YYYY-MM-DD`) ve `todayLocal()`
+- Cevrilen yerler: `firestoreOperations.js` → `createLog` varsayilan `date` ve `addDebtTransactionOperations` icindeki `today` (bugun/gecmis ayrimi, dolayisiyla log basliklari); `DebtModal.jsx` → `today` (tarih inputlarinin varsayilani ve `max` siniri)
+- `firestoreOperations.test.js` icindeki `TODAY` sabiti de ayni yardimciya cevrildi — aksi halde testler yerel saat 00:00-03:00 arasinda gecmis borc dalina duserdi
+- `src/utils/dates.test.js` (6 test): saat dilimi `beforeAll` icinde `Europe/Istanbul`'a sabitlenip 12 Agustos 21:45 UTC ani ile hata birebir uretiliyor — `toISOString()` `2026-08-12`, yardimci `2026-08-13` doner. Ayrica gun sonu (23:59) kaymasi, sifir dolgusu ve `todayLocal()` icin sahte saatle 00:45 / 14:30 senaryolari
+- `eslint.config.js`: test dosyalari icin Node global'leri (`process.env.TZ`) acildi
+
+**Kapsam disi birakilan:**
+- Mevcut kayitlar duzeltilmedi (task tanimi geregi); gecmis veri oldugu gibi kaldi
+- Kalan `toISOString()` kullanimi yalnizca `scripts/backupFirestore.js` icindeki yedek dosya adi damgasi — tarih hesabi degil, dokunulmadi
+
 **Notes:**
 Kucuk ama defter dogrulugunu dogrudan etkileyen bir hata; veteriner gece kayit giriyorsa tarihler bir gun geriye kayiyor.
+Canli UI dogrulamasi yapilmadi: hata yalnizca yerel saat 00:00-03:00 araliginda gozlemlenebiliyor, dogrulama saat dilimi sabitlenmis unit testlerle yapildi.
 
 ---
 

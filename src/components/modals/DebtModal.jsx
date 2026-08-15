@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Plus, Clock, Check, Trash2, ChevronDown } from 'lucide-react';
 import { useCustomer } from '../../hooks/useCustomer';
 import { fmtTL, fmtQty } from '../../utils/formatters';
+import { todayLocal } from '../../utils/dates';
 
 const emptyRow = () => ({ id: crypto.randomUUID(), drugId: '', qty: '1', priceMode: 'unit', unitPrice: '' });
 
@@ -10,7 +11,7 @@ export default function DebtModal({ mode, onClose }) {
   const isPast = mode === 'past';
 
   const [tab, setTab] = useState('service');
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocal();
 
   // İşlem tarihi — hizmet ve ilaç ortak (tek işlem = tek tarih)
   const [date, setDate] = useState(today);

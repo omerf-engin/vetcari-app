@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockBatch, mockDoc, mockCollection, mockAddDoc, mockDeleteDoc, mockUpdateDoc, mockGetDoc, resetMocks } from '../test/firebaseMock';
+import { todayLocal } from '../utils/dates';
 
 // Firebase modulunu mock'la
 const mockBatch = createMockBatch();
@@ -44,7 +45,9 @@ const {
   deleteServiceDebtOperations,
 } = await import('./firestoreOperations');
 
-const TODAY = new Date().toISOString().split('T')[0];
+// Uygulama ile ayni yerel tarih kaynagi; UTC kullanilirsa gece 00:00-03:00
+// arasinda "bugun" testleri gecmis borc dalina duserdi.
+const TODAY = todayLocal();
 
 /** Ilac kalemi kisayolu */
 const item = (drug, qty, unitPrice) => ({ drug, qty, unitPrice });

@@ -115,6 +115,14 @@ Ekstre her zaman `timestamp` alanına göre azalan sırada (`desc`) gösterilir:
 - Aynı gün içinde dahi sonraki işlem üstte yer alır (LIFO)
 - `dateOverride` ile görüntülenen tarih farklı olsa bile sıralama `timestamp` ile belirlenir
 
+### Tarih Üretimi (Yerel Gün)
+
+"Bugün" **asla** `new Date().toISOString().split('T')[0]` ile üretilmez — `toISOString()` UTC döndürdüğü için Türkiye'de (UTC+3) yerel saat 00:00–03:00 arasında bir önceki günü verirdi; borç `date` alanları ve ekstre logları bir gün geriye kayardı.
+
+- Tek kaynak: `utils/dates.js` → `todayLocal()` ve `toLocalDateStr(date)` (`getFullYear/getMonth/getDate`)
+- Kullanıldığı yerler: `createLog` varsayılan `date`, `addDebtTransactionOperations` içindeki bugün/geçmiş ayrımı (log başlıklarını da belirler), `DebtModal`'daki tarih inputlarının varsayılanı ve `max` sınırı
+- Yeni kod da bu yardımcıyı kullanmalı; `toISOString()` yalnızca tarih olmayan damgalarda (ör. yedek dosya adı) geçerlidir
+
 ### Performans: Memoize Stratejisi
 
 `App.jsx`'te `CustomerProvider` value'su `useMemo` ile oluşturulur:
@@ -228,7 +236,11 @@ vetcari-app/
 │   │
 │   ├── utils/
 │   │   ├── formatters.js
-│   │   └── formatters.test.js       # Formatlayıcı unit testleri (Vitest)
+│   │   ├── formatters.test.js       # Formatlayıcı unit testleri (Vitest)
+│   │   ├── dates.js                 # todayLocal / toLocalDateStr (yerel gün, UTC değil)
+│   │   ├── dates.test.js
+│   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
+│   │   └── debtGrouping.test.js
 │   │
 │   ├── App.jsx                      # activeTab ile sekme yönetimi
 │   ├── main.jsx

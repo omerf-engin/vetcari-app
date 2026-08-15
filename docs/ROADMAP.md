@@ -191,9 +191,9 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10+5: Kalite ve Duzeltmeler — PLANLANDI
+## Faz 10+5: Kalite ve Duzeltmeler — DEVAM EDIYOR
 
-- [ ] Tarih kaymasi bug fix: `toISOString()` (UTC) yerine yerel tarih yardimcisi — gece
+- [x] Tarih kaymasi bug fix: `toISOString()` (UTC) yerine yerel tarih yardimcisi — gece
       00:00-03:00 arasi girilen borclar bir onceki gune yaziliyor (TASK-028, P1)
 - [ ] Component test altyapisi: @testing-library/react; DebtModal, BatchReturnModal ve
       gruplanmis kart icin koruma testleri (TASK-029, P2)

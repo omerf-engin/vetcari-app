@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { fmtTL, fmtQty } from '../utils/formatters';
+import { todayLocal } from '../utils/dates';
 
 const chunkIds = (ids, size) => {
   const out = [];
@@ -38,7 +39,7 @@ const commitDeletesInBatches = async (refs) => {
 const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, userId, dateOverride) => {
   const o = {
     debtId,
-    date: dateOverride || new Date().toISOString().split('T')[0],
+    date: dateOverride || todayLocal(),
     timestamp: Date.now(),
     title,
     message,
@@ -420,7 +421,7 @@ export const addDebtTransactionOperations = async (customerId, payload, userId) 
     applyInflation = false
   } = payload || {};
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayLocal();
   const effectiveDate = date || today;
   const common = {
     customerId,
