@@ -963,7 +963,7 @@ Veri zaten mevcut; yeni Firestore koleksiyonu gerekmez. `transactions` uzerinde 
 **Deliverables:**
 - `drugs` Firestore koleksiyonuna `stock` (mevcut adet) ve `minStock` (kritik esik) alanlari eklenmesi
 - DrugsView'e her ilac icin stok giriş/duzenle alani
-- `addBulkDrugDebtOperations` icinde borc yazilirken ilgili ilacin stogunun otomatik dusurulmesi
+- `appendDrugItemsToBatch` (yani `addDebtTransactionOperations` yazim yolu) icinde borc yazilirken ilgili ilacin stogunun otomatik dusurulmesi — supurulen satirlar stok dusmemeli
 - Dashboard'a "Stok Kritik Ilaclar" widget'i (stok <= minStock olan ilaclar)
 
 **Acceptance Criteria:**

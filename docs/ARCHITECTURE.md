@@ -86,14 +86,16 @@ Veteriner geçmişte kağıt/hafızadan takip ettiği borçları sisteme girebil
 - **Enflasyon seçeneği:** `applyInflation = true` ve ilacın güncel fiyatı girilen birim fiyattan yüksekse `maxPrice` güncellenir, borç bugünkü fiyata taşınır.
 - **Süpürücü:** Kısmi tahsilat sonrası kalan ≤ 10 TL ise borç otomatik silinir.
 
-### Toplu İlaç Borcu (Bulk)
+### Toplu İlaç Borcu (Aynı İşlemde N Kalem)
 
-Tek işlemde birden fazla ilaç borcu eklenebilir (`addBulkDrugDebtOperations`):
+Bir işlemde birden fazla ilaç kalemi girilebilir. Bunlar `addDebtTransactionOperations`'ın `drugItems` bölümünü oluşturur ve `appendDrugItemsToBatch(batch, ctx)` yardımcısı tarafından — hizmet kalemiyle **aynı** `writeBatch` içine — yazılır (TASK-027 öncesindeki bağımsız `addBulkDrugDebtOperations` kaldırıldı):
 
-- Tek `writeBatch` ile N ilaç borcu + N transaction log yazılır (atomik)
-- Kısmi tahsilat toplam tutara orantılı olarak her satıra dağıtılır; son satır yuvarlama farkını alır
-- Enflasyon ve süpürücü satır bazında uygulanır
-- Bugün veya geçmiş tarih modunda çalışır (`date` parametresi)
+- Her kalem ayrı bir `drugDebts` dokümanı olur; hepsi işlemin ortak `batchId` + `createdAt` değerini taşır → tek kart olarak render edilir (bkz. "İşlem Bazlı Gruplama (batchId)")
+- **Geçerli satır filtresi:** yalnızca `drug` seçilmiş ve `qty > 0`, `unitPrice > 0` olan satırlar yazılır; boş/eksik satırlar sessizce atlanır. Hiç geçerli satır yoksa (veya `grandTotal <= 0` ya da `paidAmount >= grandTotal` ise) ilaç bölümü hiçbir şey yazmaz — hizmet bölümü bundan etkilenmez
+- **Kısmi tahsilat:** toplam tutara orantılı olarak satırlara dağıtılır; **son geçerli satır** yuvarlama artığını alır, her satırın payı `min(pay, satır toplamı, kalan tahsilat)` ile sınırlanır
+- **Süpürücü ve enflasyon satır bazındadır:** tahsilat sonrası kalanı ≤ 10 TL olan satır için borç dokümanı yazılmaz (yalnızca logları kalır) ve o satıra enflasyon uygulanmaz
+- **Bugün / geçmiş ayrımı** `isToday` ile yapılır: log başlığı `Borç Açıldı` ↔ `Geçmiş İlaç Borcu` değişir ve geçmiş modda logların `date`'i işlem tarihine override edilir. `isToday` hesabı yerel gün üzerindendir (bkz. "Tarih Üretimi (Yerel Gün)")
+- **Log seti (satır başına):** borç açılış logu + [tahsilat varsa] `Geçmiş Tahsilat` + [süpürüldüyse] `Süpürücü (Silindi)` + [enflasyon uygulandıysa] `Enflasyon Güncellemesi`
 
 ### İşlem Bazlı Gruplama (batchId)
 
