@@ -18,6 +18,11 @@ dist-ssr
 scripts/serviceAccountKey.json
 scripts/backup-*.json
 
+# Musteri/cari verisi iceren calisma dosyalari (repoya girmemeli)
+*.xlsx
+*.xls
+*.csv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
