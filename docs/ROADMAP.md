@@ -191,6 +191,17 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
+## Faz 10+5: Kalite ve Duzeltmeler — PLANLANDI
+
+- [ ] Tarih kaymasi bug fix: `toISOString()` (UTC) yerine yerel tarih yardimcisi — gece
+      00:00-03:00 arasi girilen borclar bir onceki gune yaziliyor (TASK-028, P1)
+- [ ] Component test altyapisi: @testing-library/react; DebtModal, BatchReturnModal ve
+      gruplanmis kart icin koruma testleri (TASK-029, P2)
+
+> Ilgili tasklar: TASK-028, TASK-029
+
+---
+
 ## Faz 10++: TypeScript Migrasyonu — PLANLANDI
 
 - [ ] Altyapi: tsconfig.json, vite.config.ts, typescript-eslint

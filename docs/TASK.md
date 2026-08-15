@@ -822,6 +822,70 @@ Tarayicida gecici test musterisiyle dogrulanan senaryolar: karma islem (muayene 
 
 ---
 
+## TASK-028: Tarih Kaymasi — UTC / Yerel Saat Uyumsuzlugu (Bug Fix)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P1 |
+| **Depends on** | — |
+
+**Problem:**
+Kod tabaninda "bugunun tarihi" her yerde `new Date().toISOString().split('T')[0]` ile uretiliyor. `toISOString()` **UTC** dondurur; Turkiye UTC+3 oldugu icin yerel saat **00:00–03:00** arasinda uretilen tarih bir onceki gune duser.
+
+Somut ornek: 13 Agustos 00:45'te girilen bir borc, ekstreye ve `date` alanina **12 Agustos** olarak yaziliyor. TASK-027 dogrulamasi sirasinda gozlemlendi.
+
+**Etkilenen yerler:**
+- `firestoreOperations.js` — `createLog` varsayilan `date`, `addDebtTransactionOperations` icindeki `today` karsilastirmasi (bugun/gecmis ayrimi ve dolayisiyla log basliklari)
+- `DebtModal.jsx` — `today` degiskeni (tarih inputlarinin varsayilani ve `max` siniri)
+- Gece yarisindan sonra girilen kayitlarda "Borc Acildi" yerine "Gecmis Ilac Borcu" logu yazilmasina da yol acabilir
+
+**Deliverables:**
+- `utils/formatters.js` (veya yeni `utils/dates.js`) icine yerel tarih ureten tek yardimci: `todayLocal()` — `getFullYear/getMonth/getDate` ile `YYYY-MM-DD`
+- `new Date().toISOString().split('T')[0]` kullanan tum yerler bu yardimciya cevrilir
+- Mevcut kayitlar duzeltilmez (gecmis veri oldugu gibi kalir); yalnizca bundan sonraki girisler dogru olur
+
+**Acceptance Criteria:**
+- Yerel saat 00:00–03:00 araliginda girilen borcun `date` alani **o gunun** tarihi olur
+- Ayni sartlarda "Borc Acildi" logu yazilir (yanlislikla gecmis borc moduna dusmez)
+- Yardimci fonksiyon icin en az 2 unit test (gece yarisi sinirini sabit tarihle dogrulayan)
+- `toISOString()` kullanimi icin repo genelinde arama yapilir, kalan olmaz
+
+**Notes:**
+Kucuk ama defter dogrulugunu dogrudan etkileyen bir hata; veteriner gece kayit giriyorsa tarihler bir gun geriye kayiyor.
+
+---
+
+## TASK-029: Component Test Altyapisi
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P2 |
+| **Depends on** | TASK-027 |
+
+**Problem:**
+Projede yalnizca `utils/` ve `services/` testleri var (84 test). TASK-026 ve TASK-027 ile gelen UI mantigi — gruplanmis kart, kalem tipine gore dallanma, `BatchReturnModal` secim/adet state'i, `DebtModal`'in dolu/gecerli ayrimi — tamamen elle dogrulaniyor. Bir regresyon CI'da yakalanmaz.
+
+**Deliverables:**
+- `@testing-library/react` + `@testing-library/jest-dom` kurulumu, `vitest` jsdom ortami (`src/test/setup.js` zaten var)
+- `CustomerContext` icin test yardimcisi (provider sarmalayici + sahte handler'lar)
+- Oncelikli testler:
+  - `DebtModal` — yalnizca hizmet doluyken Kaydet aktif ve `drugItems` bos gonderilir; on-secili ilac satiri olmadigi
+  - `DebtModal` — sekme degistirince her iki bolumun ozeti footer'da kalir
+  - `BatchReturnModal` — secim yokken onay pasif, kismi secimde yalnizca secililer gonderilir
+  - `CustomerDetail` — karma grupta HIZMET cipi + ilac satiri birlikte render edilir; hizmet-only grupta kilit/iade butonlari yok
+
+**Acceptance Criteria:**
+- `npm run test` component testlerini de calistirir
+- En az 6 component testi gecer
+- Mevcut 84 test etkilenmez
+
+**Notes:**
+TASK-026/027 elle dogrulandi ve calisiyor; bu task koruma katmani icin.
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |
