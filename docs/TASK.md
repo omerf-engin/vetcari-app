@@ -900,6 +900,62 @@ TASK-026/027 elle dogrulandi ve calisiyor; bu task koruma katmani icin.
 
 ---
 
+## TASK-030: Eski Kayitlarin Ayni Tarihte Tek Islem Karti Olmasi
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P2 |
+| **Depends on** | TASK-026, TASK-027 |
+
+**Problem:**
+Musteri detayinda 14 Mayis 2024 icin iki ayri "1 kalem" karti goruluyordu. TASK-026/027 oncesi
+yazilan kayitlarda `batchId` alani yok; `groupDebtsByBatch` bunlari `` `${type}:${doc.id}` `` ile
+anahtarladigi icin ayni ziyarette girilmis bir muayene + bir ilac iki bagimsiz kart oluyordu.
+Render hatasi degil, gruplama anahtarinin eski veriye uymamasi.
+
+**Fix:**
+`src/utils/debtGrouping.js` icindeki grup anahtari uc kademeli hale getirildi:
+
+```javascript
+const key = debt.batchId || (debt.date ? `legacy:${debt.date}` : `${type}:${debt.id}`);
+```
+
+- `batchId` varsa davranis aynen korunur — ayni gundeki iki **yeni** islem ayri kartlarda kalir
+- `batchId` yok ama `date` varsa ayni tarihli eski hizmet + ilac kayitlari tek grupta birlesir
+- Ikisi de yoksa tip onekli doküman id'sine duser (id cakismasi korumasi yerinde kalir)
+
+Yalnizca render katmani; Firestore'a yazma, migration veya veri degisikligi yok. Musteri bazinda
+izolasyon zaten var (`App.jsx` borclari context'e vermeden once `customerId`'ye gore filtreliyor),
+bu yuzden tarihe gore anahtarlama farkli musterileri birlestirmez.
+
+**Kabul edilen takas:**
+Eski donemde ayni gune denk gelen iki ayri ziyaret de tek kartta birlesir — bu bilgi veride yok.
+Veri kaybi yok, tutarlar ayni; yalnizca gorsel gruplama. Yeni kayitlar `batchId` tasidigi icin
+bu belirsizlik sonraki verilerde olusmaz.
+
+**Kabul Kriterleri:**
+- Ayni tarihli eski hizmet + ilac borclari tek kartta ("2 kalem") ve dogru grup toplamiyla gorunur
+- `batchId` tasiyan yeni islemler, ayni gune denk gelse bile ayri kartlarda kalir
+- Farkli tarihli eski kayitlar ayri kartlarda kalir
+- Tahsilat dagitimi degismez (gruplama yalnizca gorsel — TASK-026 kisiti)
+- Lint 0/0 · Test gecer · Build basarili
+
+**Sonuc:** Test 90 → 93 · Lint 0 error 0 warning · Build basarili
+
+Tarayicida gercek veriyle dogrulanan senaryolar (musteri: efe, 14 Haziran 2023 tarihli iki eski
+ilac borcu): degisiklik oncesi iki ayri "1 kalem" karti (113.000 ₺ + 6.813,1 ₺), sonrasinda tek
+"2 kalem" karti (119.813,1 ₺) · kalem eylemleri (Gecmis/Serbest/Iade) ve grup eylemleri yerinde ·
+farkli tarihli eski kayitlar ayri kartlarda kaliyor (musteri: omer, 3 ayri tarih) · **tahsilat
+dagitimi degismedi**: 50.000 ₺ girisi icin satir degerleri degisiklik oncesi ve sonrasi birebir
+ayni (47156,77 / 2843,23; Dagitilan Toplam 50.000 ₺) · genel ekstrede loglar tek
+"14 Haziran 2023 · 2 kalemlik islem" basligi altinda, her log kendi ilac etiketini koruyor.
+
+Ayni tarihli iki **yeni** islemin ayri kartlarda kalmasi gercek veride denk gelmedi; bu senaryo
+`eski kayitlar ayni tarihli batchId li gruba karismaz` unit testiyle kapsandi.
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |

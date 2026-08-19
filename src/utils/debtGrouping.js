@@ -1,7 +1,8 @@
 // --- ISLEM (BATCH) BAZLI BORC GRUPLAMA ---
 // Ayni islemde acilan hizmet ve ilac borclari ortak bir `batchId` tasir.
-// `batchId` alani olmayan eski kayitlar kendi doküman id'leriyle tek kalemlik
-// gruplara ayrilir (migration gerektirmez).
+// `batchId` alani olmayan eski kayitlarda bu bilgi veride yok; onlar tarihlerine
+// gore gruplanir — ayni gun acilmis eski borclar tek islem sayilir (migration
+// gerektirmez). Tarihi de olmayan kayitlar kendi doküman id'lerine duser.
 
 const round2 = (val) => Math.round(val * 100) / 100;
 
@@ -23,8 +24,9 @@ export const groupDebtsByBatch = (serviceDebts, drugDebts) => {
   const map = new Map();
 
   const add = (debt, type) => {
-    // Eski kayitlarda iki koleksiyonun doküman id'leri cakismasin diye tip oneki
-    const key = debt.batchId || `${type}:${debt.id}`;
+    // `batchId` yoksa ayni gune ait eski kayitlar tek islem sayilir. Tarih de yoksa
+    // tip onekli doküman id'sine dusulur; onek iki koleksiyonun id cakismasini onler.
+    const key = debt.batchId || (debt.date ? `legacy:${debt.date}` : `${type}:${debt.id}`);
     if (!map.has(key)) {
       map.set(key, {
         batchId: key,

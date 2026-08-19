@@ -73,21 +73,63 @@ describe('groupDebtsByBatch', () => {
     expect(g.hasDrug).toBe(true);
   });
 
-  it('batchId tasimayan eski kayitlari tek kalemlik gruplara ayirir', () => {
+  it('batchId tasimayan ayni tarihli eski kayitlari tek grupta birlestirir', () => {
     const groups = groupDebtsByBatch(
-      [service({ id: 'eskiSvc', batchId: undefined, createdAt: undefined })],
-      [drug({ id: 'eskiDrug', batchId: undefined, createdAt: undefined })]
+      [service({ id: 'eskiSvc', batchId: undefined, createdAt: undefined, amount: 500 })],
+      [drug({ id: 'eskiDrug', batchId: undefined, createdAt: undefined, qty: 2, maxPrice: 100 })]
     );
+
+    expect(groups).toHaveLength(1);
+    const [g] = groups;
+    expect(g.itemCount).toBe(2);
+    expect(g.total).toBe(700); // 500 + 2 × 100
+    expect(g.hasService).toBe(true);
+    expect(g.hasDrug).toBe(true);
+  });
+
+  it('farkli tarihli eski kayitlar ayri gruplarda kalir', () => {
+    const groups = groupDebtsByBatch([], [
+      drug({ id: 'a', batchId: undefined, date: '2024-05-14' }),
+      drug({ id: 'b', batchId: undefined, date: '2024-05-15' })
+    ]);
 
     expect(groups).toHaveLength(2);
     expect(groups.every(g => g.itemCount === 1)).toBe(true);
   });
 
-  it('eski kayitlarda iki koleksiyonun ayni id si cakismaz', () => {
+  it('eski kayitlar ayni tarihli batchId li gruba karismaz', () => {
+    const groups = groupDebtsByBatch([], [
+      drug({ id: 'yeni', batchId: 'b1', date: '2024-05-14', createdAt: 500 }),
+      drug({ id: 'eski1', batchId: undefined, date: '2024-05-14', createdAt: undefined }),
+      drug({ id: 'eski2', batchId: undefined, date: '2024-05-14', createdAt: undefined })
+    ]);
+
+    expect(groups).toHaveLength(2);
+    // createdAt yoklugu (0) birlesmis eski grubu ayni tarihli yeni islemin altina indirir
+    expect(groups.map(g => g.batchId)).toEqual(['b1', 'legacy:2024-05-14']);
+    expect(groups[0].itemCount).toBe(1);
+    expect(groups[1].itemCount).toBe(2);
+  });
+
+  it('birlesmis eski grupta hasFixed/allFixed yalnizca ilac kalemlerine bakar', () => {
+    const [g] = groupDebtsByBatch(
+      [service({ id: 'eskiSvc', batchId: undefined })],
+      [
+        drug({ id: 'eski1', batchId: undefined, isFixed: true }),
+        drug({ id: 'eski2', batchId: undefined, isFixed: true })
+      ]
+    );
+
+    expect(g.itemCount).toBe(3);
+    expect(g.hasFixed).toBe(true);
+    expect(g.allFixed).toBe(true);
+  });
+
+  it('tarihi olmayan eski kayitlarda iki koleksiyonun ayni id si cakismaz', () => {
     // Ayni doküman id'si hem hizmet hem ilac tarafinda olsa bile ayri gruplara duser
     const groups = groupDebtsByBatch(
-      [service({ id: 'ayniId', batchId: undefined })],
-      [drug({ id: 'ayniId', batchId: undefined })]
+      [service({ id: 'ayniId', batchId: undefined, date: undefined })],
+      [drug({ id: 'ayniId', batchId: undefined, date: undefined })]
     );
 
     expect(groups).toHaveLength(2);
