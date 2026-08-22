@@ -61,15 +61,16 @@ src/
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
 │   ├── drugs/DrugsView          # Drug inventory & price management
-│   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal
+│   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal, BatchReturnModal
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
 ├── contexts/
 │   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)
 │   └── CustomerContext.jsx      # Selected customer data + handlers (scoped)
 ├── hooks/                       # useAuth, useFirestore, useToast, useCustomer
 ├── services/                    # firebase.js (init), firestoreOperations.js (all DB ops)
-├── test/                        # Vitest helpers: setup.js, firebaseMock.js
-└── utils/formatters.js          # Turkish number/currency formatting
+├── test/                        # Vitest helpers: setup.js, firebaseMock.js, renderWithCustomer.jsx
+└── utils/                       # formatters.js (tr-TR number/currency), dates.js (todayLocal),
+                                 # debtGrouping.js (groupDebtsByBatch)
 ```
 
 ## Styling conventions

@@ -234,6 +234,7 @@ vetcari-app/
 │   │
 │   ├── test/
 │   │   ├── firebaseMock.js          # Firestore mock (writeBatch, addDoc, vb.)
+│   │   ├── renderWithCustomer.jsx   # CustomerProvider sarmalayici + sahte veri kurucular
 │   │   └── setup.js                 # Vitest global setup
 │   │
 │   ├── utils/

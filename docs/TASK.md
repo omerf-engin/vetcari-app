@@ -874,7 +874,7 @@ Canli UI dogrulamasi yapilmadi: hata yalnizca yerel saat 00:00-03:00 araliginda 
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P2 |
 | **Depends on** | TASK-027 |
 
@@ -895,8 +895,39 @@ Projede yalnizca `utils/` ve `services/` testleri var (84 test). TASK-026 ve TAS
 - En az 6 component testi gecer
 - Mevcut 84 test etkilenmez
 
+**Sonuc:** Test 93 → 110 (17 component testi) · Lint 0 error 0 warning · Build basarili
+
+**Yapilanlar:**
+- Kurulum gerekmedi: `@testing-library/react`, `@testing-library/jest-dom` ve `jsdom` zaten
+  `devDependencies`'de; `vite.config.js` `environment: 'jsdom'` + `globals: true` ile hazirdi.
+  `@testing-library/user-event` **eklenmedi** — kontrollu input'lar icin `fireEvent` yeterli,
+  yeni bagimlilik acilmadi
+- `src/test/renderWithCustomer.jsx` — `CustomerProvider` sarmalayici + `vi.fn()` handler'lar.
+  Sahte veri kuruculari: `makeCustomer`, `makeDrug`, `makeServiceDebt`, `makeDrugDebt` ve
+  grup prop'u alan bilesenler icin `makeGroup` / `makeServiceItem` / `makeDrugItem`
+- `DebtModal.test.jsx` (6) — on-secili ilac satiri yok · yalnizca hizmet → `drugItems: []` ·
+  yalnizca ilac → `service: null` · sekme degisiminde iki bolumun ozeti footer'da kaliyor ve
+  veri korunuyor · iki bolum tek cagride birlikte gonderiliyor · duplikat ilac submit'i engelliyor
+- `BatchReturnModal.test.jsx` (6) — hizmet kalemi listelenmiyor (yalnizca 2 ilac satiri) ·
+  secim yokken onay pasif · kismi secimde yalnizca secili kalem gonderiliyor · "Tumunu sec"
+  yalnizca ilac kalemlerini isaretliyor · gecersiz adet onayi pasiflestiriyor · fazla adette
+  avans uyarisi
+- `CustomerDetail.test.jsx` (5) — karma grupta HIZMET cipi + ilac satiri birlikte · karma grupta
+  kilit/iade/ekstre eylemleri gorunur · hizmet-only grupta kilit ve iade **yok** · grup eylemi
+  yalnizca ilac kalemleriyle cagriliyor · TASK-030 gruplamasi (ayni tarihli eski kayitlar tek
+  kart, farkli tarihliler ayri) UI seviyesinde dogrulaniyor
+
+**Dogrulama (mutasyon testi):**
+Testlerin gercekten regresyon yakaladigi iki kasitli mutasyonla olculdu, ikisi de geri alindi:
+- `emptyRow()` ilk satiri `drugId: 'drug1'` ile on-secili yapildi → 2 test kirildi; biri tam olarak
+  TASK-027'nin cozdugu sessiz veri kaybi (`expected [{drugId:'drug1'…}] to deeply equal []`)
+- `CustomerDetail`'deki `group.hasDrug &&` kosulu `true &&` yapildi → hizmet-only testi kirildi
+  (negatif assertion'larin bos yere gecmedigi boylece kanitlandi)
+
 **Notes:**
 TASK-026/027 elle dogrulandi ve calisiyor; bu task koruma katmani icin.
+Negatif assertion'lar (`queryBy...not.toBeInTheDocument`) her zaman ayni regex'i pozitif dogrulayan
+bir kardes testle eslestirildi — regex yanlissa test sessizce gecmesin diye.
 
 ---
 

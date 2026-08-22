@@ -191,14 +191,17 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10+5: Kalite ve Duzeltmeler — DEVAM EDIYOR
+## Faz 10+5: Kalite ve Duzeltmeler — TAMAMLANDI
 
 - [x] Tarih kaymasi bug fix: `toISOString()` (UTC) yerine yerel tarih yardimcisi — gece
       00:00-03:00 arasi girilen borclar bir onceki gune yaziliyor (TASK-028, P1)
-- [ ] Component test altyapisi: @testing-library/react; DebtModal, BatchReturnModal ve
+- [x] Ayni tarihli eski (batchId'siz) kayitlar tek islem kartinda birlesiyor; grup anahtari
+      `batchId` → `legacy:${date}` → `${type}:${doc.id}` (TASK-030, P2)
+- [x] Component test altyapisi: @testing-library/react; DebtModal, BatchReturnModal ve
       gruplanmis kart icin koruma testleri (TASK-029, P2)
+- [x] Test 84 → 110 (6 tarih + 3 gruplama + 17 component testi)
 
-> Ilgili tasklar: TASK-028, TASK-029
+> Ilgili tasklar: TASK-028, TASK-029, TASK-030
 
 ---
 
