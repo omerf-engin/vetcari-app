@@ -20,6 +20,7 @@ import {
   toggleBatchLockOperations,
   returnDrug,
   returnBatchOperations,
+  cancelDebtTransactionOperations,
   deleteServiceDebtOperations,
   addDebtTransactionOperations,
   applyPaymentOperations
@@ -152,6 +153,16 @@ export default function App() {
     catch (err) { handleError(err, 'Toplu İade'); }
   }, [customers, currentUser, toast, handleError]);
 
+  /** Yanlış girilen bir işlemin tüm kalemlerini gerekçeyle iptal eder. */
+  const handleCancelBatch = useCallback(async (group, reason) => {
+    if (!group?.batchId || !reason) return;
+    const customerId = group.items?.[0]?.customerId ?? selectedCustomerId;
+    try {
+      await cancelDebtTransactionOperations(customerId, group.items, group.batchId, reason, currentUser.uid);
+      toast.success('İşlem iptal edildi');
+    } catch (err) { handleError(err, 'İşlem İptali'); }
+  }, [selectedCustomerId, currentUser, toast, handleError]);
+
   const deleteServiceDebt = useCallback(async (debtId) => {
     const ok = await confirm(
       "Hizmet Kaydı İptali",
@@ -200,13 +211,14 @@ export default function App() {
       transactions: custTransactions,
       onToggleLock: toggleDebtLockHandler, onReturnDrug: handleDrugReturn,
       onToggleBatchLock: toggleBatchLockHandler, onReturnBatch: handleBatchReturn,
+      onCancelBatch: handleCancelBatch,
       onDeleteServiceDebt: deleteServiceDebt,
       onAddDebtTransaction: (payload) => addDebtTransaction(selectedCustomerId, payload),
       onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
     };
   }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
       toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
-      deleteServiceDebt, addDebtTransaction, applyPayment]);
+      handleCancelBatch, deleteServiceDebt, addDebtTransaction, applyPayment]);
 
   if (loading) {
     return (

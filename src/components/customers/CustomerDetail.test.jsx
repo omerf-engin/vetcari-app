@@ -72,6 +72,73 @@ describe('CustomerDetail — islem karti', () => {
     expect(items[0].type).toBe('drug');
   });
 
+  it('dokunulmamis islemde "Islemi Iptal Et" aktiftir', () => {
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [makeServiceDebt({ batchId: 'b1' })],
+      drugDebts: [makeDrugDebt({ batchId: 'b1' })],
+      transactions: [
+        { id: 'l1', debtId: 'svc1', batchId: 'b1', kind: 'entry', title: 'Hizmet Borcu', date: '2026-08-12' },
+        { id: 'l2', debtId: 'dd1', batchId: 'b1', kind: 'entry', title: 'Borç Açıldı', date: '2026-08-12' }
+      ]
+    });
+    expandCard();
+
+    expect(screen.getByRole('button', { name: /İşlemi İptal Et/ })).toBeEnabled();
+  });
+
+  it('sonradan tahsilat inmis islemde iptal pasif ve sebebi yazili', () => {
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ batchId: 'b1' })],
+      transactions: [
+        { id: 'l1', debtId: 'dd1', batchId: 'b1', kind: 'entry', title: 'Borç Açıldı', date: '2026-08-12' },
+        { id: 'l2', debtId: 'dd1', kind: 'payment', title: 'Tahsilat', date: '2026-08-13' }
+      ]
+    });
+    expandCard();
+
+    expect(screen.getByRole('button', { name: /İşlemi İptal Et/ })).toBeDisabled();
+    expect(screen.getByText(/sonradan tahsilat, iade veya zam işlenmiş/)).toBeInTheDocument();
+  });
+
+  it('eski (batchId siz) kayitta iptal pasif ve sebebi yazili', () => {
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ batchId: undefined, date: '2024-05-14' })],
+      transactions: []
+    });
+    expandCard();
+
+    expect(screen.getByRole('button', { name: /İşlemi İptal Et/ })).toBeDisabled();
+    expect(screen.getByText(/Eski kayıt/)).toBeInTheDocument();
+  });
+
+  it('iptal onaylandiginda handler gruba ve gerekceyle cagrilir', () => {
+    const onCancelBatch = vi.fn();
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ batchId: 'b1' })],
+      transactions: [
+        { id: 'l1', debtId: 'dd1', batchId: 'b1', kind: 'entry', title: 'Borç Açıldı', date: '2026-08-12' }
+      ],
+      onCancelBatch
+    });
+    expandCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /İşlemi İptal Et/ }));
+    fireEvent.change(screen.getByLabelText(/İptal Gerekçesi/), { target: { value: 'Hatalı giriş' } });
+    fireEvent.click(screen.getByRole('button', { name: /İptali Onayla/ }));
+
+    expect(onCancelBatch).toHaveBeenCalledTimes(1);
+    const [group, reason] = onCancelBatch.mock.calls[0];
+    expect(group.batchId).toBe('b1');
+    expect(reason).toBe('Hatalı giriş');
+  });
+
   it('ayni tarihli eski kayitlar tek kartta, farkli tarihliler ayri kartlarda toplanir', () => {
     openDetail({
       drugs: [makeDrug()],

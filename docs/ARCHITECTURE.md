@@ -111,6 +111,18 @@ Bir ziyarette girilen hizmet ve ilaç kalemleri **tek atomik yazımda** açılı
 - **Görünüm:** CustomerDetail'de tek "İşlemler" listesi, katlanabilir kart (varsayılan kapalı), kalem satırı `type`'a göre dallanır; HistoryModal'da `variant='batch'` işlem ekstresi; genel ekstrede işlem başlıkları; PaymentModal'da grup başlıklı dağıtım tablosu
 - **Tahsilat kısıtı:** PaymentModal'daki gruplama yalnızca render katmanındadır. Şelale önce tüm hizmet borçlarını, sonra ilaçları kapatmaya devam eder. Otomatik dağıtım dizi sırasına göre yuvarlama artığı taşıdığı için `distribution` hesabı, `extreDDebts` sırası ve `manualOverrides` anahtarları değiştirilmez; satırlar id üzerinden okunur
 
+### İşlem İptali (Yanlış Giriş Düzeltme)
+
+Yanlış girilen bir kayıt **düzeltilmez, iptal edilir**. İlaç borcu durağan bir kayıt değil (`maxPrice` zamla yükselir, `qty` tahsilat/iadeyle düşer), dolayısıyla "girişi düzelt" iyi tanımlı değildir; iptal + yeniden giriş her zaman iyi tanımlıdır ve defterin doğruluğunu korur.
+
+- **Birim işlemdir:** `cancelDebtTransactionOperations(customerId, items, batchId, reason, userId)`, `addDebtTransactionOperations`'ın birebir tersidir — tek `writeBatch`, gruptaki hizmet + ilaç dokümanları silinir
+- **Loglar silinmez:** açılış logları ekstrede kalır, gerekçeli tek `İşlem İptali` logu eklenir, iptal edilenler soluk/üstü çizili + `İPTAL` rozetiyle gösterilir. İptal durumu `kind: 'cancel'` logundan **client tarafında türetilir**; eski loglara yazma yapılmaz (`firestore.rules` update'i `resource.data.userId` şartına bağladığı için bu ayrıca isabetlidir)
+- **Neden doküman silinip log bırakılıyor:** iptal edilen borçları koleksiyonda bırakmak `totalDrugDebt`, `netDebt`, Dashboard ve PaymentModal şelalesi dahil her toplama noktasına filtre eklemeyi gerektirirdi — bozulmaması gereken tahsilat yolu riske girerdi. Denetim izinin gerçek gereği dokümanın kendisi değil, hikâyenin okunabilir kalmasıdır
+- **Guard (`utils/batchCancel.js`):** `canCancelBatch` (kartı olan işlem) ve `canCancelOrphanBatch` (dokümanı kalmamış işlem). Aynı `batchId`'yi taşıyan loglar **girişin parçasıdır** — geçmiş borcun içine gömülü `Geçmiş Tahsilat`, `Süpürücü`, `Enflasyon Güncellemesi` dahil — ve iptali engellemez. Sonradan gelen `payment` / `return` / `price` engeller; `lock` engellemez. Karar log başlığına değil `kind` alanına bakar ve **fail-closed**'dur: tanınmayan bir log da engeller
+- **Kapsam:** yalnızca logları `batchId` taşıyan kayıtlar. Eski kayıtlarda buton pasiftir, kullanıcı mevcut Sil/İade yollarına yönlendirilir. Migration yok
+- **Süpürülmüş işlemler:** kısmi tahsilat kalanı 10 TL altına düşürdüyse borç dokümanı hiç yazılmaz; bu loglar artık `Kapalı / silinmiş borçlar` yerine kendi işlem başlığı altında toplanır ve genel ekstredeki "İptal Et" ile iptal edilebilir
+- **Bakiye:** iptal `customers.balance`'a dokunmaz — giriş yolu zaten bakiyeye yazmıyor, guard da para hareketi görmüş işlemleri dışarıda bırakıyor
+
 ### Ekstre Sıralama Kuralı
 
 Ekstre her zaman `timestamp` alanına göre azalan sırada (`desc`) gösterilir:
@@ -242,6 +254,8 @@ vetcari-app/
 │   │   ├── formatters.test.js       # Formatlayıcı unit testleri (Vitest)
 │   │   ├── dates.js                 # todayLocal / toLocalDateStr (yerel gün, UTC değil)
 │   │   ├── dates.test.js
+│   │   ├── batchCancel.js           # İşlem iptali guard'ı (canCancelBatch, kind tabanlı)
+│   │   ├── batchCancel.test.js
 │   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
 │   │   └── debtGrouping.test.js
 │   │

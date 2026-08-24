@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { History } from 'lucide-react';
+import { History, Ban } from 'lucide-react';
 import { fmtDate } from '../../utils/formatters';
 
 const getLogSortPriority = (title) => {
@@ -27,8 +27,10 @@ const sortLogsInternal = (arr) => [...arr].sort((a, b) => {
  * @param {object} [debtInfo] — variant debt iken ilaç satırı bilgisi (drugName).
  * @param {string} [customerName] — variant customer iken müşteri adı.
  * @param {object} [batchInfo] — variant batch iken işlem bilgisi (date, itemCount, total).
+ * @param {(batchId: string, date: string) => void} [onCancelBatch] — dokümanı kalmamış hatalı
+ *        girişi iptal etmek için; yalnızca `log.cancellableBatchId` taşıyan gruplarda görünür.
  */
-export default function HistoryModal({ variant = 'debt', debtInfo, customerName, batchInfo, logs, onClose }) {
+export default function HistoryModal({ variant = 'debt', debtInfo, customerName, batchInfo, logs, onCancelBatch, onClose }) {
   const isGrouped = variant === 'customer' || variant === 'batch';
 
   const sortedLogs = useMemo(() => isGrouped ? [] : sortLogsInternal(logs), [logs, isGrouped]);
@@ -51,6 +53,10 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
         label: group[0].groupLabel || group[0].sourceLabel || 'Bilinmeyen Borç',
         logs: sorted,
         oldestDate,
+        cancelled: group.some((l) => l.cancelled),
+        // Dokümanı kalmamış hatalı giriş: kartı olmadığı için iptal buradan yapılır
+        cancellableBatchId: group.find((l) => l.cancellableBatchId)?.cancellableBatchId,
+        batchDate: group.find((l) => l.batchDate)?.batchDate,
         // Bir işlemde birden fazla kalem varsa her log'un hangi ilaca ait olduğu belirtilir
         showSourceLabels: distinctSources.size > 1
       };
@@ -102,22 +108,43 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
               {logGroups.map((group) => (
                 <div key={group.groupKey}>
                   <div className="flex items-center gap-2 mb-3 px-1">
-                    <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{group.label}</span>
-                    <div className="flex-1 h-px bg-indigo-200/60"></div>
+                    <span className={`text-xs font-bold uppercase tracking-wider ${group.cancelled ? 'text-slate-400 line-through' : 'text-indigo-600'}`}>{group.label}</span>
+                    {group.cancelled && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border bg-rose-100 text-rose-700 border-rose-200">
+                        İptal Edildi
+                      </span>
+                    )}
+                    <div className={`flex-1 h-px ${group.cancelled ? 'bg-slate-200' : 'bg-indigo-200/60'}`}></div>
+                    {group.cancellableBatchId && onCancelBatch && (
+                      <button
+                        type="button"
+                        onClick={() => onCancelBatch(group.cancellableBatchId, group.batchDate || group.oldestDate)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600 text-[10px] font-bold uppercase tracking-wider transition-colors flex-shrink-0"
+                      >
+                        <Ban className="w-3 h-3" /> İptal Et
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-3 ml-2 pl-4 border-l-2 border-indigo-100">
                     {group.logs.map((log) => (
-                      <div key={log.id} className="p-3 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${getBadgeColor(log.type)}`}>
-                            {log.title}
+                      <div key={log.id} className={`p-3 rounded-xl border shadow-sm transition-shadow ${log.cancelled ? 'border-slate-200 bg-slate-100/70 opacity-70' : 'border-slate-200 bg-white hover:shadow-md'}`}>
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${getBadgeColor(log.type)} ${log.cancelled ? 'line-through' : ''}`}>
+                              {log.title}
+                            </span>
+                            {log.cancelled && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border bg-rose-100 text-rose-700 border-rose-200 flex-shrink-0">
+                                İptal
+                              </span>
+                            )}
                           </span>
-                          <time className="text-xs text-slate-400 font-medium">{fmtDate(log.date)}</time>
+                          <time className="text-xs text-slate-400 font-medium flex-shrink-0">{fmtDate(log.date)}</time>
                         </div>
                         {group.showSourceLabels && log.sourceLabel && (
                           <p className="text-[11px] font-semibold text-slate-400 mb-1">{log.sourceLabel}</p>
                         )}
-                        <div className="text-sm text-slate-700 leading-relaxed font-medium">
+                        <div className={`text-sm leading-relaxed font-medium ${log.cancelled ? 'text-slate-500' : 'text-slate-700'}`}>
                           {log.message}
                         </div>
                       </div>

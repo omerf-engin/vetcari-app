@@ -42,6 +42,7 @@ const {
   addDebtTransactionOperations,
   toggleBatchLockOperations,
   returnBatchOperations,
+  cancelDebtTransactionOperations,
   deleteServiceDebtOperations,
 } = await import('./firestoreOperations');
 
@@ -879,6 +880,123 @@ describe('Grup Iadesi (returnBatchOperations)', () => {
     expect(mockBatch.commit).not.toHaveBeenCalled();
 
     await returnBatchOperations([{ debt: batchDebt(), returnQty: 0 }], 0, 'uid1');
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================
+// LOG META ALANLARI (batchId + kind) — TASK-031
+// =============================================
+
+describe('log meta alanlari', () => {
+  const logOps = () => mockBatch.operations.filter(op => op.type === 'set' && op.data.title !== undefined);
+
+  it('giris yolundaki tum loglar islemin batchId sini ve kind entry tasir', async () => {
+    // Gecmis tarihli, kismi tahsilatli, enflasyonlu karma islem: giris yolunun tum log
+    // cesitlerini (borc, tahsilat, enflasyon) tek cagride uretir
+    await addDebtTransactionOperations('cust1', {
+      date: '2026-01-20',
+      service: { desc: 'Muayene', amount: 500, paidAmount: 100, paidDate: '2026-01-21' },
+      drugItems: [item({ id: 'drug1', price: 200 }, 5, 100)],
+      drugPaidAmount: 200,
+      drugPaidDate: '2026-01-21',
+      applyInflation: true
+    }, 'uid1');
+
+    const logs = logOps();
+    expect(logs.length).toBeGreaterThan(3);
+
+    const batchIds = new Set(logs.map(op => op.data.batchId));
+    expect(batchIds.size).toBe(1);
+    expect([...batchIds][0]).toBeTruthy();
+    expect(logs.every(op => op.data.kind === 'entry')).toBe(true);
+
+    // Borc dokumanlari da ayni batchId yi tasir — guard ikisini eslestiriyor
+    const debtBatchId = drugSets()[0].data.batchId;
+    expect([...batchIds][0]).toBe(debtBatchId);
+  });
+
+  it('tahsilat, iade, zam ve kilit loglari kendi kind degerini tasir', async () => {
+    const debt = { id: 'd1', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false };
+
+    await applyPaymentOperations(
+      { id: 'cust1', balance: 0 }, 200,
+      [{ id: 'd1', type: 'drug', deduct: 200 }], [], [debt], 'uid1'
+    );
+    expect(logOps().every(op => op.data.kind === 'payment')).toBe(true);
+
+    mockBatch.operations.length = 0;
+    await returnDrug(debt, 1, 0, 'uid1');
+    expect(logOps().every(op => op.data.kind === 'return')).toBe(true);
+
+    mockBatch.operations.length = 0;
+    await updateDrugPrice('drug1', 300, [debt], 'uid1');
+    expect(logOps().every(op => op.data.kind === 'price')).toBe(true);
+
+    mockBatch.operations.length = 0;
+    await toggleBatchLockOperations([debt], 'uid1');
+    expect(logOps().every(op => op.data.kind === 'lock')).toBe(true);
+  });
+});
+
+// =============================================
+// ISLEM IPTALI (cancelDebtTransactionOperations) — TASK-031
+// =============================================
+
+describe('cancelDebtTransactionOperations', () => {
+  const svcItem = (over = {}) => ({ id: 'svc1', type: 'service', desc: 'Muayene', amount: 500, ...over });
+  const drugItem = (over = {}) => ({ id: 'dd1', type: 'drug', drugName: 'Amoksisilin', qty: 2, maxPrice: 100, tlValue: 200, ...over });
+
+  const deletes = () => mockBatch.operations.filter(op => op.type === 'delete');
+  const cancelLog = () => mockBatch.operations.find(op => op.type === 'set' && op.data.title === 'İşlem İptali');
+
+  it('karma islemde her iki koleksiyondan da siler ve tek iptal logu yazar', async () => {
+    const ok = await cancelDebtTransactionOperations(
+      'cust1', [svcItem(), drugItem()], 'b1', 'Yanlış müşteriye girildi', 'uid1'
+    );
+
+    expect(ok).toBe(true);
+    expect(deletes().map(op => op.ref.path).sort()).toEqual(['drugDebts/dd1', 'serviceDebts/svc1']);
+
+    const logs = mockBatch.operations.filter(op => op.type === 'set');
+    expect(logs.length).toBe(1);
+    expect(mockBatch.commit).toHaveBeenCalled();
+  });
+
+  it('iptal logu batchId, kind cancel ve gerekceyi tasir', async () => {
+    await cancelDebtTransactionOperations('cust1', [svcItem(), drugItem()], 'b1', 'Yanlış müşteriye girildi', 'uid1');
+
+    const log = cancelLog();
+    expect(log.data.batchId).toBe('b1');
+    expect(log.data.kind).toBe('cancel');
+    expect(log.data.customerId).toBe('cust1');
+    expect(log.data.userId).toBe('uid1');
+    expect(log.data.message).toMatch(/Yanlış müşteriye girildi/);
+    expect(log.data.message).toMatch(/2 kalemlik/);
+    expect(log.data.message).toMatch(/700/); // 500 + 2 × 100
+  });
+
+  it('dokumani kalmamis (supurulmus) islemde yalnizca iptal logu yazar', async () => {
+    const ok = await cancelDebtTransactionOperations('cust1', [], 'b1', 'Hatalı giriş', 'uid1');
+
+    expect(ok).toBe(true);
+    expect(deletes().length).toBe(0);
+    expect(cancelLog()).toBeTruthy();
+    expect(cancelLog().data.message).toMatch(/Borç kaydı kalmamış/);
+  });
+
+  it('musteri bakiyesine dokunmaz', async () => {
+    await cancelDebtTransactionOperations('cust1', [svcItem(), drugItem()], 'b1', 'Hatalı giriş', 'uid1');
+
+    const customerUpdates = mockBatch.operations.filter(
+      op => op.type === 'update' && op.data.balance !== undefined
+    );
+    expect(customerUpdates.length).toBe(0);
+  });
+
+  it('gerekce veya batchId yoksa hicbir sey yazmaz', async () => {
+    expect(await cancelDebtTransactionOperations('cust1', [drugItem()], 'b1', '   ', 'uid1')).toBe(false);
+    expect(await cancelDebtTransactionOperations('cust1', [drugItem()], '', 'Hatalı giriş', 'uid1')).toBe(false);
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 });

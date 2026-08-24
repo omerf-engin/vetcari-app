@@ -987,6 +987,193 @@ Ayni tarihli iki **yeni** islemin ayri kartlarda kalmasi gercek veride denk gelm
 
 ---
 
+## TASK-031: Islem Bazli Iptal (Yanlis Giris Duzeltme)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-026, TASK-027, TASK-030 |
+
+**Problem:**
+Yanlis girilen bir kaydi duzeltmenin genel bir yolu yok. Kalem tipine gore dagilmis, eksik
+yollar var:
+
+- **Hizmet borcu** silinebiliyor (`deleteServiceDebtOperations`), `Hizmet Borcu Iptali` logu duser
+- **Ilac borcu** silinemiyor; tek yol tam adet **Iade**. Yanlis giris, ekstreye gercek bir iade
+  gibi gecer (`Iade Islemi` + `Supurucu (Silindi)`)
+- **Gecmis borc + kismi tahsilat** senaryosunda tahsilat borcun **icine gomulu** yazilir
+  (`appendServiceDebtToBatch` / `appendDrugItemsToBatch`): borc dokumani zaten dusulmus
+  `qty`/`amount` ile olusur. Borc silinse bile girilen `Gecmis Tahsilat` logu ekstrede kalir —
+  defterde hic yapilmamis bir tahsilat gorunmeye devam eder
+- **Kalan <= 10 TL ise supurucu devreye girer ve borc dokumani hic yazilmaz.** Geriye yalnizca
+  loglar kalir; `CustomerDetail`'de `Kapali / silinmis borclar` basligi altinda hayalet satir
+  olarak durur ve musteriyi tamamen silmeden temizlenemez
+- **Tahsilat** (PaymentModal) hicbir sekilde geri alinamaz
+
+**Tasarim karari — neden "iptal", neden "duzenleme" degil:**
+Ilac borcu duragan bir kayit degil; `maxPrice` zamla yukseliyor (`updateDrugPrice`), `qty`
+tahsilat ve iadeyle dusuyor. Ekrandaki satir "girilen deger" degil, bir gecmisin sonucu — uzerine
+tahsilat inmis ve zam gormus bir kalemde "girisi duzelt" iyi tanimli degil, zincirin bastan
+oynatilmasi gerekir. Iptal + yeniden giris her zaman iyi tanimlidir ve defterin dogrulugunu korur.
+
+**Tasarim karari — dokuman silinir, loglar kalir:**
+Saf "void" yaklasimi iptal edilen borclari `drugDebts`/`serviceDebts` icinde birakirdi; o zaman
+`totalDrugDebt`, `netDebt`, Dashboard ve PaymentModal selalesi dahil **her toplama noktasinin**
+filtre eklemesi gerekirdi — bozulmamasi gereken tahsilat yolu riske girerdi. Denetim izinin
+gercek geregi dokumanin kendisi degil hikayenin okunabilir kalmasi: acilis loglari + gomulu
+tahsilat logu + yeni `Islem Iptali` logu ekstrede durur, orijinal loglar `cancelled: true` ile
+soluk gosterilir. Toplama yollarina hic dokunulmaz.
+
+### Deliverables
+
+**1. Veri modeli (ileriye donuk, migration yok)**
+- `createLog`'a `batchId` alani: `addDebtTransactionOperations` yolunda yazilan tum loglar
+  islemin `batchId`'sini tasir
+- Iptal isaretleme alanlari: orijinal loglara `cancelled: true`, `cancelledAt`, `cancelReason`
+- `batchId` tasimayan eski loglarda iptal kapalidir; o kayitlar mevcut sil/iade yollarina duser
+
+**2. Guard — "sonradan aktivite" sinirini `batchId` belirler**
+- Ayni `batchId`'yi tasiyan loglar **girisin parcasidir** (`Gecmis Tahsilat`, `Supurucu`,
+  `Enflasyon Guncellemesi` dahil) ve iptali engellemez
+- Ayni `debtId`'ye bakan ama o `batchId`'yi tasimayan log = sonradan gelen tahsilat/iade/zam
+  → iptal **kapali**, kullanici once o islemi geri almaya yonlendirilir
+- Zaman damgasi tahminiyle degil, veriyle calisir
+
+**3. Backend — `cancelDebtTransactionOperations(batchId, items, batchLogs, reason, userId)`**
+- Tek `writeBatch`: gruptaki `serviceDebts` + `drugDebts` dokumanlarini siler, o `batchId`'ye ait
+  orijinal loglari `cancelled` olarak isaretler, gerekceyi iceren tek `Islem Iptali` logu yazar
+- **Supurulmus islem** (hic dokuman yazilmamis) yalnizca log tarafiyla iptal edilir — bugun
+  ulasilamayan hayalet kayitlar boylece temizlenir
+- `customers.balance`'a dokunmaz: giris yolu zaten bakiyeyi degistirmiyor
+  (`appendServiceDebtToBatch` / `appendDrugItemsToBatch` yalnizca kendi koleksiyonlarina yaziyor)
+
+**4. UI**
+- `CustomerDetail` grup kartinda "Islemi Iptal Et"; gerekce soran onay modali (gerekce zorunlu)
+- Guard kapaliysa buton pasif ve sebebi yaziyor ("Bu isleme sonradan tahsilat inmis")
+- `HistoryModal`: `cancelled` loglar soluk/ustu cizili + `IPTAL` rozeti
+
+**5. Testler** — senaryo bazli: dokunulmamis islem · gecmis borc + kismi tahsilat · supurulmus
+islem (dokumansiz) · sonradan tahsilat inmis islem (iptal kapali) · karma grup (hizmet + ilac) ·
+eski (batchId'siz) kayit · guard'in giris loglarini sonraki aktiviteden ayirmasi
+
+### Acceptance Criteria
+
+- Bugun veya gecmis tarihli, tahsilatli veya tahsilatsiz bir islem tek adimda iptal edilebilir
+- Kismi tahsilatla girilen islemin iptali, girilen tahsilat logunu da iptal isaretler — ekstrede
+  yapilmamis tahsilat gorunmez
+- Kalan <= 10 TL oldugu icin supurulmus islem de iptal edilebilir; hayalet log kalmaz
+- Sonradan gercek tahsilat/iade/zam inmis islem iptal edilemez, sebebi kullaniciya yazilir
+- Iptal sonrasi `grossDebt`, `netDebt`, Dashboard ve PaymentModal dagitimi tutarli kalir
+- Ekstrede iptal izi okunur: orijinal loglar + gerekceli `Islem Iptali` logu
+- Lint 0/0 · Test gecer · Build basarili
+
+**Sonuc:** Test 143 (110 → 143) · Lint 0 error 0 warning · Build basarili
+
+**Yapilanlar:**
+- `createLog` sondaki `meta` objesiyle genisletildi (`{ kind, batchId }`) — 8 konumsal parametreye
+  iki tane daha eklemek 18 cagri yerinde hataya davetiyeydi. Tum cagri yerleri kendi `kind`'ini
+  aliyor: giris `entry` (+`batchId`), `payment`, `return`, `price`, `lock`, `cancel`
+- `utils/batchCancel.js`: `canCancelBatch` (kartli islem), `canCancelOrphanBatch` (dokumani
+  kalmamis islem), `cancelBlockedMessage`, `cancelledBatchIds`. **Fail-closed**: `kind` tasimayan
+  yabanci bir log da iptali engeller — guvenli yon budur
+- `cancelDebtTransactionOperations(customerId, items, batchId, reason, userId)`: tek `writeBatch`,
+  dokumanlari siler + gerekceli tek `Islem Iptali` logu yazar, `customers.balance`'a dokunmaz
+- `CancelBatchModal.jsx`: kalemleri ve toplami listeler, gerekce zorunlu. `ToastContext`'teki
+  `confirm(title, message)` metin girisi desteklemedigi icin ayri bilesen
+- `CustomerDetail`: grup kartinda "Islemi Iptal Et"; guard kapaliysa buton pasif + sebep yazili
+- `HistoryModal`: iptal edilmis loglar soluk + `IPTAL` rozeti, grup basliginda `IPTAL EDILDI`.
+  Iptal durumu **loglardan turetilir**, eski loglara yazma yok
+- **Supurulmus islemler** (`decorateLogs`): `batchId` tasiyan dokumansiz loglar artik
+  `Kapali / silinmis borclar` copluguna dusmuyor, kendi islem basligi altinda gruplaniyor ve
+  genel ekstredeki "Iptal Et" butonuyla iptal edilebiliyor
+
+**Tarayicida dogrulanan senaryolar** (gecici ZZTEST musterisi, sonunda silindi):
+- Bugunku karma islem (hizmet + ilac, 2.312 ₺) → iptal aktif → iptal sonrasi borc 0 ₺, ekstrede
+  acilis loglari + gerekceli `Islem Iptali`, basligi ustu cizili + `IPTAL EDILDI`
+- **Gecmis borc + kismi tahsilat** (1.000 ₺ borc, 400 ₺ gomulu tahsilat) → iptal **aktif**;
+  gomulu `Gecmis Tahsilat` logu girisin parcasi sayiliyor, engellemiyor
+- Ayni ekranda sonradan tahsilat inmis islem (1.000 → 700 ₺) → iptal **pasif** + sebep yazili.
+  Iki kart yan yana ayrimin dogru calistigini gosterdi
+- Supurulmus islem (1.000 ₺ borc, 995 ₺ tahsilat → kalan 5 ₺, dokuman yazilmadi) → genel
+  ekstrede `18 Agustos 2026 · kapanmis islem` basligi + `Iptal Et` → iptal isaretlendi
+- Iptal sonrasi `Toplam Guncel Borc` ve musteri listesi tutarli
+
+**Notes:**
+- Log basliklari `HistoryModal`'daki `getLogSortPriority` tarafindan **metin olarak** eslesiyor:
+  `Tahsilat` iceren bir baslik istemeden oncelik 1 alir. `Islem Iptali` basligi bu anahtarlarin
+  hicbirine denk gelmez (oncelik 3) — degistirilmemeli. Guard bilincli olarak baslik yerine
+  `kind` alanina bakiyor
+- `firestore.rules` update/delete'i `resource.data.userId == request.auth.uid` sartina bagliyor;
+  `userId` alani olmayan cok eski loglar isaretlenemez. Guard bu kayitlarda zaten iptali kapatiyor
+- TASK-020 (donemsel raporlama) geldiginde `cancelled` loglar donem toplamlarindan dislanmali
+- **Kapsam disi:** kalem duzenleme, borc tasima, cift tarafli muhasebeye gecis
+- **Uygulama sirasinda gorulen ayri sorun (duzeltilmedi):** gecmis tarihli girislerde
+  `Supurucu (Silindi)` logu `dateOverride` almadigi icin islem tarihini degil **bugunun**
+  tarihini gosteriyor (`appendServiceDebtToBatch` / `appendDrugItemsToBatch`). Ekstrede ayni
+  islemin satirlari farkli tarihlerde gorunuyor. Tek satirlik bir duzeltme ama davranis
+  degisikligi oldugu icin bu taskin disinda birakildi — TASK-018'de enflasyon logunun bugunu
+  gostermesi "dogru davranis" olarak isaretlenmisti, supurucu icin ayni karar verilmeli
+- **Tahsilat geri alma bu taskta yok** — ayri ve daha agir. Ön kosul veri eksigi: selalenin hangi
+  borca ne kadar dagittigi hicbir yerde saklanmiyor (`distributionArr` modalda hesaplanip
+  atiliyor), loglarda tutar sayisal degil (`createLog` yalnizca prose `message` yaziyor),
+  supurulen borclar silinmis durumda. Dagitimin ve on-durumun yapisal yazilmasi ayri bir task
+  olarak ele alinmali; gecmis tahsilatlar hicbir kosulda geri alinabilir olmayacak
+
+---
+
+## TASK-032: Fiyat Guncellemesi — Etki Onizlemesi ve Geri Alma
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P1 |
+| **Depends on** | — |
+
+**Problem:**
+`updateDrugPrice` bir ilacin fiyatini yukselttiginde, o ilaca ait **tum musterilerin** acik ve
+sabitlenmemis borclarinin `maxPrice`'ini gunceller (`firestoreOperations.js:118`). Kural geregi
+yalnizca artislar yansir, dususler yansimaz — dolayisiyla **yazim hatasi kalicidir**: 1.800 yerine
+18.000 girilirse butun acik borclar aninda siser ve dogru fiyat yeniden girilse bile borclar
+inmez. Kullanici ne olacagini islem oncesinde de goremiyor; etki ancak ekstrelere dusen zam
+loglarindan fark ediliyor.
+
+Gercek veride gozlemlendi: bir ilacta `1.800 ₺ -> 20.000 ₺` zammi tek musteride borcu
+`10.170 ₺ -> 113.000 ₺` yapmis. Gercek zam mi yazim hatasi mi oldugunu sistemden anlamanin da
+geri almanin da yolu yok.
+
+**Deliverables:**
+
+**1. Etki onizlemesi (dusuk maliyet, yuksek fayda)**
+- `DrugsView`'de fiyat kaydedilmeden once onay: etkilenecek acik borc sayisi, musteri sayisi ve
+  toplam ₺ etki gosterilir ("12 acik borc, 4 musteri, toplam +X ₺")
+- Hesap tamamen client-side; `drugDebts` zaten `useFirestore` ile bellekte
+
+**2. Zam geri alma**
+- Son fiyat guncellemesini geri alir: ilacin `price` degeri ve etkilenen borclarin `maxPrice`
+  degerleri zam oncesi haline doner, ekstreye `Fiyat Guncellemesi Iptali` logu duser
+- Ön kosul veri (ileriye donuk): zam loglari yapisal alan tasimali — `priceBefore`, `priceAfter`
+  ve zammin toplu islem oldugunu belirten `batchId`. Bugun bu degerler yalnizca prose `message`
+  icinde
+- **Guard:** yalnizca son zam; ve yalnizca o zamdan sonra uzerine tahsilat/iade inmemis borclar.
+  Yapisal verisi olmayan eski zamlar geri alinamaz, UI bunu acikca soyler
+
+**Acceptance Criteria:**
+- Fiyat degisikligi onaylanmadan once etkisi sayisal olarak gorunur
+- Yanlis girilen zam geri alinabilir; borclarin `maxPrice` degeri zam oncesine doner
+- `isFixed` (sabitlenmis) borclar ne zamdan ne geri almadan etkilenir
+- "Dususler acik borclara yansimaz" is kurali korunur — geri alma bir fiyat dususu degil, hatali
+  islemin iptalidir
+- Yapisal verisi olmayan eski zamlarda geri alma butonu pasif ve sebebi yazili
+- Lint 0/0 · Test gecer · Build basarili
+
+**Notes:**
+Bu task TASK-031'den bagimsiz calisabilir ama ayni deseni paylasir: toplu islemi `batchId` ile
+isaretle, gerekceli iptal logu yaz, guard'i sonradan aktiviteye bak. Ikisi de yapilirsa `createLog`
+uzerindeki `batchId` alani ortak kullanilir.
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |

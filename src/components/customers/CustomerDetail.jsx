@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import { groupDebtsByBatch } from '../../utils/debtGrouping';
+import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds } from '../../utils/batchCancel';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
 import DebtModal from '../modals/DebtModal';
 import BatchReturnModal from '../modals/BatchReturnModal';
+import CancelBatchModal from '../modals/CancelBatchModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
-  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onDeleteServiceDebt, onToggleBatchLock, onReturnBatch } = useCustomer();
+  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onDeleteServiceDebt, onToggleBatchLock, onReturnBatch, onCancelBatch } = useCustomer();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
@@ -19,6 +21,7 @@ export default function CustomerDetail({ onBack }) {
   const [expandedBatches, setExpandedBatches] = useState(() => new Set());
   const [batchReturnId, setBatchReturnId] = useState(null);
   const [historyBatchId, setHistoryBatchId] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
 
   const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
 
@@ -52,17 +55,45 @@ export default function CustomerDetail({ onBack }) {
     [debtGroups, batchReturnId]
   );
 
+  // Kartı olan işlem gruptan çözülür; süpürülmüş (dokümansız) işlem için ekstredeki
+  // başlık bilgisiyle kalemsiz geçici bir grup kurulur
+  const cancelGroup = useMemo(() => {
+    if (!cancelTarget) return null;
+    return debtGroups.find(g => g.batchId === cancelTarget.batchId)
+      || { batchId: cancelTarget.batchId, date: cancelTarget.date, items: [], itemCount: 0, total: 0 };
+  }, [debtGroups, cancelTarget]);
+
+  // İptal edilebilirlik grup bazinda onceden hesaplanir (guard loglara bakar)
+  const cancelStateByBatch = useMemo(() => {
+    const map = new Map();
+    debtGroups.forEach(g => map.set(g.batchId, canCancelBatch(g, transactions)));
+    return map;
+  }, [debtGroups, transactions]);
+
   const totalServiceDebt = serviceDebts.reduce((sum, d) => sum + d.amount, 0);
   const totalDrugDebt = extreDDebts.reduce((sum, d) => sum + d.tlValue, 0);
   const grossDebt = totalServiceDebt + totalDrugDebt;
   const netDebt = Math.max(0, grossDebt - customer.balance);
+
+  // İptal durumu ayrı bir alanda saklanmaz, iptal loglarından türetilir
+  const cancelledBatches = useMemo(() => cancelledBatchIds(transactions), [transactions]);
 
   // Her log'a kaynak etiketi (ilaç/hizmet adı) ve ait olduğu işlem grubu bilgisi eklenir
   const decorateLogs = useCallback((logs) => {
     const groupByDebtId = new Map();
     debtGroups.forEach((g) => g.items.forEach((it) => groupByDebtId.set(it.id, g)));
 
+    // Dokümanı kalmamış işlemin tarihi, gruptaki **en eski** log'dan gelir: süpürücü ve
+    // iptal logları bugünün tarihini taşır, işlemin kendi tarihini değil
+    const batchDates = new Map();
+    logs.forEach((log) => {
+      if (!log.batchId || !log.date) return;
+      const current = batchDates.get(log.batchId);
+      if (!current || log.date < current) batchDates.set(log.batchId, log.date);
+    });
+
     return logs.map((log) => {
+      const cancelled = Boolean(log.batchId && cancelledBatches.has(log.batchId));
       const group = groupByDebtId.get(log.debtId);
       if (group) {
         const item = group.items.find((it) => it.id === log.debtId);
@@ -71,6 +102,7 @@ export default function CustomerDetail({ onBack }) {
           : `İlaç: ${item.drugName}`;
         return {
           ...log,
+          cancelled,
           sourceLabel,
           groupKey: group.batchId,
           // Tek kalemlik işlemde kalem adı, çok kalemlide işlem başlığı daha okunaklı
@@ -80,13 +112,37 @@ export default function CustomerDetail({ onBack }) {
         };
       }
 
-      if (log.drugId) {
-        const name = drugs.find((x) => x.id === log.drugId)?.name || 'Bilinmeyen İlaç';
-        return { ...log, sourceLabel: `İlaç: ${name} / silinmiş borç`, groupKey: '__closed__', groupLabel: 'Kapalı / silinmiş borçlar' };
+      // Borç dokümanı kalmamış loglar. `batchId` varsa (iptal edilmiş ya da kısmi tahsilat
+      // sonrası süpürülmüş işlem) kendi işlem başlığı altında toplanır; yoksa eski kayıt
+      // olduğu için tek bir "kapalı borçlar" grubuna düşer.
+      const drugName = log.drugId
+        ? drugs.find((x) => x.id === log.drugId)?.name || 'Bilinmeyen İlaç'
+        : null;
+
+      if (log.batchId) {
+        const batchDate = batchDates.get(log.batchId) || log.date;
+        // Grup başlığı durumu zaten söylüyor; satırda "silinmiş borç" tekrarına gerek yok
+        return {
+          ...log,
+          cancelled,
+          batchDate,
+          sourceLabel: drugName ? `İlaç: ${drugName}` : 'Hizmet',
+          groupKey: `batch:${log.batchId}`,
+          groupLabel: `${fmtDate(batchDate)} · ${cancelled ? 'iptal edilmiş işlem' : 'kapanmış işlem'}`,
+          // Süpürülüp dokümanı kalmamış hatalı giriş: kartı olmadığı için ekstreden iptal edilir
+          cancellableBatchId: canCancelOrphanBatch(log.batchId, logs).ok ? log.batchId : undefined
+        };
       }
-      return { ...log, sourceLabel: 'Kapalı / silinmiş borç', groupKey: '__closed__', groupLabel: 'Kapalı / silinmiş borçlar' };
+
+      return {
+        ...log,
+        cancelled,
+        sourceLabel: drugName ? `İlaç: ${drugName} / silinmiş borç` : 'Kapalı / silinmiş borç',
+        groupKey: '__closed__',
+        groupLabel: 'Kapalı / silinmiş borçlar'
+      };
     });
-  }, [debtGroups, drugs]);
+  }, [debtGroups, drugs, cancelledBatches]);
 
   const customerAggregateLogs = useMemo(() => {
     const debtIds = new Set([
@@ -217,7 +273,25 @@ export default function CustomerDetail({ onBack }) {
                             >
                               <History className="w-3.5 h-3.5" /> Grup Ekstresi
                             </button>
+                            {(() => {
+                              const cancelState = cancelStateByBatch.get(group.batchId) || { ok: false };
+                              return (
+                                <button
+                                  onClick={() => setCancelTarget({ batchId: group.batchId, date: group.date })}
+                                  disabled={!cancelState.ok}
+                                  title={cancelState.ok ? 'Hatalı girişi iptal et' : cancelBlockedMessage(cancelState.reason)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors disabled:opacity-40 disabled:hover:bg-slate-100 disabled:hover:text-slate-600 disabled:cursor-not-allowed"
+                                >
+                                  <Ban className="w-3.5 h-3.5" /> İşlemi İptal Et
+                                </button>
+                              );
+                            })()}
                           </div>
+                          {!(cancelStateByBatch.get(group.batchId)?.ok) && (
+                            <p className="px-5 pb-3 -mt-1 text-[11px] text-slate-400 italic">
+                              {cancelBlockedMessage(cancelStateByBatch.get(group.batchId)?.reason)}
+                            </p>
+                          )}
 
                           <ul className="divide-y divide-slate-100 bg-slate-50/30">
                             {group.items.map(d => d.type === 'service' ? (
@@ -343,6 +417,15 @@ export default function CustomerDetail({ onBack }) {
         />
       )}
 
+      {cancelGroup && (
+        <CancelBatchModal
+          key={cancelGroup.batchId}
+          group={cancelGroup}
+          onConfirm={(reason) => onCancelBatch(cancelGroup, reason)}
+          onClose={() => setCancelTarget(null)}
+        />
+      )}
+
       {historyDebtId && (
         <HistoryModal
           variant="debt"
@@ -357,6 +440,7 @@ export default function CustomerDetail({ onBack }) {
           variant="customer"
           customerName={customer.name}
           logs={customerAggregateLogs}
+          onCancelBatch={(batchId, date) => { setShowCustomerHistory(false); setCancelTarget({ batchId, date }); }}
           onClose={() => setShowCustomerHistory(false)}
         />
       )}

@@ -205,6 +205,20 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
+## Faz 10+6: Yanlis Giris Duzeltme — DEVAM EDIYOR
+
+- [x] Islem bazli iptal: `cancelDebtTransactionOperations`, loglara `batchId` + `kind`, gerekceli
+      `Islem Iptali` logu, "sonradan aktivite" guard'i (TASK-031, P1)
+- [x] Supurulmus (dokumansiz) islemler kendi islem basligi altinda gruplanip iptal edilebiliyor
+      (TASK-031)
+- [x] Test 110 → 143
+- [ ] Fiyat guncellemesi: etki onizlemesi + son zammi geri alma (TASK-032, P1)
+- [ ] Tahsilat geri alma: on kosul olarak dagitimin ve on-durumun yapisal saklanmasi (ayri task)
+
+> Ilgili tasklar: TASK-031, TASK-032
+
+---
+
 ## Faz 10++: TypeScript Migrasyonu — PLANLANDI
 
 - [ ] Altyapi: tsconfig.json, vite.config.ts, typescript-eslint
