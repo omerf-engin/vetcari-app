@@ -13,6 +13,7 @@ import {
 import { db } from './firebase';
 import { fmtTL, fmtQty } from '../utils/formatters';
 import { todayLocal } from '../utils/dates';
+import { selectAffectedDebts } from '../utils/priceImpact';
 
 const chunkIds = (ids, size) => {
   const out = [];
@@ -59,8 +60,12 @@ const createLog = (debtId, title, message, type = 'neutral', customerId, drugId,
   if (customerId != null && customerId !== '') o.customerId = customerId;
   if (drugId != null && drugId !== '') o.drugId = drugId;
   if (userId != null && userId !== '') o.userId = userId;
-  if (meta.kind) o.kind = meta.kind;
-  if (meta.batchId) o.batchId = meta.batchId;
+  // `meta` içindeki tanımlı tüm alanlar log'a yazılır (kind, batchId ve fiyat geri alma için
+  // maxPriceBefore/After, drugPriceBefore/After). 0 geçerli bir fiyat olduğu için yalnızca
+  // undefined/null elenir.
+  for (const [key, value] of Object.entries(meta)) {
+    if (value !== undefined && value !== null && value !== '') o[key] = value;
+  }
   return o;
 };
 
@@ -121,36 +126,99 @@ export const deleteDrug = async (drugId) => {
   await deleteDoc(doc(db, 'drugs', drugId));
 };
 
-export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId) => {
+/**
+ * İlacın fiyatını günceller; zam ise açık ve sabitlenmemiş borçların `maxPrice`'ini de yükseltir.
+ * Düşüşler mevcut borçlara yansımaz (iş kuralı).
+ *
+ * Etkilenecek borçlar `selectAffectedDebts` ile seçilir — `computePriceImpact`'in kullanıcıya
+ * gösterdiği önizleme **aynı** yardımcıyı kullanır, böylece önizleme ile gerçek yazım ayrışamaz.
+ *
+ * Loglar geri alma için yapısal veri taşır: borç bazında `maxPriceBefore`/`maxPriceAfter` (her
+ * borcun zam öncesi fiyatı farklı olabilir) ve ilacın kendi `drugPriceBefore`/`drugPriceAfter`
+ * değeri. Hiçbir borç etkilenmiyorsa log yazılmaz; borçlara dokunulmadığı için geri almaya da
+ * gerek yoktur (doğru fiyatı yeniden yazmak tam düzeltmedir).
+ */
+export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId, currentPrice) => {
   if (newPrice <= 0) return;
   const batch = writeBatch(db);
+  const priceBatchId = doc(collection(db, 'transactions')).id;
 
   batch.update(doc(db, 'drugs', drugId), { price: newPrice });
 
-  currentDrugDebts.forEach(debt => {
-    if (debt.drugId === drugId && !debt.isFixed && newPrice > debt.maxPrice) {
-      const oldTotalTl = debt.qty * debt.maxPrice;
-      const newTotalTl = debt.qty * newPrice;
-      const diffTl = newTotalTl - oldTotalTl;
+  selectAffectedDebts(drugId, newPrice, currentDrugDebts).forEach(debt => {
+    const oldTotalTl = debt.qty * debt.maxPrice;
+    const newTotalTl = debt.qty * newPrice;
+    const diffTl = newTotalTl - oldTotalTl;
 
-      batch.update(doc(db, 'drugDebts', debt.id), { maxPrice: newPrice });
+    batch.update(doc(db, 'drugDebts', debt.id), { maxPrice: newPrice });
 
-      const logRef = doc(collection(db, 'transactions'));
-      batch.set(logRef, createLog(
-        debt.id,
-        'Fiyat Güncellemesi (Zam)',
-        `Birim fiyat ${fmtTL(debt.maxPrice)} -> ${fmtTL(newPrice)} oldu. Toplam borç ${fmtTL(oldTotalTl)}'den ${fmtTL(newTotalTl)}'ye çıktı (+${fmtTL(diffTl)} fark).`,
-        'warning',
-        debt.customerId,
-        debt.drugId,
-        userId,
-        undefined,
-        { kind: 'price' }
-      ));
-    }
+    const logRef = doc(collection(db, 'transactions'));
+    batch.set(logRef, createLog(
+      debt.id,
+      'Fiyat Güncellemesi (Zam)',
+      `Birim fiyat ${fmtTL(debt.maxPrice)} -> ${fmtTL(newPrice)} oldu. Toplam borç ${fmtTL(oldTotalTl)}'den ${fmtTL(newTotalTl)}'ye çıktı (+${fmtTL(diffTl)} fark).`,
+      'warning',
+      debt.customerId,
+      debt.drugId,
+      userId,
+      undefined,
+      {
+        kind: 'price',
+        batchId: priceBatchId,
+        maxPriceBefore: debt.maxPrice,
+        maxPriceAfter: newPrice,
+        drugPriceBefore: currentPrice ?? debt.maxPrice,
+        drugPriceAfter: newPrice
+      }
+    ));
   });
 
   await batch.commit();
+};
+
+/**
+ * Bir ilacın **son** zammını geri alır: ilacın fiyatı ve etkilenen borçların `maxPrice` değeri
+ * zam öncesine döner, her borç için bir iptal logu yazılır.
+ *
+ * Hangi zammın geri alınabileceğine `utils/priceImpact.js` içindeki `canRevertPriceUpdate` karar
+ * verir (fail-closed); bu fonksiyon yalnızca o guard'ın verdiği grubun loglarıyla çağrılır.
+ *
+ * @param {Array<object>} priceLogs — geri alınacak zam grubunun logları (`batch.logs`)
+ */
+export const revertDrugPriceOperations = async (drugId, priceLogs, userId) => {
+  const logs = (priceLogs || []).filter(l => l?.debtId && l.maxPriceBefore != null);
+  if (!drugId || logs.length === 0) return false;
+
+  const batch = writeBatch(db);
+  const revertBatchId = doc(collection(db, 'transactions')).id;
+  const drugPriceBefore = logs.find(l => l.drugPriceBefore != null)?.drugPriceBefore;
+
+  if (drugPriceBefore != null) {
+    batch.update(doc(db, 'drugs', drugId), { price: drugPriceBefore });
+  }
+
+  for (const log of logs) {
+    batch.update(doc(db, 'drugDebts', log.debtId), { maxPrice: log.maxPriceBefore });
+
+    const logRef = doc(collection(db, 'transactions'));
+    batch.set(logRef, createLog(
+      log.debtId,
+      'Fiyat Güncellemesi İptali',
+      `Zam geri alındı. Birim fiyat ${fmtTL(log.maxPriceAfter)} -> ${fmtTL(log.maxPriceBefore)} olarak eski değerine döndürüldü.`,
+      'success',
+      log.customerId,
+      drugId,
+      userId,
+      undefined,
+      // `maxPriceBefore` bilinçli olarak yazılmıyor: iptal logu yeni bir "geri alınabilir zam"
+      // sayılmamalı, aksi halde geri almanın geri alınması zinciri açılırdı. Guard bu logu
+      // yalnızca "daha yeni bir fiyat işlemi var" (not-latest) sinyali olarak görür.
+      { kind: 'price', batchId: revertBatchId }
+    ));
+  }
+
+  await batch.commit();
+  return true;
 };
 
 export const toggleDebtLock = async (debt, userId) => {

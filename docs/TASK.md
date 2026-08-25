@@ -1136,9 +1136,9 @@ eski (batchId'siz) kayit · guard'in giris loglarini sonraki aktiviteden ayirmas
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P1 |
-| **Depends on** | — |
+| **Depends on** | TASK-031 (log `kind` alani) |
 
 **Problem:**
 `updateDrugPrice` bir ilacin fiyatini yukselttiginde, o ilaca ait **tum musterilerin** acik ve
@@ -1177,10 +1177,48 @@ geri almanin da yolu yok.
 - Yapisal verisi olmayan eski zamlarda geri alma butonu pasif ve sebebi yazili
 - Lint 0/0 · Test gecer · Build basarili
 
+**Sonuc:** Test 146 → 193 · Lint 0 error 0 warning · Build basarili
+
+**Yapilanlar:**
+- `utils/priceImpact.js` — `selectAffectedDebts` (ortak secici), `computePriceImpact`,
+  `computeRevertImpact`, `needsPriceConfirm`, `latestPriceBatch`, `canRevertPriceUpdate`,
+  `revertBlockedMessage`
+- **Drift korumasi:** `updateDrugPrice` guncellenecek borclari artik `selectAffectedDebts` ile
+  seciyor — onizlemenin gosterdigi kume ile gercekten yazilan kume ayni fonksiyondan geliyor,
+  ayrisamazlar. Bir test bunu dogrudan dogruluyor
+- `createLog`'un `meta` objesi genellestirildi: tanimli tum alanlar loga yaziliyor (0 gecerli bir
+  fiyat oldugu icin yalnizca undefined/null eleniyor). Zam loglari artik `batchId`,
+  `maxPriceBefore`/`maxPriceAfter` (borc bazinda) ve `drugPriceBefore`/`drugPriceAfter` tasiyor
+- `revertDrugPriceOperations(drugId, priceLogs, userId)` — tek `writeBatch`: ilac fiyati ve her
+  borcun `maxPrice`'i geri yuklenir, borc basina `Fiyat Güncellemesi İptali` logu yazilir
+- **Iptal logu bilincli olarak `maxPriceBefore` tasimaz** — aksi halde "geri almanin geri alinmasi"
+  zinciri acilirdi. Guard onu yalnizca `not-latest` sinyali olarak gorur
+- `PriceImpactModal.jsx` — tek bilesen, uc mod (`increase` / `decrease` / `revert`)
+- `DrugsView`: acik borc yoksa modal acilmadan kaydeder; satirda "Son Zammı Geri Al" yalnizca
+  guard izin verdiginde gorunur
+
+**Tarayicida dogrulanan senaryolar** (gecici ZZTEST Ilac + ZZTEST musterisi, ikisi de silindi):
+- Acik borcu olmayan ilacta fiyat degisimi → **modal acilmadan** kaydediliyor (100 → 120 ₺)
+- 5 adet × 120 ₺ borc varken 120 → 300 ₺ zam → modal "1 müşterinin 1 açık borcu", satirda
+  `600 ₺ → 1.500 ₺`, toplam artis **900 ₺** → onaylandi, borc sisti
+- **Son Zammı Geri Al** butonu zam sonrasi belirdi (eski zamli iki ilacta gorunmuyor) → geri alma
+  modali `300 ₺ → 120 ₺` ve `1.500 ₺ → 600 ₺` gosterdi → onaylandi
+- Geri alma sonrasi: ilac fiyati 120 ₺, musteri borcu 600 ₺, ekstrede uc log birlikte
+  (`Fiyat Güncellemesi İptali` · `Fiyat Güncellemesi (Zam)` · `Borç Açıldı`)
+- Geri aldiktan sonra buton **kayboldu** (`not-latest` — cifte geri alma engellendi)
+- Fiyat dususu (120 → 80 ₺) → "Düşüşler açık borçlara **yansımaz**" bilgisi + eski fiyatta kalacak
+  borcun listesi
+- TASK-031 guard'i zam logunu dogru sekilde engelleyici sayiyor: zam inmis islemde
+  "İşlemi İptal Et" pasif ve sebebi yazili
+
 **Notes:**
-Bu task TASK-031'den bagimsiz calisabilir ama ayni deseni paylasir: toplu islemi `batchId` ile
-isaretle, gerekceli iptal logu yaz, guard'i sonradan aktiviteye bak. Ikisi de yapilirsa `createLog`
-uzerindeki `batchId` alani ortak kullanilir.
+Geri alma **yalnizca bu degisiklikten sonra yapilan zamlar** icin calisir; eski loglarda
+`maxPriceBefore` yok. Bugun sisik duran borclar (ornegin `efe`'deki ARMAPEN `1.800 → 20.000`)
+bu ozellikle duzeltilemez — onlar icin ayri bir karar gerekir. Onizleme ise mevcut veriyle
+hemen calisiyor.
+
+TASK-031 ile ayni deseni paylasiyor: toplu islemi `batchId` ile isaretle, iptal logu yaz, guard'i
+`kind` alanina bakarak fail-closed kur.
 
 ---
 

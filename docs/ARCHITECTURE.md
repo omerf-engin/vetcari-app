@@ -123,6 +123,17 @@ Yanlış girilen bir kayıt **düzeltilmez, iptal edilir**. İlaç borcu durağa
 - **Süpürülmüş işlemler:** kısmi tahsilat kalanı 10 TL altına düşürdüyse borç dokümanı hiç yazılmaz; bu loglar artık `Kapalı / silinmiş borçlar` yerine kendi işlem başlığı altında toplanır ve genel ekstredeki "İptal Et" ile iptal edilebilir
 - **Bakiye:** iptal `customers.balance`'a dokunmaz — giriş yolu zaten bakiyeye yazmıyor, guard da para hareketi görmüş işlemleri dışarıda bırakıyor
 
+### Fiyat Güncellemesi: Önizleme ve Geri Alma
+
+Bir ilacın fiyatı yükseldiğinde **tüm müşterilerin** açık ve sabitlenmemiş borçları anında etkilenir; düşüşler yansımaz. Bu asimetri yazım hatasını kalıcı hale getiriyordu.
+
+- **Tek seçici:** Etkilenecek borçlar `selectAffectedDebts` (`utils/priceImpact.js`) ile seçilir. Hem `computePriceImpact` (önizleme) hem `updateDrugPrice` (yazım) bunu kullanır — önizleme gerçekte olacaktan **ayrışamaz**. Bir test bunu doğrudan doğrular
+- **Önizleme:** `PriceImpactModal` üç modda çalışır — `increase` (etkilenen müşteriler, eski→yeni borç, toplam artış), `decrease` (düşüşün yansımayacağı bilgisi + eski fiyatta kalacaklar), `revert` (geri dönülecek tutarlar). Hiç açık borç yoksa modal açılmaz, fiyat doğrudan yazılır
+- **Geri alma verisi:** Zam logları `batchId`, borç bazında `maxPriceBefore`/`maxPriceAfter` ve `drugPriceBefore`/`drugPriceAfter` taşır. `maxPriceBefore` borç bazındadır çünkü her borcun zam öncesi fiyatı farklı olabilir
+- **Geri alma:** `revertDrugPriceOperations` tek `writeBatch` ile ilacın fiyatını ve her borcun `maxPrice`'ini geri yükler, borç başına `Fiyat Güncellemesi İptali` logu yazar. İptal logu **bilinçli olarak `maxPriceBefore` taşımaz** — aksi halde geri almanın geri alınması zinciri açılırdı
+- **Guard (`canRevertPriceUpdate`):** yalnızca **son** zam; daha yeni bir fiyat işlemi (`not-latest`), kapanmış borç (`missing`), zamdan sonra inen tahsilat/iade (`activity`) veya yapısal verisi olmayan eski zam (`legacy`) engeller. Fail-closed
+- **Sınır:** Bu özellikten önce yapılmış zamlar geri alınamaz (veride `maxPriceBefore` yok); önizleme ise mevcut veriyle çalışır
+
 ### Log Tarihi Kuralı (`date` ↔ `timestamp`)
 
 Bir log'un `date` alanı **anlattığı olayın** tarihidir; `timestamp` ise kaydın sisteme ne zaman girildiğini tutar. İkisi ayrı olduğu için geçmiş tarih yazmak bilgi kaybettirmez.
@@ -270,6 +281,8 @@ vetcari-app/
 │   │   ├── dates.test.js
 │   │   ├── batchCancel.js           # İşlem iptali guard'ı (canCancelBatch, kind tabanlı)
 │   │   ├── batchCancel.test.js
+│   │   ├── priceImpact.js           # Fiyat etki hesabı + zam geri alma guard'ı
+│   │   ├── priceImpact.test.js
 │   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
 │   │   └── debtGrouping.test.js
 │   │

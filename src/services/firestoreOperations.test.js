@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockBatch, mockDoc, mockCollection, mockAddDoc, mockDeleteDoc, mockUpdateDoc, mockGetDoc, resetMocks } from '../test/firebaseMock';
 import { todayLocal } from '../utils/dates';
+import { computePriceImpact } from '../utils/priceImpact';
 
 // Firebase modulunu mock'la
 const mockBatch = createMockBatch();
@@ -43,6 +44,7 @@ const {
   toggleBatchLockOperations,
   returnBatchOperations,
   cancelDebtTransactionOperations,
+  revertDrugPriceOperations,
   deleteServiceDebtOperations,
 } = await import('./firestoreOperations');
 
@@ -980,6 +982,110 @@ describe('log meta alanlari', () => {
 // =============================================
 // ISLEM IPTALI (cancelDebtTransactionOperations) — TASK-031
 // =============================================
+
+// =============================================
+// FIYAT GERI ALMA (TASK-032)
+// =============================================
+
+describe('zam loglari geri alma verisi tasir', () => {
+  const priceLogs = () => mockBatch.operations.filter(
+    op => op.type === 'set' && op.data.title === 'Fiyat Güncellemesi (Zam)'
+  );
+
+  it('her zam logu batchId, maxPriceBefore/After ve drugPriceBefore/After tasir', async () => {
+    const debts = [
+      { id: 'd1', drugId: 'drug1', customerId: 'c1', qty: 2, maxPrice: 100, isFixed: false },
+      { id: 'd2', drugId: 'drug1', customerId: 'c2', qty: 1, maxPrice: 150, isFixed: false }
+    ];
+
+    await updateDrugPrice('drug1', 200, debts, 'uid1', 100);
+
+    const logs = priceLogs();
+    expect(logs).toHaveLength(2);
+
+    const batchIds = new Set(logs.map(op => op.data.batchId));
+    expect(batchIds.size).toBe(1);
+    expect([...batchIds][0]).toBeTruthy();
+
+    // maxPriceBefore borc bazindadir — iki borcun zam oncesi fiyati farkli
+    expect(logs.map(op => op.data.maxPriceBefore).sort((a, b) => a - b)).toEqual([100, 150]);
+    expect(logs.every(op => op.data.maxPriceAfter === 200)).toBe(true);
+    expect(logs.every(op => op.data.drugPriceBefore === 100)).toBe(true);
+    expect(logs.every(op => op.data.drugPriceAfter === 200)).toBe(true);
+    expect(logs.every(op => op.data.kind === 'price')).toBe(true);
+  });
+
+  it('onizlemedeki etkilenen borclar ile gercekten guncellenenler ayni', async () => {
+    // Drift korumasi: computePriceImpact ve updateDrugPrice ayni seciciyi kullanmali
+    const debts = [
+      { id: 'd1', drugId: 'drug1', customerId: 'c1', qty: 2, maxPrice: 100, isFixed: false },
+      { id: 'd2', drugId: 'drug1', customerId: 'c1', qty: 1, maxPrice: 100, isFixed: true },
+      { id: 'd3', drugId: 'drug1', customerId: 'c2', qty: 1, maxPrice: 300, isFixed: false },
+      { id: 'd4', drugId: 'baska', customerId: 'c2', qty: 1, maxPrice: 10, isFixed: false }
+    ];
+
+    const impact = computePriceImpact({ id: 'drug1', price: 100 }, 200, debts, []);
+    await updateDrugPrice('drug1', 200, debts, 'uid1', 100);
+
+    const updatedDebtIds = mockBatch.operations
+      .filter(op => op.type === 'update' && op.data.maxPrice !== undefined)
+      .map(op => op.ref.path.split('/')[1]);
+
+    expect(updatedDebtIds).toEqual(impact.affected.map(a => a.debt.id));
+    expect(updatedDebtIds).toEqual(['d1']);
+  });
+});
+
+describe('revertDrugPriceOperations', () => {
+  const log = (over = {}) => ({
+    debtId: 'd1', customerId: 'c1', maxPriceBefore: 100, maxPriceAfter: 200,
+    drugPriceBefore: 100, drugPriceAfter: 200, ...over
+  });
+
+  const updates = () => mockBatch.operations.filter(op => op.type === 'update');
+  const revertLogs = () => mockBatch.operations.filter(
+    op => op.type === 'set' && op.data.title === 'Fiyat Güncellemesi İptali'
+  );
+
+  it('ilac fiyatini ve her borcun maxPrice degerini geri yukler', async () => {
+    const ok = await revertDrugPriceOperations('drug1', [
+      log({ debtId: 'd1', maxPriceBefore: 100 }),
+      log({ debtId: 'd2', maxPriceBefore: 150 })
+    ], 'uid1');
+
+    expect(ok).toBe(true);
+    expect(mockBatch.commit).toHaveBeenCalled();
+
+    const drugUpdate = updates().find(op => op.ref.path.startsWith('drugs/'));
+    expect(drugUpdate.data).toEqual({ price: 100 });
+
+    const debtUpdates = updates().filter(op => op.ref.path.startsWith('drugDebts/'));
+    expect(debtUpdates.map(op => op.data.maxPrice)).toEqual([100, 150]);
+  });
+
+  it('her borc icin bir iptal logu yazar', async () => {
+    await revertDrugPriceOperations('drug1', [log({ debtId: 'd1' }), log({ debtId: 'd2' })], 'uid1');
+
+    const logs = revertLogs();
+    expect(logs).toHaveLength(2);
+    expect(logs.every(op => op.data.kind === 'price')).toBe(true);
+    expect(logs.every(op => op.data.drugId === 'drug1')).toBe(true);
+    expect(new Set(logs.map(op => op.data.batchId)).size).toBe(1);
+  });
+
+  it('iptal logu maxPriceBefore tasimaz — geri almanin geri alinmasi zinciri acilmaz', async () => {
+    await revertDrugPriceOperations('drug1', [log()], 'uid1');
+
+    expect(revertLogs()[0].data.maxPriceBefore).toBeUndefined();
+  });
+
+  it('bos veya gecersiz log listesinde islem yapmaz', async () => {
+    expect(await revertDrugPriceOperations('drug1', [], 'uid1')).toBe(false);
+    expect(await revertDrugPriceOperations('drug1', [{ debtId: 'd1' }], 'uid1')).toBe(false);
+    expect(await revertDrugPriceOperations(undefined, [log()], 'uid1')).toBe(false);
+    expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+});
 
 describe('cancelDebtTransactionOperations', () => {
   const svcItem = (over = {}) => ({ id: 'svc1', type: 'service', desc: 'Muayene', amount: 500, ...over });

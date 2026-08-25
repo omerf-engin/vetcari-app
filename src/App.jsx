@@ -21,6 +21,7 @@ import {
   returnDrug,
   returnBatchOperations,
   cancelDebtTransactionOperations,
+  revertDrugPriceOperations,
   deleteServiceDebtOperations,
   addDebtTransactionOperations,
   applyPaymentOperations
@@ -121,8 +122,21 @@ export default function App() {
   };
 
   const handleUpdateDrugPrice = async (drugId, newPrice) => {
-    try { await updateDrugPrice(drugId, newPrice, drugDebts, currentUser.uid); toast.success('Fiyat güncellendi'); }
+    const drug = drugs.find(d => d.id === drugId);
+    try {
+      await updateDrugPrice(drugId, newPrice, drugDebts, currentUser.uid, drug?.price);
+      toast.success('Fiyat güncellendi');
+    }
     catch (err) { handleError(err, 'Fiyat Güncelleme'); }
+  };
+
+  /** Bir ilacın son zammını geri alır; hangi grubun geri alınacağına guard karar verir. */
+  const handleRevertDrugPrice = async (drugId, priceLogs) => {
+    try {
+      await revertDrugPriceOperations(drugId, priceLogs, currentUser.uid);
+      toast.success('Zam geri alındı');
+    }
+    catch (err) { handleError(err, 'Zam Geri Alma'); }
   };
 
   const toggleDebtLockHandler = useCallback(async (debtId) => {
@@ -273,7 +287,11 @@ export default function App() {
         {activeTab === 'drugs' && (
           <DrugsView
             drugs={drugs}
+            drugDebts={drugDebts}
+            customers={customers}
+            transactions={transactions}
             onUpdatePrice={handleUpdateDrugPrice}
+            onRevertPrice={handleRevertDrugPrice}
             onAddDrug={handleAddDrug}
             onDeleteDrug={handleDeleteDrug}
           />

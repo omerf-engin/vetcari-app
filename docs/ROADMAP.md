@@ -212,7 +212,9 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] Supurulmus (dokumansiz) islemler kendi islem basligi altinda gruplanip iptal edilebiliyor
       (TASK-031)
 - [x] Test 110 → 143
-- [ ] Fiyat guncellemesi: etki onizlemesi + son zammi geri alma (TASK-032, P1)
+- [x] Fiyat guncellemesi: etki onizlemesi + son zammi geri alma (TASK-032, P1)
+- [x] Fiyat dususunde de bilgilendirme — bugune kadar sessizce oluyordu (TASK-032)
+- [x] Test 146 → 193
 - [ ] Tahsilat geri alma: on kosul olarak dagitimin ve on-durumun yapisal saklanmasi (ayri task)
 
 > Ilgili tasklar: TASK-031, TASK-032

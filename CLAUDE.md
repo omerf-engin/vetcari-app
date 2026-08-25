@@ -42,6 +42,7 @@ Custom hooks:
 - Customer deletion blocked if active debts exist; drug deletion blocked if customer debts reference it
 - Debts below 10₺ are auto-swept (micro-transaction cleanup)
 - Drug debts support price locking (`isFixed`) to prevent inflation adjustments on existing debts
+- A price change is previewed before it is written: `computePriceImpact` (`utils/priceImpact.js`) shows which customers/debts are affected, and decreases show that they will **not** propagate. `updateDrugPrice` and the preview both pick debts via `selectAffectedDebts`, so the preview can never drift from what is actually written. Price logs carry `batchId`, per-debt `maxPriceBefore/After` and `drugPriceBefore/After`, which `revertDrugPriceOperations` uses to undo the **last** hike — guarded by `canRevertPriceUpdate` (fail-closed). Revert logs deliberately omit `maxPriceBefore` so an undo cannot itself be undone. Hikes made before this existed carry no such data and cannot be reverted
 - Customer `balance` field tracks advance payments that offset new debts
 - Payment distribution spreads a payment across multiple debts. Both service and drug debt payments write `Tahsilat` transaction logs. Rounding uses `Math.round(x * 100) / 100` (0.01 TL precision) consistently across modal and backend
 - Past-dated debts can be entered with custom pricing, partial payment deduction, and optional inflation application

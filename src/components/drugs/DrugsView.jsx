@@ -1,21 +1,69 @@
-import React, { useState } from 'react';
-import { Pill, Plus, Save, Edit2, Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Pill, Plus, Save, Edit2, Trash2, Undo } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
+import {
+  computePriceImpact, computeRevertImpact, needsPriceConfirm, canRevertPriceUpdate
+} from '../../utils/priceImpact';
+import PriceImpactModal from './PriceImpactModal';
 
-export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDrug }) {
+export default function DrugsView({
+  drugs, drugDebts = [], customers = [], transactions = [],
+  onUpdatePrice, onRevertPrice, onAddDrug, onDeleteDrug
+}) {
   const [editingId, setEditingId] = useState(null);
   const [tempPrice, setTempPrice] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newDrugName, setNewDrugName] = useState('');
   const [newDrugPrice, setNewDrugPrice] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  // { mode, drug, newPrice, impact, batch? } — onay bekleyen fiyat işlemi
+  const [pending, setPending] = useState(null);
 
   const filteredDrugs = drugs.filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
+  // Hangi ilaçların son zammı geri alınabilir? Guard loglara baktığı için ilaç bazında hesaplanır.
+  const revertableByDrug = useMemo(() => {
+    const map = new Map();
+    drugs.forEach(d => {
+      const result = canRevertPriceUpdate(d.id, transactions, drugDebts);
+      if (result.ok) map.set(d.id, result.batch);
+    });
+    return map;
+  }, [drugs, transactions, drugDebts]);
+
   const handleSavePrice = (id) => {
     const p = parseFloat(tempPrice);
-    if (!isNaN(p) && p > 0) onUpdatePrice(id, p);
+    if (isNaN(p) || p <= 0) { setEditingId(null); return; }
+
+    const drug = drugs.find(d => d.id === id);
+    const impact = computePriceImpact(drug, p, drugDebts, customers);
     setEditingId(null);
+
+    // Açık borç yoksa kullanıcıyı boşuna durdurmayız; etkilenecek bir şey yok
+    if (impact.direction === 'same' || !needsPriceConfirm(impact)) {
+      if (impact.direction !== 'same') onUpdatePrice(id, p);
+      return;
+    }
+
+    setPending({ mode: impact.direction, drug, newPrice: p, impact });
+  };
+
+  const handleRevertClick = (drug) => {
+    const batch = revertableByDrug.get(drug.id);
+    if (!batch) return;
+    setPending({
+      mode: 'revert',
+      drug,
+      newPrice: batch.logs.find(l => l.drugPriceBefore != null)?.drugPriceBefore ?? drug.price,
+      impact: computeRevertImpact(batch, drugDebts, customers),
+      batch
+    });
+  };
+
+  const confirmPending = () => {
+    if (!pending) return;
+    if (pending.mode === 'revert') onRevertPrice(pending.drug.id, pending.batch.logs);
+    else onUpdatePrice(pending.drug.id, pending.newPrice);
   };
 
   const handleAddSubmit = (e) => {
@@ -82,6 +130,15 @@ export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDru
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-3">
+                        {revertableByDrug.has(drug.id) && (
+                          <button
+                            onClick={() => handleRevertClick(drug)}
+                            title="Son zammı geri al"
+                            className="text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <Undo className="w-3.5 h-3.5" /> Son Zammı Geri Al
+                          </button>
+                        )}
                         <button onClick={() => { setEditingId(drug.id); setTempPrice(drug.price); }} className="text-indigo-600 hover:text-indigo-800 flex items-center justify-end gap-1.5 font-semibold transition-colors"><Edit2 className="w-4 h-4" /> Fiyatı Güncelle</button>
                         <button onClick={() => onDeleteDrug(drug.id)} title="İlacı Sistemden Sil" className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
@@ -93,6 +150,18 @@ export default function DrugsView({ drugs, onUpdatePrice, onAddDrug, onDeleteDru
           </table>
         </div>
       </div>
+
+      {pending && (
+        <PriceImpactModal
+          mode={pending.mode}
+          drugName={pending.drug.name}
+          oldPrice={pending.drug.price}
+          newPrice={pending.newPrice}
+          impact={pending.impact}
+          onConfirm={confirmPending}
+          onClose={() => setPending(null)}
+        />
+      )}
     </div>
   );
 }
