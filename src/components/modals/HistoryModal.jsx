@@ -2,10 +2,12 @@ import React, { useEffect, useMemo } from 'react';
 import { History, Ban } from 'lucide-react';
 import { fmtDate } from '../../utils/formatters';
 
+// Ekstre yeniden eskiye sıralanır: küçük öncelik = üstte = olayın daha sonrasında olduğu anlamına gelir.
+// Süpürücü her zaman kendisini tetikleyen tahsilattan SONRA gerçekleşir, bu yüzden onun üstündedir.
 const getLogSortPriority = (title) => {
   if (title.includes('Enflasyon') || title.includes('Fiyat Güncellemesi')) return 0;
-  if (title.includes('Tahsilat')) return 1;
-  if (title.includes('Süpürücü')) return 2;
+  if (title.includes('Süpürücü')) return 1;
+  if (title.includes('Tahsilat')) return 2;
   if (title.includes('Borcu') || title.includes('Borç Açıldı')) return 4;
   return 3;
 };

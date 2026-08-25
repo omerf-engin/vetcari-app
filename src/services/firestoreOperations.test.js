@@ -916,6 +916,44 @@ describe('log meta alanlari', () => {
     expect([...batchIds][0]).toBe(debtBatchId);
   });
 
+  it('gecmis giriste supurucu logu tahsilat tarihini tasir', async () => {
+    // Supurucu, gomulu tahsilatin sonucudur; anlattigi olay o tahsilatla ayni gun olmustur.
+    // Bugunun tarihini yazmak ayni islemin satirlarini ekstrede farkli gunlere dagitirdi.
+    await addDebtTransactionOperations('cust1', {
+      date: '2026-01-20',
+      service: { desc: 'Muayene', amount: 1000, paidAmount: 995, paidDate: '2026-01-22' }
+    }, 'uid1');
+
+    const sweep = logOps().find(op => op.data.title === 'Süpürücü (Silindi)');
+    const payment = logOps().find(op => op.data.title === 'Geçmiş Tahsilat');
+
+    expect(sweep.data.date).toBe('2026-01-22');
+    expect(sweep.data.date).toBe(payment.data.date);
+    expect(sweep.data.date).not.toBe(TODAY);
+  });
+
+  it('ilac dalinda da supurucu tahsilat tarihini tasir', async () => {
+    await addDebtTransactionOperations('cust1', {
+      date: '2026-01-20',
+      drugItems: [item({ id: 'drug1', price: 100 }, 10, 100)],
+      drugPaidAmount: 995,
+      drugPaidDate: '2026-01-22'
+    }, 'uid1');
+
+    const sweep = logOps().find(op => op.data.title === 'Süpürücü (Silindi)');
+    expect(sweep.data.date).toBe('2026-01-22');
+  });
+
+  it('tahsilat tarihi verilmemisse supurucu islem tarihine duser', async () => {
+    await addDebtTransactionOperations('cust1', {
+      date: '2026-01-20',
+      service: { desc: 'Muayene', amount: 1000, paidAmount: 995 }
+    }, 'uid1');
+
+    const sweep = logOps().find(op => op.data.title === 'Süpürücü (Silindi)');
+    expect(sweep.data.date).toBe('2026-01-20');
+  });
+
   it('tahsilat, iade, zam ve kilit loglari kendi kind degerini tasir', async () => {
     const debt = { id: 'd1', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false };
 

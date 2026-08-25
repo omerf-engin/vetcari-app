@@ -393,7 +393,9 @@ const appendServiceDebtToBatch = (batch, ctx) => {
     if (finalAmount <= 10) {
       isSwept = true;
       const logRef3 = doc(collection(db, 'transactions'));
-      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId, undefined, { kind: 'entry', batchId }));
+      // Süpürücü bu dalda yalnızca gömülü tahsilatın sonucu olarak tetiklenir; anlattığı olay
+      // o tahsilatla aynı gün gerçekleşmiştir. `timestamp` gerçek giriş anını tutmaya devam eder.
+      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId, paidDate || (isToday ? undefined : date), { kind: 'entry', batchId }));
     }
   }
 
@@ -451,7 +453,8 @@ const appendDrugItemsToBatch = (batch, ctx) => {
         if (remainTl <= 10) {
           isSwept = true;
           const logRef3 = doc(collection(db, 'transactions'));
-          batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, item.drug.id, userId, undefined, { kind: 'entry', batchId }));
+          // Bkz. hizmet dalındaki not: süpürücünün tarihi onu tetikleyen tahsilatın tarihidir
+          batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, item.drug.id, userId, paidDate || (isToday ? undefined : date), { kind: 'entry', batchId }));
         }
       }
     }

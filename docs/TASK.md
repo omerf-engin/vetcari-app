@@ -1108,12 +1108,22 @@ eski (batchId'siz) kayit · guard'in giris loglarini sonraki aktiviteden ayirmas
   `userId` alani olmayan cok eski loglar isaretlenemez. Guard bu kayitlarda zaten iptali kapatiyor
 - TASK-020 (donemsel raporlama) geldiginde `cancelled` loglar donem toplamlarindan dislanmali
 - **Kapsam disi:** kalem duzenleme, borc tasima, cift tarafli muhasebeye gecis
-- **Uygulama sirasinda gorulen ayri sorun (duzeltilmedi):** gecmis tarihli girislerde
-  `Supurucu (Silindi)` logu `dateOverride` almadigi icin islem tarihini degil **bugunun**
-  tarihini gosteriyor (`appendServiceDebtToBatch` / `appendDrugItemsToBatch`). Ekstrede ayni
-  islemin satirlari farkli tarihlerde gorunuyor. Tek satirlik bir duzeltme ama davranis
-  degisikligi oldugu icin bu taskin disinda birakildi — TASK-018'de enflasyon logunun bugunu
-  gostermesi "dogru davranis" olarak isaretlenmisti, supurucu icin ayni karar verilmeli
+- **Ek duzeltme (kullanici onayiyla, ayri commit):** gecmis tarihli girislerde
+  `Supurucu (Silindi)` logu `dateOverride` almadigi icin islem tarihini degil bugunun tarihini
+  gosteriyordu; ayni islemin satirlari ekstrede farkli gunlere dagiliyordu. Artik onu tetikleyen
+  tahsilatin tarihini aliyor (`paidDate || (isToday ? undefined : date)`).
+
+  **Ilke:** log'un `date` alani **anlattigi olayin** tarihidir; `timestamp` kaydin ne zaman
+  girildigini tutmaya devam eder, dolayisiyla bilgi kaybi yok. Bu ilkeye gore:
+  - Acilis logu → islem tarihi · gomulu tahsilat → tahsilat tarihi · **supurucu → tahsilat tarihi**
+  - `Enflasyon Guncellemesi` → **bugun** (TASK-018 karari gecerli: yeniden fiyatlama bugun
+    yapiliyor, gecmiste olmus bir olay degil)
+  - `applyReturnToBatch` / `applyPaymentOperations` icindeki supurucular → **bugun** (onlari
+    tetikleyen iade/tahsilat gercekten bugun oluyor), dokunulmadi
+  - Yan etki: supurucu ile tahsilat artik ayni tarihe dustugu icin siralamayi
+    `getLogSortPriority` belirliyor. Supurucu her zaman tahsilattan **sonra** gerceklesir,
+    bu yuzden oncelikleri takas edildi (`Supurucu: 1`, `Tahsilat: 2`). Baslik metinlerine
+    dokunulmadi — kirilgan olan basliklar, oncelik sayilari degil
 - **Tahsilat geri alma bu taskta yok** — ayri ve daha agir. Ön kosul veri eksigi: selalenin hangi
   borca ne kadar dagittigi hicbir yerde saklanmiyor (`distributionArr` modalda hesaplanip
   atiliyor), loglarda tutar sayisal degil (`createLog` yalnizca prose `message` yaziyor),

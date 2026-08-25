@@ -123,11 +123,25 @@ Yanlış girilen bir kayıt **düzeltilmez, iptal edilir**. İlaç borcu durağa
 - **Süpürülmüş işlemler:** kısmi tahsilat kalanı 10 TL altına düşürdüyse borç dokümanı hiç yazılmaz; bu loglar artık `Kapalı / silinmiş borçlar` yerine kendi işlem başlığı altında toplanır ve genel ekstredeki "İptal Et" ile iptal edilebilir
 - **Bakiye:** iptal `customers.balance`'a dokunmaz — giriş yolu zaten bakiyeye yazmıyor, guard da para hareketi görmüş işlemleri dışarıda bırakıyor
 
+### Log Tarihi Kuralı (`date` ↔ `timestamp`)
+
+Bir log'un `date` alanı **anlattığı olayın** tarihidir; `timestamp` ise kaydın sisteme ne zaman girildiğini tutar. İkisi ayrı olduğu için geçmiş tarih yazmak bilgi kaybettirmez.
+
+| Log | `date` |
+|---|---|
+| Açılış (`Hizmet Borcu` / `Borç Açıldı` ve geçmiş karşılıkları) | İşlem tarihi |
+| Gömülü `Geçmiş Tahsilat` | Tahsilat tarihi (`paidDate`) |
+| Girişteki `Süpürücü (Silindi)` | **Onu tetikleyen tahsilatın tarihi** — süpürücü bu dalda yalnızca gömülü tahsilatın sonucu olarak tetiklenir |
+| `Enflasyon Güncellemesi` | **Bugün** — yeniden fiyatlama bugün yapılan bir karardır, geçmişte olmuş bir olay değil (TASK-018) |
+| İade / tahsilat yolundaki süpürücüler | **Bugün** — onları tetikleyen olay gerçekten bugün olur |
+
 ### Ekstre Sıralama Kuralı
 
-Ekstre her zaman `timestamp` alanına göre azalan sırada (`desc`) gösterilir:
+Ekstre `date` (yeniden eskiye) → `timestamp` (yeniden eskiye) → `getLogSortPriority` sırasıyla dizilir. Öncelik yalnızca aynı milisaniyede yazılmış batch logları için devreye girer; küçük öncelik = üstte = olayın daha sonra gerçekleştiği anlamına gelir.
+
 - Aynı gün içinde dahi sonraki işlem üstte yer alır (LIFO)
-- `dateOverride` ile görüntülenen tarih farklı olsa bile sıralama `timestamp` ile belirlenir
+- Süpürücü kendisini tetikleyen tahsilattan sonra gerçekleştiği için onun üstündedir (`Süpürücü: 1`, `Tahsilat: 2`)
+- **Öncelikler başlık metniyle eşleştirilir** (`getLogSortPriority`); başlıklar değiştirilmemeli, öncelik sayıları güvenle ayarlanabilir
 
 ### Tarih Üretimi (Yerel Gün)
 
