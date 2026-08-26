@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Pill, Plus, Save, Edit2, Trash2, Undo } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 import {
-  computePriceImpact, computeRevertImpact, needsPriceConfirm, canRevertPriceUpdate
+  computePriceImpact, computeRevertImpact, needsPriceConfirm, canRevertPriceUpdate,
+  revertBlockedMessage
 } from '../../utils/priceImpact';
 import PriceImpactModal from './PriceImpactModal';
 
@@ -22,11 +23,18 @@ export default function DrugsView({
   const filteredDrugs = drugs.filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   // Hangi ilaçların son zammı geri alınabilir? Guard loglara baktığı için ilaç bazında hesaplanır.
-  const revertableByDrug = useMemo(() => {
+  //
+  // Butonu yalnızca **geri alınabilir bir zam varsa** gösteririz: `legacy` (yapısal verisi olan
+  // hiç zam yok) ve `not-latest` (zam zaten geri alınmış) durumlarında hiç göstermeyiz, aksi
+  // halde her satırda kalıcı pasif bir buton dururdu. `activity` / `missing` durumunda ise buton
+  // pasif olarak durur ve sebebini yazar — kullanıcı neden geri alamadığını bilmeli.
+  const revertStateByDrug = useMemo(() => {
     const map = new Map();
     drugs.forEach(d => {
       const result = canRevertPriceUpdate(d.id, transactions, drugDebts);
-      if (result.ok) map.set(d.id, result.batch);
+      if (result.ok || result.reason === 'activity' || result.reason === 'missing') {
+        map.set(d.id, result);
+      }
     });
     return map;
   }, [drugs, transactions, drugDebts]);
@@ -49,7 +57,7 @@ export default function DrugsView({
   };
 
   const handleRevertClick = (drug) => {
-    const batch = revertableByDrug.get(drug.id);
+    const batch = revertStateByDrug.get(drug.id)?.batch;
     if (!batch) return;
     setPending({
       mode: 'revert',
@@ -129,18 +137,28 @@ export default function DrugsView({
                         <button onClick={() => handleSavePrice(drug.id)} className="text-emerald-600 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-md transition-colors"><Save className="w-4 h-4" /> Kaydet</button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-end gap-3">
-                        {revertableByDrug.has(drug.id) && (
-                          <button
-                            onClick={() => handleRevertClick(drug)}
-                            title="Son zammı geri al"
-                            className="text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                          >
-                            <Undo className="w-3.5 h-3.5" /> Son Zammı Geri Al
-                          </button>
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center justify-end gap-3">
+                          {revertStateByDrug.has(drug.id) && (
+                            <button
+                              onClick={() => handleRevertClick(drug)}
+                              disabled={!revertStateByDrug.get(drug.id).ok}
+                              title={revertStateByDrug.get(drug.id).ok
+                                ? 'Son zammı geri al'
+                                : revertBlockedMessage(revertStateByDrug.get(drug.id).reason)}
+                              className="text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:text-slate-500 disabled:bg-slate-100 disabled:hover:bg-slate-100 disabled:cursor-not-allowed"
+                            >
+                              <Undo className="w-3.5 h-3.5" /> Son Zammı Geri Al
+                            </button>
+                          )}
+                          <button onClick={() => { setEditingId(drug.id); setTempPrice(drug.price); }} className="text-indigo-600 hover:text-indigo-800 flex items-center justify-end gap-1.5 font-semibold transition-colors"><Edit2 className="w-4 h-4" /> Fiyatı Güncelle</button>
+                          <button onClick={() => onDeleteDrug(drug.id)} title="İlacı Sistemden Sil" className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                        {revertStateByDrug.has(drug.id) && !revertStateByDrug.get(drug.id).ok && (
+                          <p className="text-[11px] text-slate-400 italic font-normal max-w-xs text-right">
+                            {revertBlockedMessage(revertStateByDrug.get(drug.id).reason)}
+                          </p>
                         )}
-                        <button onClick={() => { setEditingId(drug.id); setTempPrice(drug.price); }} className="text-indigo-600 hover:text-indigo-800 flex items-center justify-end gap-1.5 font-semibold transition-colors"><Edit2 className="w-4 h-4" /> Fiyatı Güncelle</button>
-                        <button onClick={() => onDeleteDrug(drug.id)} title="İlacı Sistemden Sil" className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )}
                   </td>

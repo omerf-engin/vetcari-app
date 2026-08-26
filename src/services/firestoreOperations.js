@@ -137,6 +137,11 @@ export const deleteDrug = async (drugId) => {
  * borcun zam öncesi fiyatı farklı olabilir) ve ilacın kendi `drugPriceBefore`/`drugPriceAfter`
  * değeri. Hiçbir borç etkilenmiyorsa log yazılmaz; borçlara dokunulmadığı için geri almaya da
  * gerek yoktur (doğru fiyatı yeniden yazmak tam düzeltmedir).
+ *
+ * @param {number} [currentPrice] — ilacın zam öncesi fiyatı. Verilmezse `drugPriceBefore`
+ *        **hiç yazılmaz**: borç bazındaki `maxPrice`'ten türetmek gruptaki loglara birbirinden
+ *        farklı değerler yazardı ve geri alma ilacın fiyatını yanlış bir değere döndürürdü.
+ *        O durumda geri alma yalnızca borçların `maxPrice`'ini onarır.
  */
 export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId, currentPrice) => {
   if (newPrice <= 0) return;
@@ -167,7 +172,7 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId
         batchId: priceBatchId,
         maxPriceBefore: debt.maxPrice,
         maxPriceAfter: newPrice,
-        drugPriceBefore: currentPrice ?? debt.maxPrice,
+        drugPriceBefore: currentPrice,
         drugPriceAfter: newPrice
       }
     ));

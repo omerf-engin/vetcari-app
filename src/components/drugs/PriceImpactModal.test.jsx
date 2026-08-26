@@ -46,6 +46,25 @@ describe('PriceImpactModal', () => {
     expect(screen.getByText(/sonradan düşürmek bu borçları geri indirmez/)).toBeInTheDocument();
   });
 
+  it('zamdan korunan borclari da listeler', () => {
+    const withFixed = [debts[0], { ...debts[1], isFixed: true }];
+    const impact = computePriceImpact(drug, 200, withFixed, customers);
+    openModal('increase', impact, 200);
+
+    expect(screen.getByText(/Etkilenmeyecek Borçlar \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText('SABİT')).toBeInTheDocument();
+  });
+
+  it('hicbir borcu etkilemeyen artista "0 musteri" demez', () => {
+    // Borclarin baz fiyati yeni fiyatin ustunde: artis hicbir seye yansimaz
+    const higher = [{ ...debts[0], maxPrice: 500 }];
+    const impact = computePriceImpact({ ...drug, price: 100 }, 200, higher, customers);
+    openModal('increase', impact, 200);
+
+    expect(screen.getByText(/hiçbir açık borca yansımıyor/)).toBeInTheDocument();
+    expect(screen.queryByText(/0 müşterinin/)).not.toBeInTheDocument();
+  });
+
   it('dusus modunda borclarin eski fiyatta kalacagini gosterir', () => {
     const impact = computePriceImpact(drug, 50, debts, customers);
     openModal('decrease', impact, 50);

@@ -49,13 +49,22 @@ export default function PriceImpactModal({ mode, drugName, oldPrice, newPrice, i
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
-          {isIncrease && (
+          {isIncrease && impact.debtCount > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm flex gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-amber-800">
                 Bu zam <strong>{impact.customerCount} müşterinin</strong> {impact.debtCount} açık borcuna
                 anında yansıyacak. Fiyatı sonradan düşürmek bu borçları geri indirmez.
               </p>
+            </div>
+          )}
+
+          {isIncrease && impact.debtCount === 0 && (
+            // Açık borçların baz fiyatı yeni fiyatın üstündeyse (önceki bir düşüşten sonra)
+            // artış hiçbir borca yansımaz — "0 müşteri" demek yerine durumu açıkça söyleriz
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-600">
+              Bu artış <strong>hiçbir açık borca yansımıyor</strong>; mevcut borçların baz fiyatı
+              zaten yeni fiyatın üstünde ya da sabitlenmiş durumda.
             </div>
           )}
 
@@ -78,7 +87,7 @@ export default function PriceImpactModal({ mode, drugName, oldPrice, newPrice, i
             <p className="text-sm text-slate-500 text-center py-4">Etkilenen açık borç yok.</p>
           ) : (
             <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" aria-label={isIncrease || isRevert ? 'Etkilenen borçlar' : 'Etkilenmeyen borçlar'}>
                 <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-2.5 text-left font-bold uppercase tracking-wider text-xs">Müşteri</th>
@@ -110,6 +119,31 @@ export default function PriceImpactModal({ mode, drugName, oldPrice, newPrice, i
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {isIncrease && impact.unchanged.length > 0 && (
+            // Zamdan korunan borçlar: sabitlenmiş olanlar ve baz fiyatı zaten yeni fiyatın
+            // üstünde kalanlar. Veterinerin "hangileri etkilenmiyor" sorusu da cevaplanmalı.
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                Etkilenmeyecek Borçlar ({impact.unchanged.length})
+              </p>
+              <ul className="border border-slate-200 rounded-lg divide-y divide-slate-100">
+                {impact.unchanged.map(row => (
+                  <li key={row.debt.id} className="px-4 py-2 flex justify-between items-center gap-3 text-sm">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="font-semibold text-slate-600 truncate">{row.customerName}</span>
+                      {row.debt.isFixed && (
+                        <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold border border-amber-200 flex-shrink-0">
+                          SABİT
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-slate-500 flex-shrink-0">{fmtTL(row.currentTl)}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

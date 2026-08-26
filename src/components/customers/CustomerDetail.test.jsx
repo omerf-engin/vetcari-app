@@ -139,6 +139,33 @@ describe('CustomerDetail — islem karti', () => {
     expect(reason).toBe('Hatalı giriş');
   });
 
+  it('kismen supurulmus islemde iptal yalnizca yasayan kalemi hedefler', () => {
+    // Ayni islemde iki ilac kalemi: biri supurulmus (dokumani yok, yalnizca logu var),
+    // digeri yasiyor. Ekstrede supurulen kalem ayri bir baslik altinda gorunse de karttan
+    // yapilan iptal grubu dogru cozmeli — silinecek kalem yalnizca yasayan olmali.
+    const onCancelBatch = vi.fn();
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ id: 'dd1', batchId: 'b1' })],
+      transactions: [
+        { id: 'l1', debtId: 'dd1', batchId: 'b1', kind: 'entry', title: 'Borç Açıldı', date: '2026-08-12' },
+        { id: 'l2', debtId: 'ddSupuruldu', batchId: 'b1', kind: 'entry', title: 'Geçmiş İlaç Borcu', date: '2026-08-12' },
+        { id: 'l3', debtId: 'ddSupuruldu', batchId: 'b1', kind: 'entry', title: 'Süpürücü (Silindi)', date: '2026-08-12' }
+      ],
+      onCancelBatch
+    });
+    expandCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /İşlemi İptal Et/ }));
+    fireEvent.change(screen.getByLabelText(/İptal Gerekçesi/), { target: { value: 'Hatalı giriş' } });
+    fireEvent.click(screen.getByRole('button', { name: /İptali Onayla/ }));
+
+    const [group] = onCancelBatch.mock.calls[0];
+    expect(group.batchId).toBe('b1');
+    expect(group.items.map(i => i.id)).toEqual(['dd1']);
+  });
+
   it('ayni tarihli eski kayitlar tek kartta, farkli tarihliler ayri kartlarda toplanir', () => {
     openDetail({
       drugs: [makeDrug()],

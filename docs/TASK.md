@@ -1220,6 +1220,24 @@ hemen calisiyor.
 TASK-031 ile ayni deseni paylasiyor: toplu islemi `batchId` ile isaretle, iptal logu yaz, guard'i
 `kind` alanina bakarak fail-closed kur.
 
+**Gozden gecirme sonrasi duzeltmeler (TASK-031 + TASK-032):**
+- `revertBlockedMessage` yazilmis ve test edilmisti ama **hicbir yerde kullanilmiyordu**; guard
+  engellediginde buton sessizce gizleniyordu. Artik `activity` / `missing` durumunda buton pasif
+  olarak duruyor ve sebebi yaziyor (TASK-031'deki desenle ayni). `legacy` ve `not-latest`
+  durumunda gizli kalir — kalici pasif buton gurultusu olmasin diye
+- `drugPriceBefore: currentPrice ?? debt.maxPrice` fallback'i **kaldirildi**. Borc bazindaki
+  `maxPrice`'ten turetmek gruptaki loglara birbirinden farkli degerler yaziyordu; geri alma
+  bunlardan birini secip ilacin fiyatini yanlis bir degere dondurebilirdi. Artik `currentPrice`
+  yoksa alan hic yazilmiyor ve geri alma yalnizca borclarin `maxPrice`'ini onariyor
+- Zam onizlemesi artik **korunan borclari da listeliyor** (sabitlenmisler ve baz fiyati yeni
+  fiyatin ustunde kalanlar); hicbir borcu etkilemeyen artista "0 musterinin 0 acik borcu" yerine
+  durumu acikca anlatan bir metin gosteriliyor
+- Kismen supurulmus islemde iptalin dogru grubu cozdugu testle sabitlendi
+- Guard'larin istemci anlik goruntusune dayandigi ve `writeBatch`'in on kosulsuz yazdigi
+  ARCHITECTURE'a bilinen sinir olarak yazildi
+
+**Sonuc (gozden gecirme sonrasi):** Test 193 → 199
+
 ---
 
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)

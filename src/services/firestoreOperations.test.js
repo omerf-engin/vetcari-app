@@ -1015,6 +1015,23 @@ describe('zam loglari geri alma verisi tasir', () => {
     expect(logs.every(op => op.data.kind === 'price')).toBe(true);
   });
 
+  it('ilacin mevcut fiyati bilinmiyorsa drugPriceBefore yazilmaz', async () => {
+    // Borc bazindaki maxPrice'ten turetmek gruptaki loglara farkli degerler yazardi ve geri
+    // alma ilacin fiyatini yanlis bir degere dondururdu; alan hic yazilmamasi daha guvenli
+    const debts = [
+      { id: 'd1', drugId: 'drug1', customerId: 'c1', qty: 1, maxPrice: 100, isFixed: false },
+      { id: 'd2', drugId: 'drug1', customerId: 'c2', qty: 1, maxPrice: 150, isFixed: false }
+    ];
+
+    await updateDrugPrice('drug1', 200, debts, 'uid1'); // currentPrice yok
+
+    const logs = priceLogs();
+    expect(logs).toHaveLength(2);
+    expect(logs.every(op => op.data.drugPriceBefore === undefined)).toBe(true);
+    // Borc bazindaki veri yine de yazilir; geri alma borclari onarabilir
+    expect(logs.map(op => op.data.maxPriceBefore).sort((a, b) => a - b)).toEqual([100, 150]);
+  });
+
   it('onizlemedeki etkilenen borclar ile gercekten guncellenenler ayni', async () => {
     // Drift korumasi: computePriceImpact ve updateDrugPrice ayni seciciyi kullanmali
     const debts = [
@@ -1046,6 +1063,13 @@ describe('revertDrugPriceOperations', () => {
   const revertLogs = () => mockBatch.operations.filter(
     op => op.type === 'set' && op.data.title === 'Fiyat Güncellemesi İptali'
   );
+
+  it('drugPriceBefore yoksa ilac fiyatina dokunmaz, borclari yine onarir', async () => {
+    await revertDrugPriceOperations('drug1', [log({ drugPriceBefore: undefined })], 'uid1');
+
+    expect(updates().some(op => op.ref.path.startsWith('drugs/'))).toBe(false);
+    expect(updates().filter(op => op.ref.path.startsWith('drugDebts/'))).toHaveLength(1);
+  });
 
   it('ilac fiyatini ve her borcun maxPrice degerini geri yukler', async () => {
     const ok = await revertDrugPriceOperations('drug1', [

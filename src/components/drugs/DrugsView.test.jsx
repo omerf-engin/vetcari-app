@@ -79,14 +79,15 @@ describe('DrugsView — fiyat degisikligi', () => {
     expect(onUpdatePrice).not.toHaveBeenCalled();
   });
 
-  it('sabitlenmis borc zamdan etkilenmez ama onay yine de sorulur', () => {
+  it('sabitlenmis borc zamdan etkilenmez ve korunanlar listesinde gosterilir', () => {
     renderView({ drugDebts: [openDebt({ isFixed: true })] });
 
     editPrice('200');
 
-    // Sabit borc `unchanged` tarafinda; kullanici neye dokunulmayacagini gorur
     expect(screen.getByText('Fiyat Artışı')).toBeInTheDocument();
     expect(screen.getByText('Etkilenen açık borç yok.')).toBeInTheDocument();
+    expect(screen.getByText(/Etkilenmeyecek Borçlar \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText('SABİT')).toBeInTheDocument();
   });
 });
 
@@ -103,10 +104,24 @@ describe('DrugsView — son zammi geri al', () => {
     expect(screen.getByRole('button', { name: /Son Zammı Geri Al/ })).toBeInTheDocument();
   });
 
-  it('zamdan sonra tahsilat inmisse buton gorunmez', () => {
+  it('zamdan sonra tahsilat inmisse buton pasif ve sebebi yazili', () => {
     renderView({
       drugDebts: [openDebt({ maxPrice: 200 })],
       transactions: [priceLog(), { id: 'l2', debtId: 'd1', kind: 'payment', timestamp: 2000 }]
+    });
+
+    expect(screen.getByRole('button', { name: /Son Zammı Geri Al/ })).toBeDisabled();
+    expect(screen.getByText(/Zamdan sonra bu borçlara tahsilat/)).toBeInTheDocument();
+  });
+
+  it('zam zaten geri alinmissa buton hic gorunmez', () => {
+    // `not-latest`: kalici pasif bir buton birakmak yerine tamamen gizlenir
+    renderView({
+      drugDebts: [openDebt()],
+      transactions: [
+        priceLog(),
+        { id: 'l2', kind: 'price', drugId: 'drug1', debtId: 'd1', batchId: 'rev1', timestamp: 2000 }
+      ]
     });
 
     expect(screen.queryByRole('button', { name: /Son Zammı Geri Al/ })).not.toBeInTheDocument();

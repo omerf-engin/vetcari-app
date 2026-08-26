@@ -134,6 +134,16 @@ Bir ilacın fiyatı yükseldiğinde **tüm müşterilerin** açık ve sabitlenme
 - **Guard (`canRevertPriceUpdate`):** yalnızca **son** zam; daha yeni bir fiyat işlemi (`not-latest`), kapanmış borç (`missing`), zamdan sonra inen tahsilat/iade (`activity`) veya yapısal verisi olmayan eski zam (`legacy`) engeller. Fail-closed
 - **Sınır:** Bu özellikten önce yapılmış zamlar geri alınamaz (veride `maxPriceBefore` yok); önizleme ise mevcut veriyle çalışır
 
+### Guard'ların Bilinen Sınırları
+
+İptal (`canCancelBatch`) ve zam geri alma (`canRevertPriceUpdate`) guard'ları **istemcideki anlık görüntüye** bakar; `writeBatch` ise ön koşulsuz yazar. Firestore tarafında "guard'ın gördüğü durum hâlâ geçerli mi" kontrolü yoktur.
+
+- **Sonuç:** iki sekme açıksa veya `onSnapshot` gecikirse, guard "temiz" derken araya girmiş bir tahsilattan sonra iptal/geri alma yazılabilir. Tek kullanıcılı bir defterde pratik risk düşüktür
+- **Gerçek çözüm** `runTransaction` ile okuma-yazmayı atomikleştirmek olurdu; mevcut tüm operasyonlar `writeBatch` deseninde olduğu için bu ayrı bir iş olarak duruyor
+- Guard'lar bu yüzden **fail-closed** kurulmuştur: tanınmayan bir log iptali engeller, aksi yönde değil
+
+**Kısmen süpürülmüş işlemler:** bir işlemde bazı kalemler süpürülüp (dokümanı yok) bazıları yazıldıysa, genel ekstrede işlem iki başlık altında görünür — yaşayan kalem kendi işlem başlığında, süpürülen kalem `kapanmış işlem` başlığında. İkisinden de yapılan iptal doğru çalışır (`cancelGroup` önce canlı grubu çözer, `CustomerDetail.jsx`), ancak aynı işlem için iki ayrı iptal yolu görünmesi bilinen bir görsel kusurdur.
+
 ### Log Tarihi Kuralı (`date` ↔ `timestamp`)
 
 Bir log'un `date` alanı **anlattığı olayın** tarihidir; `timestamp` ise kaydın sisteme ne zaman girildiğini tutar. İkisi ayrı olduğu için geçmiş tarih yazmak bilgi kaybettirmez.
