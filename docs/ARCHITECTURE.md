@@ -134,6 +134,18 @@ Bir ilacın fiyatı yükseldiğinde **tüm müşterilerin** açık ve sabitlenme
 - **Guard (`canRevertPriceUpdate`):** yalnızca **son** zam; daha yeni bir fiyat işlemi (`not-latest`), kapanmış borç (`missing`), zamdan sonra inen tahsilat/iade (`activity`) veya yapısal verisi olmayan eski zam (`legacy`) engeller. Fail-closed
 - **Sınır:** Bu özellikten önce yapılmış zamlar geri alınamaz (veride `maxPriceBefore` yok); önizleme ise mevcut veriyle çalışır
 
+### Tahsilat Geri Alma
+
+Tahsilat, borçları düşüren/silen ve bakiyeyi değiştiren tek işlemdir; geri alınabilmesi için **ödeme öncesi durumun** saklanması gerekir.
+
+- **Kayıt:** her `Tahsilat` logu `batchId` (çağrı başına), `deduct`, `qtyDeducted`, `removed` ve **`before`** (borcun ödeme öncesi tam anlık görüntüsü, `id` hariç) taşır; grup genelinde `balanceDelta` (= alınan − dağıtılan) yazılır
+- **Geri alma:** `revertPaymentOperations` her kalem için **tek kod yolu** kullanır — `set(ref, before)`. Süpürülüp silinmiş borç **aynı doküman id'siyle** yeniden yaratılır, böylece o borcun eski logları kopmaz; yaşayan borç ödeme öncesi haline döner. Bakiyeye ters delta uygulanır
+- **Guard** (`utils/paymentRevert.js`): yalnızca **son** tahsilat; daha yeni bir tahsilat veya geri alma (`not-latest`), borçlara sonradan inen işlem (`activity`), yapısal verisi olmayan eski tahsilat (`legacy`). Fail-closed
+- **Zincir koruması:** geri alma logu bilinçli olarak `balanceDelta` taşımaz — `latestPaymentBatch` onu aday saymaz ama varlığı `not-latest` sinyali verir
+- **Avans görünürlüğü:** `balanceDelta !== 0` ise `Avans Girişi` logu yazılır. Borçlara dağıtılmayan para eskiden sessizce bakiyeye yazılıyordu, ekstrede hiç görünmüyordu
+- **Bakiye kuralı:** düşüm yalnızca borç gerçekten bulunduysa bakiyeyi etkiler. Önceden bulunamayan borçta da bakiye düşüyordu, yani para kayboluyordu
+- **Etkileşim:** tahsilatı geri alınmış bir borcun **girişi** yine de iptal edilemez; `canCancelBatch` geri alma logunu aktivite sayar (fail-closed)
+
 ### Guard'ların Bilinen Sınırları
 
 İptal (`canCancelBatch`) ve zam geri alma (`canRevertPriceUpdate`) guard'ları **istemcideki anlık görüntüye** bakar; `writeBatch` ise ön koşulsuz yazar. Firestore tarafında "guard'ın gördüğü durum hâlâ geçerli mi" kontrolü yoktur.
@@ -295,6 +307,8 @@ vetcari-app/
 │   │   ├── batchCancel.test.js
 │   │   ├── priceImpact.js           # Fiyat etki hesabı + zam geri alma guard'ı
 │   │   ├── priceImpact.test.js
+│   │   ├── paymentRevert.js         # Tahsilat geri alma guard'ı
+│   │   ├── paymentRevert.test.js
 │   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
 │   │   └── debtGrouping.test.js
 │   │

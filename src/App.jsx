@@ -11,6 +11,7 @@ import { useToast } from './hooks/useToast';
 import { CustomerProvider } from './contexts/CustomerContext';
 import { canCancelBatch, cancelBlockedMessage } from './utils/batchCancel';
 import { canRevertPriceUpdate, revertBlockedMessage } from './utils/priceImpact';
+import { canRevertPayment, revertPaymentBlockedMessage } from './utils/paymentRevert';
 import {
   addCustomer,
   deleteCustomer,
@@ -24,6 +25,7 @@ import {
   returnBatchOperations,
   cancelDebtTransactionOperations,
   revertDrugPriceOperations,
+  revertPaymentOperations,
   deleteServiceDebtOperations,
   addDebtTransactionOperations,
   applyPaymentOperations
@@ -226,6 +228,26 @@ export default function App() {
     } catch (err) { handleError(err, 'Borç Ekleme'); }
   }, [drugs, currentUser, handleError]);
 
+  /**
+   * Son tahsilatı gerekçeyle geri alır. Guard yazımdan hemen önce tekrar çalışır: modal
+   * açıkken (kullanıcı gerekçe yazarken) başka bir cihazdan işlem inebilir.
+   */
+  const handleRevertPayment = useCallback(async (batch, reason) => {
+    const customer = customers.find(c => c.id === selectedCustomerId);
+    if (!customer || !batch || !reason) return;
+
+    const fresh = canRevertPayment(customer.id, transactions);
+    if (!fresh.ok) {
+      toast.error(revertPaymentBlockedMessage(fresh.reason));
+      return;
+    }
+
+    try {
+      await revertPaymentOperations(customer, fresh.batch.logs, reason, currentUser.uid);
+      toast.success('Tahsilat geri alındı');
+    } catch (err) { handleError(err, 'Tahsilat Geri Alma'); }
+  }, [customers, selectedCustomerId, transactions, currentUser, toast, handleError]);
+
   const applyPayment = useCallback(async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
@@ -249,13 +271,14 @@ export default function App() {
       onToggleLock: toggleDebtLockHandler, onReturnDrug: handleDrugReturn,
       onToggleBatchLock: toggleBatchLockHandler, onReturnBatch: handleBatchReturn,
       onCancelBatch: handleCancelBatch,
+      onRevertPayment: handleRevertPayment,
       onDeleteServiceDebt: deleteServiceDebt,
       onAddDebtTransaction: (payload) => addDebtTransaction(selectedCustomerId, payload),
       onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
     };
   }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
       toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
-      handleCancelBatch, deleteServiceDebt, addDebtTransaction, applyPayment]);
+      handleCancelBatch, handleRevertPayment, deleteServiceDebt, addDebtTransaction, applyPayment]);
 
   if (loading) {
     return (

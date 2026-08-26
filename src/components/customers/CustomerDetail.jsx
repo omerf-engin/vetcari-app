@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban } from 'lucide-react';
+import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Undo2, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import { groupDebtsByBatch } from '../../utils/debtGrouping';
 import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds } from '../../utils/batchCancel';
+import { canRevertPayment, revertPaymentBlockedMessage } from '../../utils/paymentRevert';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
 import DebtModal from '../modals/DebtModal';
 import BatchReturnModal from '../modals/BatchReturnModal';
 import CancelBatchModal from '../modals/CancelBatchModal';
+import RevertPaymentModal from '../modals/RevertPaymentModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
-  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onDeleteServiceDebt, onToggleBatchLock, onReturnBatch, onCancelBatch } = useCustomer();
+  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onDeleteServiceDebt, onToggleBatchLock, onReturnBatch, onCancelBatch, onRevertPayment } = useCustomer();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
@@ -22,6 +24,7 @@ export default function CustomerDetail({ onBack }) {
   const [batchReturnId, setBatchReturnId] = useState(null);
   const [historyBatchId, setHistoryBatchId] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [isRevertPaymentOpen, setRevertPaymentOpen] = useState(false);
 
   const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
 
@@ -62,6 +65,14 @@ export default function CustomerDetail({ onBack }) {
     return debtGroups.find(g => g.batchId === cancelTarget.batchId)
       || { batchId: cancelTarget.batchId, date: cancelTarget.date, items: [], itemCount: 0, total: 0 };
   }, [debtGroups, cancelTarget]);
+
+  // Son tahsilat geri alinabilir mi? `legacy`/`not-latest` durumunda buton hic gosterilmez —
+  // geri alinacak bir sey yokken kalici pasif buton gurultusu olmasin (TASK-032 kurali)
+  const revertPaymentState = useMemo(
+    () => canRevertPayment(customer.id, transactions),
+    [customer.id, transactions]
+  );
+  const showRevertPayment = revertPaymentState.ok || revertPaymentState.reason === 'activity';
 
   // İptal edilebilirlik grup bazinda onceden hesaplanir (guard loglara bakar)
   const cancelStateByBatch = useMemo(() => {
@@ -136,8 +147,12 @@ export default function CustomerDetail({ onBack }) {
         // İşlemin yaşayan bir kalemi varsa onun grubuna katılır: aynı işlem ekstrede iki
         // ayrı başlık altında görünmemeli ve iptal yalnızca kartın butonundan yapılmalı
         const liveGroup = groupByBatchId.get(log.batchId);
+        // Tahsilat/geri alma grupları bir borç işlemi değil; "kapanmış işlem" demek yanıltıcı
+        const isPayment = log.kind === 'payment';
         // Grup başlığı durumu zaten söylüyor; satırda "silinmiş borç" tekrarına gerek yok
-        const sourceLabel = drugName ? `İlaç: ${drugName}` : 'Hizmet';
+        const sourceLabel = drugName
+          ? `İlaç: ${drugName}`
+          : (isPayment ? 'Tahsilat' : 'Hizmet');
 
         if (liveGroup) {
           return {
@@ -156,7 +171,9 @@ export default function CustomerDetail({ onBack }) {
           batchDate,
           sourceLabel,
           groupKey: log.batchId,
-          groupLabel: `${fmtDate(batchDate)} · ${cancelled ? 'iptal edilmiş işlem' : 'kapanmış işlem'}`,
+          groupLabel: isPayment
+            ? `${fmtDate(batchDate)} · tahsilat kaydı`
+            : `${fmtDate(batchDate)} · ${cancelled ? 'iptal edilmiş işlem' : 'kapanmış işlem'}`,
           // Süpürülüp dokümanı kalmamış hatalı giriş: kartı olmadığı için ekstreden iptal edilir
           cancellableBatchId: canCancelOrphanBatch(log.batchId, logs).ok ? log.batchId : undefined
         };
@@ -208,6 +225,19 @@ export default function CustomerDetail({ onBack }) {
           >
             <History className="w-5 h-5" /> Genel ekstre
           </button>
+          {showRevertPayment && (
+            <button
+              type="button"
+              onClick={() => setRevertPaymentOpen(true)}
+              disabled={!revertPaymentState.ok}
+              title={revertPaymentState.ok
+                ? 'Son tahsilatı geri al'
+                : revertPaymentBlockedMessage(revertPaymentState.reason)}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-700 px-4 py-2.5 rounded-xl font-semibold border border-amber-200 flex items-center gap-2 text-sm transition-colors disabled:opacity-40 disabled:text-slate-500 disabled:bg-slate-100 disabled:border-slate-200 disabled:cursor-not-allowed"
+            >
+              <Undo2 className="w-4 h-4" /> Son Tahsilatı Geri Al
+            </button>
+          )}
           <button onClick={() => setPaymentModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 transition-transform transform active:scale-95"><CreditCard className="w-5 h-5" /> Tahsilat Yap</button>
         </div>
       </div>
@@ -442,6 +472,14 @@ export default function CustomerDetail({ onBack }) {
           group={batchReturnGroup}
           onConfirm={onReturnBatch}
           onClose={() => setBatchReturnId(null)}
+        />
+      )}
+
+      {isRevertPaymentOpen && revertPaymentState.ok && (
+        <RevertPaymentModal
+          batch={revertPaymentState.batch}
+          onConfirm={(reason) => onRevertPayment(revertPaymentState.batch, reason)}
+          onClose={() => setRevertPaymentOpen(false)}
         />
       )}
 

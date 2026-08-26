@@ -215,7 +215,11 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] Fiyat guncellemesi: etki onizlemesi + son zammi geri alma (TASK-032, P1)
 - [x] Fiyat dususunde de bilgilendirme — bugune kadar sessizce oluyordu (TASK-032)
 - [x] Test 146 → 193
-- [ ] Tahsilat geri alma: on kosul olarak dagitimin ve on-durumun yapisal saklanmasi (ayri task)
+- [x] Tahsilat geri alma: odeme loglari `before` + `balanceDelta` tasiyor, silinen borc ayni
+      dokuman id'siyle geri geliyor (TASK-034, P1)
+- [x] Avans hareketleri ekstrede gorunuyor + bakiye hatasi duzeltildi (TASK-034)
+- [x] Test 201 → 245
+- [ ] Esszamanlilik: borc dokumanlarinda `rev` + `runTransaction` (TASK-033, P3)
 
 > Ilgili tasklar: TASK-031, TASK-032
 

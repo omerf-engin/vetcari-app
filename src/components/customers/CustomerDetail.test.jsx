@@ -10,6 +10,72 @@ const openDetail = (value) => renderWithCustomer(<CustomerDetail onBack={vi.fn()
 /** Islem karti varsayilan kapali; ozet satirina tiklayarak acilir. */
 const expandCard = () => fireEvent.click(screen.getByRole('button', { name: /kalem/ }));
 
+describe('CustomerDetail — son tahsilati geri al', () => {
+  const payLog = (over = {}) => ({
+    id: 'pl1', kind: 'payment', customerId: 'cust1', debtId: 'dd1', batchId: 'p1',
+    timestamp: 5000, deduct: 200, balanceDelta: 0,
+    before: { customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false },
+    ...over
+  });
+
+  it('geri alinabilir tahsilat yoksa buton gorunmez', () => {
+    openDetail({ drugs: [makeDrug()], drugDebts: [makeDrugDebt()], transactions: [] });
+
+    expect(screen.queryByRole('button', { name: /Son Tahsilatı Geri Al/ })).not.toBeInTheDocument();
+  });
+
+  it('dokunulmamis son tahsilat icin buton aktiftir', () => {
+    openDetail({ drugs: [makeDrug()], drugDebts: [makeDrugDebt()], transactions: [payLog()] });
+
+    expect(screen.getByRole('button', { name: /Son Tahsilatı Geri Al/ })).toBeEnabled();
+  });
+
+  it('tahsilattan sonra baska islem inmisse buton pasiftir', () => {
+    openDetail({
+      drugs: [makeDrug()],
+      drugDebts: [makeDrugDebt()],
+      transactions: [payLog(), { id: 'l2', debtId: 'dd1', kind: 'return', timestamp: 9000 }]
+    });
+
+    expect(screen.getByRole('button', { name: /Son Tahsilatı Geri Al/ })).toBeDisabled();
+  });
+
+  it('borcu kalmamis tahsilat ekstrede "kapanmis islem" degil "tahsilat kaydi" olarak gruplanir', () => {
+    // Tahsilat loglari da batchId tasidigi icin borc silindiginde orphan oluyorlar;
+    // bunlari borc islemi gibi etiketlemek defteri yanlis anlatirdi
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [],
+      transactions: [payLog({ debtId: 'kapanmisBorc' })]
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Genel ekstre/ }));
+
+    expect(screen.getByText(/tahsilat kaydı/)).toBeInTheDocument();
+    expect(screen.queryByText(/kapanmış işlem/)).not.toBeInTheDocument();
+  });
+
+  it('onaylandiginda handler gruba ve gerekceyle cagrilir', () => {
+    const onRevertPayment = vi.fn();
+    openDetail({
+      drugs: [makeDrug()],
+      drugDebts: [makeDrugDebt()],
+      transactions: [payLog()],
+      onRevertPayment
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Son Tahsilatı Geri Al/ }));
+    fireEvent.change(screen.getByLabelText(/Geri Alma Gerekçesi/), { target: { value: 'Hatalı tahsilat' } });
+    fireEvent.click(screen.getByRole('button', { name: /Geri Almayı Onayla/ }));
+
+    expect(onRevertPayment).toHaveBeenCalledTimes(1);
+    const [batch, reason] = onRevertPayment.mock.calls[0];
+    expect(batch.batchId).toBe('p1');
+    expect(reason).toBe('Hatalı tahsilat');
+  });
+});
+
 describe('CustomerDetail — islem karti', () => {
   it('karma grupta hizmet ve ilac kalemleri tek kartta birlikte render edilir', () => {
     openDetail({

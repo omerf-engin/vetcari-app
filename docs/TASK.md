@@ -1240,6 +1240,67 @@ TASK-031 ile ayni deseni paylasiyor: toplu islemi `batchId` ile isaretle, iptal 
 
 ---
 
+## TASK-034: Tahsilat Geri Alma
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-031, TASK-032 |
+
+**Problem:**
+Yanlis girilen bir tahsilatin geri donusu yoktu. `applyPaymentOperations` selaleyle dagitimi
+uygular, borclari dusurur/siler ve bakiyeyi yazar; hicbiri geri alinamiyordu. Kodu okurken uc sey
+cikti:
+
+1. **Tahsilatin tamami avansa gidiyorsa hicbir log yazilmiyordu** — dongu `deduct <= 0` kalemleri
+   atliyor, geriye yalnizca bakiye guncellemesi kaliyordu. Avans girisleri ekstrede **gorunmuyordu**
+2. **Bakiye hatasi:** `currentBalance -= item.deduct` `if (debt)` kontrolunden **onceydi**. Borc
+   bulunamazsa bakiye dusuyor ama borca dokunulmuyordu — para kayboluyordu
+3. Tahsilat borcu 10 TL altina indirdiginde dokuman siliniyor; tam odeme yaygin oldugu icin geri
+   almanin silinen borclari **ayni dokuman id'siyle** yeniden yaratmasi sart
+
+**Sonuc:** Test 201 → 245 · Lint 0 error 0 warning · Build basarili
+
+**Yapilanlar:**
+- **Bakiye hatasi duzeltildi:** dusum yalnizca borc gercekten bulunduysa bakiyeyi etkiliyor
+- Tahsilat loglari yapisal veri tasiyor: cagri basina `batchId`, borc bazinda `deduct`,
+  `qtyDeducted`, `removed` ve **`before`** (borcun odeme oncesi tam anlik goruntusu, `id` haric),
+  grup genelinde `balanceDelta`
+- **Avans gorunurlugu:** `balanceDelta !== 0` ise `Avans Girisi` logu yaziliyor (artida avansa
+  yazildi, eksideyse mevcut avans kullanildi). Borclara tam dagitilan tahsilatlarda ekstre
+  gorunumu degismiyor
+- `revertPaymentOperations`: tek `writeBatch`, her kalem icin **tek kod yolu**
+  (`set(ref, before)`) — silinmis borcu ayni id ile yeniden yaratir, yasayan borcu odeme oncesi
+  haline dondurur. Bakiyeye ters delta uygulanir, her borc icin gerekceli `Tahsilat Iptali` logu
+- `utils/paymentRevert.js`: `latestPaymentBatch`, `canRevertPayment` (fail-closed),
+  `revertPaymentBlockedMessage`. Iptal logu bilincli olarak `balanceDelta` tasimaz — geri almanin
+  geri alinmasi zinciri acilmasin diye
+- `RevertPaymentModal` (gerekce zorunlu) + `CustomerDetail` ust barinda "Son Tahsilatı Geri Al"
+- **Guard sertlestirmesi:** odeme loglari artik `batchId` tasidigi icin `canCancelBatch` ve
+  `canCancelOrphanBatch` giris logunu `kind === 'entry'` ile ariyor; bir odeme grubu iptal
+  edilebilir bir giris grubu sanilamaz (onceden tesaduf eseri engelleniyordu)
+- `decorateLogs`: borcu kalmamis tahsilat gruplari "kapanmis islem" degil **"tahsilat kaydi"**
+  olarak etiketleniyor — tahsilat bir borc islemi degil
+
+**Tarayicida dogrulanan senaryolar** (gecici ZZTEST musterisi, sonunda silindi):
+- 1.000 TL hizmet borcu + **1.300 TL tahsilat** → borc supuruldu (0 TL), 300 TL avansa yazildi ve
+  ekstrede `Avans Girisi` olarak **gorundu** (once tamamen gorunmezdi)
+- Geri al → **silinen borc geri geldi** (1.000 TL), avans 300 → 0, buton kayboldu (`not-latest`)
+- **Kritik:** geri gelen borcun eski loglari hala ona bagli — `HİZMET: MUAYENE` basligi altinda
+  acilis, tahsilat ve iptal loglari birlikte (ayni dokuman id'si korundu)
+- Ekstre etiketi duzeltmesi dogrulandi: `TAHSİLAT KAYDI`
+
+**Kabul edilen sinirlar:**
+- Yalnizca bu degisiklikten sonraki tahsilatlar geri alinabilir (eski loglarda `before` /
+  `balanceDelta` yok); migration yapilmadi
+- Yalnizca **son** tahsilat; zincirleme geri alma yok
+- Tahsilati geri alinmis bir borcun **girisi** yine de iptal edilemez — `canCancelBatch` geri alma
+  logunu aktivite sayar. Net-sifir gecmis yorumlamak fail-closed ilkesine aykiri olurdu
+- Yaris durumu penceresi TASK-033 kapsaminda
+
+---
+
 ## TASK-033: Esszamanlilik — Borc Dokumanlarinda Surum Kontrolu
 
 | Alan | Deger |

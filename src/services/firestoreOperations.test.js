@@ -45,6 +45,7 @@ const {
   returnBatchOperations,
   cancelDebtTransactionOperations,
   revertDrugPriceOperations,
+  revertPaymentOperations,
   deleteServiceDebtOperations,
 } = await import('./firestoreOperations');
 
@@ -976,6 +977,167 @@ describe('log meta alanlari', () => {
     mockBatch.operations.length = 0;
     await toggleBatchLockOperations([debt], 'uid1');
     expect(logOps().every(op => op.data.kind === 'lock')).toBe(true);
+  });
+});
+
+// =============================================
+// TAHSILAT KAYDI VE GERI ALMA — TASK-034
+// =============================================
+
+describe('tahsilat loglari geri alma verisi tasir', () => {
+  const customer = { id: 'cust1', balance: 0 };
+  const drugDebt = { id: 'd1', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false };
+  const svcDebt = { id: 's1', customerId: 'cust1', desc: 'Muayene', amount: 500 };
+
+  const payLogs = () => mockBatch.operations.filter(
+    op => op.type === 'set' && op.data.title === 'Tahsilat'
+  );
+  const balanceUpdate = () => mockBatch.operations.find(
+    op => op.type === 'update' && op.data.balance !== undefined
+  );
+
+  it('tahsilat logu batchId, deduct, before ve balanceDelta tasir', async () => {
+    await applyPaymentOperations(customer, 200, [{ id: 'd1', type: 'drug', deduct: 200 }], [], [drugDebt], 'uid1');
+
+    const log = payLogs()[0];
+    expect(log.data.batchId).toBeTruthy();
+    expect(log.data.kind).toBe('payment');
+    expect(log.data.deduct).toBe(200);
+    expect(log.data.qtyDeducted).toBe(2);
+    expect(log.data.removed).toBe(false);
+    // `before` borcun odeme oncesi tam hali; `id` dokuman yolunda tasindigi icin disarida
+    expect(log.data.before).toEqual({
+      customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false
+    });
+    expect(log.data.balanceDelta).toBe(0);
+  });
+
+  it('supurulup silinen borcta removed true olur', async () => {
+    await applyPaymentOperations(customer, 500, [{ id: 'd1', type: 'drug', deduct: 500 }], [], [drugDebt], 'uid1');
+
+    expect(payLogs()[0].data.removed).toBe(true);
+    expect(payLogs()[0].data.before.qty).toBe(5);
+  });
+
+  it('bulunamayan borc bakiyeyi dusurmez', async () => {
+    // Regresyon: dusum `if (debt)` kontrolunden once bakiyeden cikariliyordu, yani borca
+    // yazilmayan para kayboluyordu
+    await applyPaymentOperations(customer, 300, [{ id: 'yokBoyleBorc', type: 'drug', deduct: 300 }], [], [], 'uid1');
+
+    expect(payLogs()).toHaveLength(0);
+    expect(balanceUpdate().data.balance).toBe(300); // tamami avansa yazilir
+  });
+
+  it('borclara dagitilmayan para icin Avans Girisi logu yazilir', async () => {
+    await applyPaymentOperations(customer, 700, [{ id: 'd1', type: 'drug', deduct: 200 }], [], [drugDebt], 'uid1');
+
+    const avans = mockBatch.operations.find(op => op.type === 'set' && op.data.title === 'Avans Girişi');
+    expect(avans).toBeTruthy();
+    expect(avans.data.balanceDelta).toBe(500);
+    expect(avans.data.message).toMatch(/avansa yazıldı/);
+    expect(balanceUpdate().data.balance).toBe(500);
+  });
+
+  it('para tamamen dagitildiysa Avans Girisi yazilmaz', async () => {
+    await applyPaymentOperations(customer, 200, [{ id: 'd1', type: 'drug', deduct: 200 }], [], [drugDebt], 'uid1');
+
+    expect(mockBatch.operations.some(op => op.data?.title === 'Avans Girişi')).toBe(false);
+  });
+
+  it('mevcut avans kullanildiysa negatif delta ile loglanir', async () => {
+    const withBalance = { id: 'cust1', balance: 1000 };
+    await applyPaymentOperations(withBalance, 0, [{ id: 's1', type: 'service', deduct: 500 }], [svcDebt], [], 'uid1');
+
+    const avans = mockBatch.operations.find(op => op.data?.title === 'Avans Girişi');
+    expect(avans.data.balanceDelta).toBe(-500);
+    expect(avans.data.message).toMatch(/avanstan kullanıldı/);
+    expect(balanceUpdate().data.balance).toBe(500);
+  });
+});
+
+describe('revertPaymentOperations', () => {
+  const customer = { id: 'cust1', balance: 500 };
+
+  const drugLog = (over = {}) => ({
+    debtId: 'd1', drugId: 'drug1', deduct: 200, qtyDeducted: 2, removed: false, balanceDelta: 0,
+    before: { customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false },
+    ...over
+  });
+
+  const sets = () => mockBatch.operations.filter(op => op.type === 'set');
+  const revertLogs = () => sets().filter(op => op.data.title === 'Tahsilat İptali');
+  const balanceUpdate = () => mockBatch.operations.find(
+    op => op.type === 'update' && op.data.balance !== undefined
+  );
+
+  it('silinen borcu ayni doküman id si ile yeniden yaratir', async () => {
+    const ok = await revertPaymentOperations(customer, [drugLog({ removed: true })], 'Yanlış tahsilat', 'uid1');
+
+    expect(ok).toBe(true);
+    const restored = sets().find(op => op.ref.path === 'drugDebts/d1');
+    expect(restored.data).toEqual({
+      customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false
+    });
+  });
+
+  it('yasayan borcu odeme oncesi haline geri yazar', async () => {
+    await revertPaymentOperations(customer, [drugLog()], 'Yanlış tahsilat', 'uid1');
+
+    expect(sets().find(op => op.ref.path === 'drugDebts/d1').data.qty).toBe(5);
+  });
+
+  it('hizmet borcunu dogru koleksiyona yazar', async () => {
+    const svcLog = drugLog({
+      debtId: 's1', drugId: undefined,
+      before: { customerId: 'cust1', desc: 'Muayene', amount: 500 }
+    });
+
+    await revertPaymentOperations(customer, [svcLog], 'Yanlış tahsilat', 'uid1');
+
+    expect(sets().some(op => op.ref.path === 'serviceDebts/s1')).toBe(true);
+  });
+
+  it('bakiyeye ters delta uygular', async () => {
+    await revertPaymentOperations(customer, [drugLog({ balanceDelta: 300 })], 'Yanlış tahsilat', 'uid1');
+
+    expect(balanceUpdate().data.balance).toBe(200); // 500 - 300
+  });
+
+  it('her borc icin gerekceli iptal logu yazar', async () => {
+    await revertPaymentOperations(
+      customer,
+      [drugLog(), drugLog({ debtId: 'd2' })],
+      'Yanlış müşteriye tahsilat',
+      'uid1'
+    );
+
+    const logs = revertLogs();
+    expect(logs).toHaveLength(2);
+    expect(logs[0].data.message).toMatch(/Yanlış müşteriye tahsilat/);
+    expect(logs.every(op => op.data.kind === 'payment')).toBe(true);
+    expect(new Set(logs.map(op => op.data.batchId)).size).toBe(1);
+  });
+
+  it('iptal logu balanceDelta tasimaz — geri almanin geri alinmasi zinciri acilmaz', async () => {
+    await revertPaymentOperations(customer, [drugLog({ balanceDelta: 300 })], 'Hatalı', 'uid1');
+
+    expect(revertLogs().every(op => op.data.balanceDelta === undefined)).toBe(true);
+  });
+
+  it('yalnizca avansa yazilmis tahsilat da geri alinabilir', async () => {
+    const avansOnly = { debtId: 'p1', balanceDelta: 400 };
+    const ok = await revertPaymentOperations(customer, [avansOnly], 'Hatalı', 'uid1');
+
+    expect(ok).toBe(true);
+    expect(balanceUpdate().data.balance).toBe(100); // 500 - 400
+    expect(revertLogs()).toHaveLength(1);
+  });
+
+  it('gerekce yoksa veya geri alinacak sey yoksa islem yapmaz', async () => {
+    expect(await revertPaymentOperations(customer, [drugLog()], '   ', 'uid1')).toBe(false);
+    expect(await revertPaymentOperations(customer, [], 'Hatalı', 'uid1')).toBe(false);
+    expect(await revertPaymentOperations(undefined, [drugLog()], 'Hatalı', 'uid1')).toBe(false);
+    expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 });
 

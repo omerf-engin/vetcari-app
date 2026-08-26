@@ -32,8 +32,10 @@ export const canCancelBatch = (group, transactions) => {
   const logs = transactions || [];
 
   // batchId loglara TASK-031 ile eklendi; oncesinde yazilmis islemlerde giris loglari
-  // ayirt edilemez, bu yuzden iptal kapali kalir
-  const hasEntryLogs = logs.some(t => t.batchId === batchId);
+  // ayirt edilemez, bu yuzden iptal kapali kalir.
+  // `kind === 'entry'` sarti onemli: tahsilat gibi diger islemler de artik `batchId` tasiyor,
+  // bir odeme grubu iptal edilebilir bir giris grubu sanilmamali.
+  const hasEntryLogs = logs.some(t => t.batchId === batchId && t.kind === 'entry');
   if (!hasEntryLogs) return { ok: false, reason: 'legacy' };
 
   // Fail-closed: kind'i taninmayan (veya hic olmayan) bir log da engeller
@@ -59,7 +61,8 @@ export const canCancelOrphanBatch = (batchId, transactions) => {
   if (!batchId) return { ok: false, reason: 'empty' };
 
   const logs = transactions || [];
-  const entryLogs = logs.filter(t => t.batchId === batchId);
+  // Yalnizca giris loglari: odeme/iade gruplari da `batchId` tasidigi icin tur kontrolu sart
+  const entryLogs = logs.filter(t => t.batchId === batchId && t.kind === 'entry');
   if (entryLogs.length === 0) return { ok: false, reason: 'legacy' };
   if (logs.some(t => t.batchId === batchId && t.kind === 'cancel')) return { ok: false, reason: 'cancelled' };
 
