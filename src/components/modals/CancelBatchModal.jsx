@@ -96,9 +96,14 @@ export default function CancelBatchModal({ group, onConfirm, onClose }) {
         </div>
 
         <div className="p-5 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 rounded-b-2xl">
+          {/* Süpürülmüş işlemde silinecek borç yok; "0 ₺" göstermek yanıltıcı olurdu */}
           <div className="text-center sm:text-left">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Silinecek Borç</p>
-            <p className="font-bold text-rose-600 text-2xl">{fmtTL(group.total)}</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              {group.items.length === 0 ? 'Borç Kaydı' : 'Silinecek Borç'}
+            </p>
+            <p className={`font-bold text-2xl ${group.items.length === 0 ? 'text-slate-400' : 'text-rose-600'}`}>
+              {group.items.length === 0 ? 'Yok' : fmtTL(group.total)}
+            </p>
           </div>
           <div className="flex gap-3 w-full sm:w-auto">
             <button onClick={onClose} className="flex-1 sm:flex-none px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-200 transition-colors">Vazgeç</button>

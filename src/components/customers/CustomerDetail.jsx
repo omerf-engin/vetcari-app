@@ -81,15 +81,26 @@ export default function CustomerDetail({ onBack }) {
   // Her log'a kaynak etiketi (ilaç/hizmet adı) ve ait olduğu işlem grubu bilgisi eklenir
   const decorateLogs = useCallback((logs) => {
     const groupByDebtId = new Map();
-    debtGroups.forEach((g) => g.items.forEach((it) => groupByDebtId.set(it.id, g)));
+    const groupByBatchId = new Map();
+    debtGroups.forEach((g) => {
+      groupByBatchId.set(g.batchId, g);
+      g.items.forEach((it) => groupByDebtId.set(it.id, g));
+    });
 
     // Dokümanı kalmamış işlemin tarihi, gruptaki **en eski** log'dan gelir: süpürücü ve
     // iptal logları bugünün tarihini taşır, işlemin kendi tarihini değil
     const batchDates = new Map();
+    // Bir işlemin bazı kalemleri süpürülüp bazıları yazılmış olabilir. O durumda dokümansız
+    // kalemin logları da aynı karta ait olduğu için işlem başlığı kalem adı yerine tarih
+    // bazlı olmalı — aksi halde "İlaç: A" başlığı altında B'nin logları görünürdü.
+    const batchesWithOrphanLogs = new Set();
     logs.forEach((log) => {
-      if (!log.batchId || !log.date) return;
-      const current = batchDates.get(log.batchId);
-      if (!current || log.date < current) batchDates.set(log.batchId, log.date);
+      if (!log.batchId) return;
+      if (log.date) {
+        const current = batchDates.get(log.batchId);
+        if (!current || log.date < current) batchDates.set(log.batchId, log.date);
+      }
+      if (!groupByDebtId.has(log.debtId)) batchesWithOrphanLogs.add(log.batchId);
     });
 
     return logs.map((log) => {
@@ -100,13 +111,14 @@ export default function CustomerDetail({ onBack }) {
         const sourceLabel = item.type === 'service'
           ? `Hizmet: ${item.desc}`
           : `İlaç: ${item.drugName}`;
+        const mixed = group.itemCount > 1 || batchesWithOrphanLogs.has(group.batchId);
         return {
           ...log,
           cancelled,
           sourceLabel,
           groupKey: group.batchId,
           // Tek kalemlik işlemde kalem adı, çok kalemlide işlem başlığı daha okunaklı
-          groupLabel: group.itemCount > 1
+          groupLabel: mixed
             ? `${fmtDate(group.date)} · ${group.itemCount} kalemlik işlem`
             : sourceLabel
         };
@@ -121,13 +133,29 @@ export default function CustomerDetail({ onBack }) {
 
       if (log.batchId) {
         const batchDate = batchDates.get(log.batchId) || log.date;
+        // İşlemin yaşayan bir kalemi varsa onun grubuna katılır: aynı işlem ekstrede iki
+        // ayrı başlık altında görünmemeli ve iptal yalnızca kartın butonundan yapılmalı
+        const liveGroup = groupByBatchId.get(log.batchId);
         // Grup başlığı durumu zaten söylüyor; satırda "silinmiş borç" tekrarına gerek yok
+        const sourceLabel = drugName ? `İlaç: ${drugName}` : 'Hizmet';
+
+        if (liveGroup) {
+          return {
+            ...log,
+            cancelled,
+            batchDate,
+            sourceLabel,
+            groupKey: liveGroup.batchId,
+            groupLabel: `${fmtDate(liveGroup.date)} · ${liveGroup.itemCount} kalemlik işlem`
+          };
+        }
+
         return {
           ...log,
           cancelled,
           batchDate,
-          sourceLabel: drugName ? `İlaç: ${drugName}` : 'Hizmet',
-          groupKey: `batch:${log.batchId}`,
+          sourceLabel,
+          groupKey: log.batchId,
           groupLabel: `${fmtDate(batchDate)} · ${cancelled ? 'iptal edilmiş işlem' : 'kapanmış işlem'}`,
           // Süpürülüp dokümanı kalmamış hatalı giriş: kartı olmadığı için ekstreden iptal edilir
           cancellableBatchId: canCancelOrphanBatch(log.batchId, logs).ok ? log.batchId : undefined

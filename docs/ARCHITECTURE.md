@@ -138,11 +138,13 @@ Bir ilacın fiyatı yükseldiğinde **tüm müşterilerin** açık ve sabitlenme
 
 İptal (`canCancelBatch`) ve zam geri alma (`canRevertPriceUpdate`) guard'ları **istemcideki anlık görüntüye** bakar; `writeBatch` ise ön koşulsuz yazar. Firestore tarafında "guard'ın gördüğü durum hâlâ geçerli mi" kontrolü yoktur.
 
-- **Sonuç:** iki sekme açıksa veya `onSnapshot` gecikirse, guard "temiz" derken araya girmiş bir tahsilattan sonra iptal/geri alma yazılabilir. Tek kullanıcılı bir defterde pratik risk düşüktür
-- **Gerçek çözüm** `runTransaction` ile okuma-yazmayı atomikleştirmek olurdu; mevcut tüm operasyonlar `writeBatch` deseninde olduğu için bu ayrı bir iş olarak duruyor
+- **Buton durumu canlıdır:** guard'lar `useMemo` ile `transactions`'a bağlı, `useFirestore` da `onSnapshot` dinliyor — başka bir cihazda yapılan tahsilat butonu bir round-trip içinde pasifleştirir
+- **Onay anında ikinci kontrol:** modal açıkken (kullanıcı gerekçe yazarken) durum değişebileceği için `handleCancelBatch` / `handleRevertDrugPrice` yazımdan hemen önce guard'ı taze veriyle tekrar çalıştırır ve geçmiyorsa toast ile durur
+- **Kalan pencere:** onay ile commit arasındaki birkaç yüz milisaniye ve çevrimdışı kuyruğa alınmış yazmalar. Kapatmak için borç dokümanlarında sürüm kontrolü gerekir — bkz. TASK-033
+- **Neden `runTransaction` tek başına yetmiyor:** Firestore istemci SDK'sında transaction içinde **sorgu çalıştırılamaz**, yalnızca `transaction.get(docRef)` yapılabilir; "yeni log inmiş mi" sorusu bu yüzden transaction içinde sorulamaz. Doğru yaklaşım borç dokümanına `rev` alanı koyup onu doğrulamaktır
 - Guard'lar bu yüzden **fail-closed** kurulmuştur: tanınmayan bir log iptali engeller, aksi yönde değil
 
-**Kısmen süpürülmüş işlemler:** bir işlemde bazı kalemler süpürülüp (dokümanı yok) bazıları yazıldıysa, genel ekstrede işlem iki başlık altında görünür — yaşayan kalem kendi işlem başlığında, süpürülen kalem `kapanmış işlem` başlığında. İkisinden de yapılan iptal doğru çalışır (`cancelGroup` önce canlı grubu çözer, `CustomerDetail.jsx`), ancak aynı işlem için iki ayrı iptal yolu görünmesi bilinen bir görsel kusurdur.
+**Kısmen süpürülmüş işlemler:** bir işlemde bazı kalemler süpürülüp (dokümanı yok) bazıları yazılmış olabilir. `decorateLogs` bu durumda dokümansız kalemin loglarını da **yaşayan kartın grubuna** katar (anahtar: ortak `batchId`) ve başlığı tarih bazlı işlem başlığına çevirir — aksi halde işlem ekstrede iki ayrı başlık altında görünür, `İlaç: A` başlığı altında B'nin logları çıkardı. Yaşayan grup varken orphan loglara `cancellableBatchId` atanmaz: iptal yalnızca kartın kendi butonundan yapılır, ekstrede ikinci bir yol oluşmaz.
 
 ### Log Tarihi Kuralı (`date` ↔ `timestamp`)
 

@@ -166,6 +166,30 @@ describe('CustomerDetail — islem karti', () => {
     expect(group.items.map(i => i.id)).toEqual(['dd1']);
   });
 
+  it('kismen supurulmus islemin loglari genel ekstrede tek baslik altinda toplanir', () => {
+    // Yasayan ve supurulen kalemin loglari ayni batchId'yi tasidigi icin ayni gruba dusmeli;
+    // aksi halde ayni islem ekstrede iki ayri baslik altinda gorunurdu
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ id: 'dd1', batchId: 'b1' })],
+      transactions: [
+        // Gercek loglar customerId tasir; supurulmus kalemin dokumani olmadigi icin genel
+        // ekstre filtresi (App.jsx) onu yalnizca customerId uzerinden yakalayabiliyor
+        { id: 'l1', customerId: 'cust1', debtId: 'dd1', batchId: 'b1', kind: 'entry', title: 'Borç Açıldı', date: '2026-08-12' },
+        { id: 'l2', customerId: 'cust1', debtId: 'ddSupuruldu', batchId: 'b1', kind: 'entry', title: 'Süpürücü (Silindi)', date: '2026-08-12' }
+      ]
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Genel ekstre/ }));
+
+    expect(screen.getByText(/1 kalemlik işlem/)).toBeInTheDocument();
+    // Ayri bir "kapanmis islem" basligi olusmamali
+    expect(screen.queryByText(/kapanmış işlem/)).not.toBeInTheDocument();
+    // Karti olan islemin iptali yalnizca karttan yapilir; ekstrede ikinci bir yol olmamali
+    expect(screen.queryByRole('button', { name: /^İptal Et$/ })).not.toBeInTheDocument();
+  });
+
   it('ayni tarihli eski kayitlar tek kartta, farkli tarihliler ayri kartlarda toplanir', () => {
     openDetail({
       drugs: [makeDrug()],

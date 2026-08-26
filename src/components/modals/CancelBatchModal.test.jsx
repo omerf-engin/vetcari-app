@@ -59,4 +59,13 @@ describe('CancelBatchModal', () => {
 
     expect(screen.getByText(/iptal edilmiş/)).toBeInTheDocument();
   });
+
+  it('supurulmus islemde "0 ₺" yerine "Yok" gosterir', () => {
+    openModal(makeGroup([], { total: 0 }));
+
+    expect(screen.getByText('Borç Kaydı')).toBeInTheDocument();
+    expect(screen.getByText('Yok')).toBeInTheDocument();
+    expect(screen.queryByText('0 ₺')).not.toBeInTheDocument();
+    expect(screen.getByText(/açık borç kaydı kalmamış/)).toBeInTheDocument();
+  });
 });

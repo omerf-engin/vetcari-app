@@ -9,6 +9,8 @@ import Login from './components/auth/Login';
 import { useFirestore } from './hooks/useFirestore';
 import { useToast } from './hooks/useToast';
 import { CustomerProvider } from './contexts/CustomerContext';
+import { canCancelBatch, cancelBlockedMessage } from './utils/batchCancel';
+import { canRevertPriceUpdate, revertBlockedMessage } from './utils/priceImpact';
 import {
   addCustomer,
   deleteCustomer,
@@ -130,8 +132,16 @@ export default function App() {
     catch (err) { handleError(err, 'Fiyat Güncelleme'); }
   };
 
-  /** Bir ilacın son zammını geri alır; hangi grubun geri alınacağına guard karar verir. */
+  /**
+   * Bir ilacın son zammını geri alır; hangi grubun geri alınacağına guard karar verir.
+   * Modal açıkken araya işlem girebileceği için guard yazımdan hemen önce tekrar çalışır.
+   */
   const handleRevertDrugPrice = async (drugId, priceLogs) => {
+    const fresh = canRevertPriceUpdate(drugId, transactions, drugDebts);
+    if (!fresh.ok) {
+      toast.error(revertBlockedMessage(fresh.reason));
+      return;
+    }
     try {
       await revertDrugPriceOperations(drugId, priceLogs, currentUser.uid);
       toast.success('Zam geri alındı');
@@ -167,15 +177,28 @@ export default function App() {
     catch (err) { handleError(err, 'Toplu İade'); }
   }, [customers, currentUser, toast, handleError]);
 
-  /** Yanlış girilen bir işlemin tüm kalemlerini gerekçeyle iptal eder. */
+  /**
+   * Yanlış girilen bir işlemin tüm kalemlerini gerekçeyle iptal eder.
+   *
+   * Guard yazımdan **hemen önce** tekrar çalıştırılır: modal açıkken (kullanıcı gerekçe
+   * yazarken) başka bir cihazdan tahsilat inebilir. Buton durumu `onSnapshot` ile canlı
+   * güncelleniyor ama modal kendi anlık görüntüsünü tutuyor.
+   */
   const handleCancelBatch = useCallback(async (group, reason) => {
     if (!group?.batchId || !reason) return;
+
+    const fresh = canCancelBatch(group, transactions);
+    if (!fresh.ok) {
+      toast.error(cancelBlockedMessage(fresh.reason));
+      return;
+    }
+
     const customerId = group.items?.[0]?.customerId ?? selectedCustomerId;
     try {
       await cancelDebtTransactionOperations(customerId, group.items, group.batchId, reason, currentUser.uid);
       toast.success('İşlem iptal edildi');
     } catch (err) { handleError(err, 'İşlem İptali'); }
-  }, [selectedCustomerId, currentUser, toast, handleError]);
+  }, [selectedCustomerId, transactions, currentUser, toast, handleError]);
 
   const deleteServiceDebt = useCallback(async (debtId) => {
     const ok = await confirm(

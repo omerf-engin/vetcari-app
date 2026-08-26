@@ -1240,6 +1240,56 @@ TASK-031 ile ayni deseni paylasiyor: toplu islemi `batchId` ile isaretle, iptal 
 
 ---
 
+## TASK-033: Esszamanlilik — Borc Dokumanlarinda Surum Kontrolu
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P3 |
+| **Depends on** | TASK-031, TASK-032 |
+
+**Problem:**
+Iptal (`canCancelBatch`) ve zam geri alma (`canRevertPriceUpdate`) guard'lari istemcideki anlik
+goruntuye bakiyor; `writeBatch` ise on kosulsuz yaziyor. Guard'in gordugu durum ile yazimin
+gerceklestigi an arasinda baska bir cihazdan tahsilat inerse, engellenmesi gereken bir islem
+yazilabilir.
+
+Risk bugun **dusuk**: buton durumu `onSnapshot` ile canli guncelleniyor ve TASK-031/032 gozden
+gecirmesinde onay anina ikinci bir guard kontrolu eklendi (modal acikken degisen durumu yakalar).
+Geriye kalan pencere yalnizca onay ile commit arasindaki birkac yuz milisaniye ve cevrimdisi
+kuyruga alinmis yazmalar.
+
+**Kritik teknik kisit:**
+Firestore **istemci SDK'sinda `runTransaction` icinde sorgu calistirilamaz** — yalnizca
+`transaction.get(docRef)` yapilabilir. Dolayisiyla "bu borca yeni log inmis mi" sorusu transaction
+icinde sorulamaz. Ama sorulmasina gerek de yok: guard'in asil sordugu sey "bu borc dokumani
+degisti mi" ve tahsilat/iade `qty`/`amount` dusuruyor ya da dokumani siliyor. **Doküman duzeyinde
+surum kontrolu yeterli.**
+
+**Deliverables:**
+- `drugDebts` ve `serviceDebts` dokumanlarina `rev` (integer sayac) alani; dokumana dokunan her
+  operasyon (`addDebtTransactionOperations`, `applyPaymentOperations`, `applyReturnToBatch`,
+  `updateDrugPrice`, `revertDrugPriceOperations`, `toggleDebtLock`) artirir
+- Guard'lar gordukleri `rev` degerini tasisin
+- `cancelDebtTransactionOperations` ve `revertDrugPriceOperations` `writeBatch` yerine
+  `runTransaction` kullansin: her borc dokumanini oku, `rev` degismisse veya dokuman silinmisse
+  islemi iptal et ve kullaniciya sebebini soyle
+- Migration yok: `rev` alani olmayan eski dokumanlar `rev ?? 0` ile ele alinir
+
+**Kabul Kriterleri:**
+- Iki sekmede ayni islem acikken birinde tahsilat yapilirsa digerindeki iptal **yazilmaz**,
+  kullaniciya "kayit degisti, tekrar deneyin" bilgisi verilir
+- Mevcut davranis (tek sekme, normal akis) degismez
+- Lint 0/0 · Test gecer · Build basarili
+
+**Notes:**
+Tek kullanicili bir defterde getirisi sinirli oldugu icin P3. `writeBatch` → `runTransaction`
+donusumu ve `rev`'in tum yazma yollarinda tasinmasi mekanik ama genis bir degisiklik; tahsilat
+geri alma taskiyla birlikte ele alinmasi mantikli olabilir (ikisi de yazma yolunu yeniden
+duzenliyor).
+
+---
+
 ## TASK-020: Donemsel Finansal Raporlama (Dashboard Guclendir)
 
 | Alan | Deger |
