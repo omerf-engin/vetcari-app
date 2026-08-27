@@ -22,13 +22,18 @@ const NON_BLOCKING_KINDS = new Set(['lock', 'cancel']);
  * soyler (TASK-035 sonrasi yazilan geri alma loglari tasir); geri alma logunun kendisi de
  * engellemez.
  */
-const isNeutralized = (log, neutralizedBatchIds) =>
-  Boolean(log.revertOf) || (log.batchId && neutralizedBatchIds.has(log.batchId));
+const isNeutralized = (log, neutralized) =>
+  Boolean(log.revertOf) || (log.batchId && neutralized.has(log.batchId));
 
-/** Geri alinmis (etkisiz kalmis) islem gruplarinin kimlikleri. */
-const neutralizedBatches = (logs) => {
+/**
+ * Geri alinmis (etkisiz kalmis) islem gruplarinin kimlikleri.
+ *
+ * Iptal guard'i disinda donemsel raporlama da kullanir (`utils/reporting.js`): geri alinmis
+ * bir tahsilat veya zam donem toplamlarina girmemeli.
+ */
+export const neutralizedBatchIds = (logs) => {
   const set = new Set();
-  for (const log of logs) if (log.revertOf) set.add(log.revertOf);
+  for (const log of logs || []) if (log.revertOf) set.add(log.revertOf);
   return set;
 };
 
@@ -58,7 +63,7 @@ export const canCancelBatch = (group, transactions) => {
 
   // Fail-closed: kind'i taninmayan (veya hic olmayan) bir log da engeller
   const itemIds = new Set(items.map(i => i.id));
-  const neutralized = neutralizedBatches(logs);
+  const neutralized = neutralizedBatchIds(logs);
   const blocked = logs.some(t =>
     itemIds.has(t.debtId) && t.batchId !== batchId
       && !NON_BLOCKING_KINDS.has(t.kind) && !isNeutralized(t, neutralized)
@@ -87,7 +92,7 @@ export const canCancelOrphanBatch = (batchId, transactions) => {
   if (logs.some(t => t.batchId === batchId && t.kind === 'cancel')) return { ok: false, reason: 'cancelled' };
 
   const debtIds = new Set(entryLogs.map(t => t.debtId));
-  const neutralized = neutralizedBatches(logs);
+  const neutralized = neutralizedBatchIds(logs);
   const blocked = logs.some(t =>
     debtIds.has(t.debtId) && t.batchId !== batchId
       && !NON_BLOCKING_KINDS.has(t.kind) && !isNeutralized(t, neutralized)
