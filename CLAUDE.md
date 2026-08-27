@@ -21,7 +21,7 @@ npm run test:watch # Run tests in watch mode
 
 **Stack:** React 19 + Vite 8 + Firebase (Auth + Firestore) + Tailwind CSS 3 + Lucide icons. Deployed on Vercel.
 
-**Routing:** State-based tab navigation in `App.jsx` via `activeTab` state (not a router library). Tabs: `dashboard`, `customers`, `customerDetail`, `drugs`. Unauthenticated users see `Login`.
+**Routing:** State-based tab navigation in `App.jsx` via `activeTab` state (not a router library). Tabs: `dashboard`, `customers`, `customerDetail`, `drugs`, `reports`. Unauthenticated users see `Login`.
 
 **State management:** `App.jsx` holds navigation state. No Redux. Two Context providers:
 - `ToastContext` — UI-layer toast/confirm system (app-wide, wraps entire app). `toast` object and context value are memoized (`useMemo`) for stable references
@@ -54,6 +54,8 @@ Custom hooks:
 - A single line can be cancelled with `cancelDebtItemOperations` (both types, reason required). Unlike transaction-level cancel this has **no guard** — it is the successor of the old "delete the remainder" on service debts and stays meaningful on a partly-paid line (collected money is not refunded; the modal says so). Its cancel log deliberately carries **no `batchId`** so sibling items in the same transaction are unaffected; cancelled state comes from `cancelledDebtIds` (`debtId`) alongside `cancelledBatchIds`
 - Revert logs (payment and price) carry `revertOf` — the batch they neutralised. `canCancelBatch` ignores both the neutralised batch's logs and the revert logs, so a fully reverted payment/hike re-opens the entry's cancel
 - Transaction logs carry `kind` (`entry` | `payment` | `return` | `price` | `lock` | `cancel`) and, on the entry path, the transaction's `batchId`. A whole mis-entered transaction is undone by `cancelDebtTransactionOperations` — debt docs are deleted, logs are **kept** and shown struck-through (cancelled state is derived client-side from the `kind: 'cancel'` log, never written back to old logs). The guard lives in `utils/batchCancel.js` and reads `kind`, never log titles; it is **fail-closed** (an unrecognized log blocks cancellation). Logs sharing the transaction's `batchId` are part of the entry — including the partial payment embedded in a past-dated debt — so they never block cancellation; a later payment/return/price change does
+- Money-moving logs carry `flow` (`debt` | `collect` | `writeoff` | `inflation` | `priceUp` | `return` | `cancel` | `advance`) and `amount` — **always a positive magnitude**, direction comes from `flow`. `kind` alone is not enough: one `kind: 'entry'` covers five different events, and telling them apart by title is forbidden. Revert logs (`Tahsilat İptali`, `Fiyat Güncellemesi İptali`) and `kind: 'lock'` deliberately carry **no** `flow`. Period reporting (`utils/reporting.js`) reads `amount` only — `deduct` stays an internal payment-revert field, `balanceDelta` stays signed and is read only off the `flow: 'advance'` log. Anything without `flow` is counted as `unmeasured` and excluded from every total (fail-closed), so the report is correct only for records written after TASK-020
+- Period totals filter on `log.date` (the event's date), never `timestamp`; bounds inclusive. A cancelled **transaction** is erased from its period entirely (its cancel log too, sharing the same `batchId`); a cancelled **item** stays counted and its cancel is a decrease — item cancel is the "delete the remainder" successor and applies to real, partly-paid debts. Reverted groups (`revertOf` / `neutralizedBatchIds`) are dropped
 - PaymentModal grouping is render-only: the distribution waterfall pays all service debts first and carries rounding remainder in array order, so `distribution`, `extreDDebts` order and `manualOverrides` keys must never be reordered or re-keyed
 
 ## Component layout
@@ -66,6 +68,7 @@ src/
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
 │   ├── drugs/                   # DrugsView (inventory+price), PriceImpactModal (preview/revert)
+│   ├── reports/                 # ReportsView (period picker + financial totals)
 │   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal,
 │   │                            # BatchReturnModal, CancelBatchModal (batch+item), RevertPaymentModal
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
@@ -77,7 +80,8 @@ src/
 ├── test/                        # Vitest helpers: setup.js, firebaseMock.js, renderWithCustomer.jsx
 └── utils/                       # formatters.js (tr-TR number/currency), dates.js (todayLocal),
                                  # debtGrouping.js (groupDebtsByBatch),
-                                 # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards)
+                                 # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards),
+                                 # reporting.js (period aggregation over flow/amount)
 ```
 
 ## Styling conventions

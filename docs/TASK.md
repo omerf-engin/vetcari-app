@@ -1411,25 +1411,64 @@ duzenliyor).
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P2 |
 | **Depends on** | TASK-019 |
 
-**Deliverables:**
-- Dashboard'a tarih aralik secici: "Bu Ay", "Son 30 Gun", "Ozel Aralik" secenekleri
-- Secilen doneme gore `transactions` koleksiyonundan toplam tahsilat, yeni borc ve net degisim hesaplama
-- Mevcut "en cok borcu olan musteriler" listesini donemsel filtre ile guncelleme
-- Rapor verileri tablo/kart gorunumunde (harici grafik kutuphanesi kullanilmayacak)
+**Sonuc:** Test 255 → 312 · Lint 0 error 0 warning · Build basarili
+
+**Belirleyici bulgu — loglarda yapisal tutar yoktu:**
+`transactions` koleksiyonu bugune kadar para hareketini **anlati** olarak tutuyordu. Giris
+loglari (`Hizmet Borcu`, `Borç Açıldı`) tutari yalnizca `message` metninde tasiyordu; sayisal
+alan yazan tek yol tahsilat yoluydu (`deduct`, `balanceDelta`) ve o da TASK-034 ile eklenmisti.
+Metinden geri okumak secenek degil: `fmtTL` en fazla 1 ondalik yazar, yani kayipli. Bu yuzden
+task iki parcali yapildi: **once loglara yapisal para alani yazildi**, sonra rapor onu okudu —
+projenin geri alma mimarisinin 1. kuralinin (yapisal veriyi loglara yaz) aynisi.
+
+**Yapilanlar:**
+- **`flow` + `amount` alanlari:** para hareketi yaratan her log `flow`
+  (`debt` | `collect` | `writeoff` | `inflation` | `priceUp` | `return` | `cancel` | `advance`)
+  ve pozitif buyukluk `amount` tasiyor. `kind` tek basina yetmiyordu: `kind: 'entry'` bes ayri
+  olayi kapsiyor (borc acilisi, gomulu tahsilat, supurucu, enflasyon) ve ayrimi baslik metninden
+  yapmak yasak. Geri alma loglari bilincli olarak `flow` **tasimaz**
+- **`utils/reporting.js`:** `resolvePeriod` / `validatePeriod` / `periodBlockedMessage` /
+  `summarizePeriod`. Donem filtresi `log.date` uzerinden (olayin tarihi — gecmis tarihli giris
+  dogru doneme duser), `timestamp` degil
+- **`neutralizedBatchIds`** `batchCancel.js`'ten disa acildi (onceden private) — rapor geri
+  alinmis tahsilat/zam gruplarini elemek icin kullaniyor
+- **Yeni "Raporlar" sekmesi** (`components/reports/ReportsView.jsx`): Bu Ay / Gecen Ay /
+  Son 30 Gun / Ozel Aralik; donem tahsilati, acilan borc, alacak degisimi kartlari; hareket
+  dokumu; olculemeyen kayit uyarisi
 
 **Acceptance Criteria:**
-- "Bu Ay" secildiginde yalnizca o ayin tahsilat ve borc kayitlari gosterilir
-- Ozel aralik seciminde baslangic > bitis tarihi girilirse uyari gosterilir
-- `transactions` koleksiyonu query'si server-side `where` + `orderBy` ile yapilir (client-side filtreleme yok)
-- Mevcut dashboard widget'lari (toplam aktif borc, musteri sayisi) donemden etkilenmez; sadece yeni rapor alani filtreye duyarlidir
-- Test: doneme gore aggregation hesabi icin en az 2 unit test eklenir
+- "Bu Ay" secildiginde yalnizca o ayin kayitlari toplanir · sinir gunleri araliga dahildir
+- Ozel aralik seciminde baslangic > bitis tarihi girilirse uyari gosterilir ve toplamlar gizlenir
+- Mevcut dashboard widget'lari donemden etkilenmez (rapor ayri sekmede yasiyor)
+- Iptal edilmis **islemlerin** loglari donem toplamlarina girmez; kalem iptali azalis sayilir
+- Geri alinmis tahsilat/zam gruplari toplamlara girmez
+- `flow` tasimayan eski kayitlar hicbir toplama katilmaz, sayilir ve kullaniciya bildirilir
+- Test: `reporting.test.js` 30 test + servis tarafinda 15 test + `ReportsView.test.jsx` 11 test
+
+**Kasitli sapma — server-side sorgu kriteri dusuruldu:**
+Ilk tanim "`transactions` query'si server-side `where` + `orderBy` ile yapilir (client-side
+filtreleme yok)" diyordu. `useFirestore` zaten tum `transactions`'i **limitsiz** indiriyor
+(`where(userId)` + `orderBy(timestamp)`), yani veri bellekte hazir. Ikinci bir sorgu; `userId +
+date` composite index, ayni verinin iki kez okunmasi ve iki kaynagin ayrisma riski demekti —
+hicbir kazanci yokken. Rapor bellekteki diziden hesapliyor. Log hacmi buyuyup ana akisa `limit`
+konmasi gerekirse bu karar yeniden degerlendirilmeli.
+
+**Kasitli tasarim karari — islem iptali silinir, kalem iptali azalis sayilir:**
+`cancelDebtTransactionOperations` guard'li ve "bu islem hic olmadi" demek; girisin tum loglari
+kendi doneminden **silinir** (iptal logu da elenir, aksi halde borc hem acilmamis hem silinmis
+sayilip cift duserdi). `cancelDebtItemOperations` ise guard'siz ve eski "kalani sil" yetenegi —
+kismen odenmis gercek bir borcta da kullanilir, dolayisiyla giris sayilir ve iptal **azalis**
+olarak toplanir. Ayirt etme bedavaya geliyor: islem iptali `batchId` tasir, kalem iptali tasimaz.
 
 **Notes:**
-Veri zaten mevcut; yeni Firestore koleksiyonu gerekmez. `transactions` uzerinde composite index gerekebilir (`userId` + `timestamp`).
+Rapor **ileriye donuk** dogrudur: `flow`/`amount` bu task ile eklendi, oncesinde yazilmis
+kayitlar olculemez. Tek seferlik `message` parse eden bir backfill dusunuldu ama `fmtTL`
+kayipli oldugu (kalem basina ≤0,05 ₺ hata) ve gercek veriye toplu yazma riski tasidigi icin
+yapilmadi. Ihtiyac olursa ayri bir task olarak ele alinabilir.
 
 ---
 

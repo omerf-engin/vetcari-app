@@ -19,6 +19,7 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 - Süpürücü mekanizması (10 TL altı küsüratları otomatik silme)
 - İlaç iade yönetimi (fazla iade → avansa çevirme)
 - Borç bazlı işlem geçmişi (ekstre/timeline)
+- Dönemsel finansal raporlama (tahsilat / açılan borç / alacak değişimi, tarih aralığı seçimli)
 - Geçmiş tarihli borç girişi (özel fiyat, kısmi tahsilat, enflasyon seçeneği)
 - Toplu ilaç borcu ekleme (tek seferde N ilaç, orantılı tahsilat dağıtımı)
 - Çok kullanıcı desteği (her kullanıcı kendi izole veritabanında çalışır)
@@ -28,7 +29,6 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 **TypeScript Migrasyonu (TASK-023):** Incremental geçiş — `allowJs: true` ile başlanır, `strict: true` hedeflenir. Sıra: `src/types/index.ts` → servis → hook → context → component. Detaylar: [TASK.md](./TASK.md#task-023).
 
 **Faz 11:**
-- **Dönemsel finansal raporlama** (TASK-020): Dashboard'da tarih aralığı filtresi ile tahsilat/borç özeti
 - **PDF ve CSV ekstre dışa aktarma** (TASK-021): Müşteriye yazılı hesap özeti üretme (`@react-pdf/renderer` + `Blob`)
 - **İlaç stok takibi** (TASK-022): `drugs` koleksiyonuna `stock`/`minStock` alanı, otomatik düşüm, kritik eşik uyarısı
 
@@ -172,6 +172,38 @@ Bir log'un `date` alanı **anlattığı olayın** tarihidir; `timestamp` ise kay
 | `Enflasyon Güncellemesi` | **Bugün** — yeniden fiyatlama bugün yapılan bir karardır, geçmişte olmuş bir olay değil (TASK-018) |
 | İade / tahsilat yolundaki süpürücüler | **Bugün** — onları tetikleyen olay gerçekten bugün olur |
 
+### Log Şeması: Finansal Alanlar (`flow` ↔ `amount`)
+
+Loglar uzun süre para hareketini yalnızca **anlatı** olarak tuttu: tutar `message` metnindeydi. Sayısal alan yazan tek yol tahsilat yoluydu (`deduct`, `balanceDelta`) ve o da geri alma ihtiyacından doğdu. Dönemsel raporlama (TASK-020) bunu yapısal hale getirdi.
+
+Para hareketi yaratan her log iki alan taşır:
+
+- **`flow`** — hareketin cinsi. `kind` bunun için yetmez: tek başına `kind: 'entry'` beş ayrı olayı kapsar (borç açılışı, gömülü tahsilat, süpürücü, enflasyon), ayrımı başlık metninden yapmak ise yasaktır (başlıklar `getLogSortPriority` tarafından zaten metin olarak eşleşiyor)
+- **`amount`** — **her zaman pozitif büyüklük**; yönü `flow` belirler. Raporun okuduğu tek tutar alanı budur; `deduct` tahsilat geri almaya ait iç alan olarak kalır, `balanceDelta` işaretlidir
+
+| `flow` | Anlam | Loglar |
+|---|---|---|
+| `debt` | Borç açıldı | `Hizmet Borcu`, `Borç Açıldı` ve geçmiş karşılıkları |
+| `collect` | Para tahsil edildi | `Tahsilat`, gömülü `Geçmiş Tahsilat` |
+| `writeoff` | Alacak silindi | `Süpürücü (Silindi)`, `Süpürücü (Kapatıldı)` |
+| `inflation` | Borç enflasyonla arttı | `Enflasyon Güncellemesi` |
+| `priceUp` | Borç zamla arttı | `Fiyat Güncellemesi (Zam)` |
+| `return` | Mal iade edildi | `İade İşlemi`, `Fazla İade (Avans)` (avansa yazılan kısım ayrı `refund` alanında) |
+| `cancel` | Borç iptal edildi | `Hizmet/İlaç Borcu İptali`, `İşlem İptali` |
+| `advance` | Avans hareketi | `Avans Girişi` (tutar işaretli `balanceDelta`'dadır, `amount` yazılmaz) |
+
+**Geri alma logları bilinçli olarak `flow` taşımaz** (`Tahsilat İptali`, `Fiyat Güncellemesi İptali`) — mevcut desenle aynı: geri alma kendini yeni bir hareket saydırmaz, `revertOf` ile hangi grubu etkisiz kıldığını söyler ve rapor o grubu bütünüyle eler. `kind: 'lock'` de finansal etkisi olmadığı için `flow` taşımaz.
+
+### Dönemsel Raporlama
+
+`utils/reporting.js` saf fonksiyonlardan oluşur, Firebase'e dokunmaz. `ReportsView` bunu `useFirestore`'un zaten bellekte tuttuğu `transactions` dizisi üzerinde çalıştırır — ayrı bir sorgu yoktur (bkz. TASK-020'deki gerekçe).
+
+- **Dönem alanı `date`, `timestamp` değil.** `date` olayın tarihidir; geçmiş tarihli bir borç girişi böylece gerçekten ait olduğu döneme düşer. Sınırlar dahildir (`>= start && <= end`), `YYYY-MM-DD` string karşılaştırmasıyla
+- **Eleme sırası:** (1) `revertOf` taşıyan loglar ve `neutralizedBatchIds`'in işaretlediği gruplar, (2) `cancelledBatchIds`'teki iptal edilmiş **işlemlerin** tüm logları, (3) `kind: 'lock'`
+- **İşlem iptali siler, kalem iptali azaltır.** İşlem iptali guard'lı ve "bu hiç olmadı" demek → girişin bütün logları kendi döneminden silinir; iptal logunun kendisi de elenir (aynı `batchId`'yi taşıdığı için), aksi halde borç hem açılmamış hem silinmiş sayılıp iki kez düşerdi. Kalem iptali guard'sızdır ve kısmen ödenmiş gerçek bir borçta da kullanılır → giriş sayılır, iptal **azalış** olarak toplanır. Ayrım bedavaya gelir: işlem iptali `batchId` taşır, kalem iptali taşımaz
+- **Nakit hesabı:** `collected = Σ(collect) + net balanceDelta`. `applyPaymentOperations` içinde `receivedAmount = totalDeducted + balanceDelta` olduğu için bu tam olarak müşteriden alınan parayı verir. `balanceDelta` ödeme grubundaki **her** loga kopyalanır, ama yalnızca `flow: 'advance'` logundan okunur — grup başına bir tane olduğu için ayrıca tekilleştirme gerekmez
+- **Fail-closed:** `flow` taşımayan (ve `lock` olmayan) her log `unmeasured` sayılır, hiçbir toplama katılmaz ve arayüzde uyarı olarak gösterilir. Tanınmayan bir `flow` değeri de aynı kovaya düşer. Rapor bu yüzden **ileriye dönük** doğrudur; TASK-020 öncesi kayıtlar ölçülemez
+
 ### Ekstre Sıralama Kuralı
 
 Ekstre `date` (yeniden eskiye) → `timestamp` (yeniden eskiye) → `getLogSortPriority` sırasıyla dizilir. Öncelik yalnızca aynı milisaniyede yazılmış batch logları için devreye girer; küçük öncelik = üstte = olayın daha sonra gerçekleştiği anlamına gelir.
@@ -272,6 +304,9 @@ vetcari-app/
 │   │   ├── drugs/
 │   │   │   ├── DrugsView.jsx        # İlaç envanter / fiyat
 │   │   │   └── PriceImpactModal.jsx # Fiyat etki önizlemesi (increase/decrease/revert)
+│   │   ├── reports/
+│   │   │   ├── ReportsView.jsx      # Dönemsel rapor (preset/özel aralık, toplamlar)
+│   │   │   └── ReportsView.test.jsx
 │   │   ├── modals/
 │   │   │   ├── DebtModal.jsx        # Borç ekleme (mode='today'/'past', hizmet+ilaç sekmeleri, toplu satır)
 │   │   │   ├── PaymentModal.jsx     # Tahsilat (waterfall)
@@ -316,7 +351,9 @@ vetcari-app/
 │   │   ├── paymentRevert.js         # Tahsilat geri alma guard'ı
 │   │   ├── paymentRevert.test.js
 │   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
-│   │   └── debtGrouping.test.js
+│   │   ├── debtGrouping.test.js
+│   │   ├── reporting.js             # Dönemsel toplama (flow/amount tabanlı, fail-closed)
+│   │   └── reporting.test.js
 │   │
 │   ├── App.jsx                      # activeTab ile sekme yönetimi
 │   ├── main.jsx
@@ -393,6 +430,11 @@ erDiagram
         string title "İşlem başlığı"
         string message "Detay mesajı"
         string type "info | success | warning | danger | neutral"
+        string kind "entry | payment | return | price | lock | cancel — guard'ların okuduğu tür"
+        string flow "debt | collect | writeoff | inflation | priceUp | return | cancel | advance"
+        number amount "Pozitif büyüklük; yönü flow belirler (raporun okuduğu tek tutar alanı)"
+        string batchId "İşlem/ödeme grubu kimliği"
+        string revertOf "Geri alma logunun etkisiz kıldığı batchId"
         string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 ```
