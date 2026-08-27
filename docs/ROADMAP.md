@@ -205,7 +205,7 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10+6: Yanlis Giris Duzeltme — DEVAM EDIYOR
+## Faz 10+6: Yanlis Giris Duzeltme — TAMAMLANDI (TASK-033 disinda)
 
 - [x] Islem bazli iptal: `cancelDebtTransactionOperations`, loglara `batchId` + `kind`, gerekceli
       `Islem Iptali` logu, "sonradan aktivite" guard'i (TASK-031, P1)
@@ -223,7 +223,11 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] Test 245 → 255
 - [ ] Esszamanlilik: borc dokumanlarinda `rev` + `runTransaction` (TASK-033, P3)
 
-> Ilgili tasklar: TASK-031, TASK-032
+> Ilgili tasklar: TASK-031, TASK-032, TASK-033, TASK-034, TASK-035
+>
+> **Ortak desen:** yapisal veriyi loglara yaz (`kind`, `batchId`, `before`, `revertOf`), guard'i
+> `kind` uzerinden **fail-closed** kur, geri alma logu kendini yeni bir geri alinabilir islem
+> saydirmasin, borc dokumani silinse de **loglar kalsin**.
 
 ---
 

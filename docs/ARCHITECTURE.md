@@ -106,7 +106,7 @@ Bir ziyarette girilen hizmet ve ilaç kalemleri **tek atomik yazımda** açılı
 - **Kalem tipi:** Her kalem `type: 'service' | 'drug'` taşır; `hasFixed` / `allFixed` yalnızca ilaç kalemleri üzerinden hesaplanır
 - **Geriye dönük uyumluluk:** `batchId` alanı olmayan eski kayıtlarda "hangi kalem hangi ziyarette açıldı" bilgisi veride yoktur; bu kayıtlar **tarihlerine göre** gruplanır — aynı gün açılmış eski hizmet ve ilaç borçları tek işlem kartında birleşir. Migration gerekmez. Kabul edilen takas: eski dönemde aynı güne denk gelen iki ayrı ziyaret de tek kartta birleşir (yalnızca görsel; veri ve tutarlar değişmez). Tarihi de olmayan kayıtlar tek kalemlik gruba düşer
 - **Sıralama:** Gruplar `date` desc, aynı tarihte `createdAt` desc
-- **Grup operasyonları:** `toggleBatchLockOperations` (hepsi sabitse tümünü serbest bırakır, aksi halde tümünü sabitler; yalnızca durumu değişen kalemlere log yazar) ve `returnBatchOperations` (kalem seçimli toplu iade; avanslar birikimli hesaplanıp tek `customers` update'i yazılır). İkisi de yalnızca ilaç kalemleri için anlamlıdır — hizmet borcu iade edilmez, `deleteServiceDebtOperations` ile iptal edilir
+- **Grup operasyonları:** `toggleBatchLockOperations` (hepsi sabitse tümünü serbest bırakır, aksi halde tümünü sabitler; yalnızca durumu değişen kalemlere log yazar) ve `returnBatchOperations` (kalem seçimli toplu iade; avanslar birikimli hesaplanıp tek `customers` update'i yazılır). İkisi de yalnızca ilaç kalemleri için anlamlıdır — hizmet borcu iade edilmez, `cancelDebtItemOperations` ile iptal edilir
 - **Ortak iade mantığı:** Tekli (`returnDrug`) ve toplu iade aynı `applyReturnToBatch` yardımcısını kullanır — süpürücü ve fazla iade kuralları çatallanmaz
 - **Görünüm:** CustomerDetail'de tek "İşlemler" listesi, katlanabilir kart (varsayılan kapalı), kalem satırı `type`'a göre dallanır; HistoryModal'da `variant='batch'` işlem ekstresi; genel ekstrede işlem başlıkları; PaymentModal'da grup başlıklı dağıtım tablosu
 - **Tahsilat kısıtı:** PaymentModal'daki gruplama yalnızca render katmanındadır. Şelale önce tüm hizmet borçlarını, sonra ilaçları kapatmaya devam eder. Otomatik dağıtım dizi sırasına göre yuvarlama artığı taşıdığı için `distribution` hesabı, `extreDDebts` sırası ve `manualOverrides` anahtarları değiştirilmez; satırlar id üzerinden okunur
@@ -146,7 +146,7 @@ Tahsilat, borçları düşüren/silen ve bakiyeyi değiştiren tek işlemdir; ge
 - **Zincir koruması:** geri alma logu bilinçli olarak `balanceDelta` taşımaz — `latestPaymentBatch` onu aday saymaz ama varlığı `not-latest` sinyali verir
 - **Avans görünürlüğü:** `balanceDelta !== 0` ise `Avans Girişi` logu yazılır. Borçlara dağıtılmayan para eskiden sessizce bakiyeye yazılıyordu, ekstrede hiç görünmüyordu
 - **Bakiye kuralı:** düşüm yalnızca borç gerçekten bulunduysa bakiyeyi etkiler. Önceden bulunamayan borçta da bakiye düşüyordu, yani para kayboluyordu
-- **Etkileşim:** tahsilatı geri alınmış bir borcun **girişi** yine de iptal edilemez; `canCancelBatch` geri alma logunu aktivite sayar (fail-closed)
+- **Etkileşim:** tahsilat tam olarak geri alındığında borç ödeme öncesi haline döndüğü için o girişin iptali **yeniden açılır** — geri alma logundaki `revertOf` sayesinde `canCancelBatch` hem ödeme hem geri alma loglarını yok sayar (TASK-035)
 
 ### Guard'ların Bilinen Sınırları
 
@@ -270,11 +270,15 @@ vetcari-app/
 │   │   │   ├── CustomersView.jsx    # Müşteri listesi + CRUD
 │   │   │   └── CustomerDetail.jsx   # Ekstre; ilaç iadesi (inline modal)
 │   │   ├── drugs/
-│   │   │   └── DrugsView.jsx        # İlaç envanter / fiyat
+│   │   │   ├── DrugsView.jsx        # İlaç envanter / fiyat
+│   │   │   └── PriceImpactModal.jsx # Fiyat etki önizlemesi (increase/decrease/revert)
 │   │   ├── modals/
 │   │   │   ├── DebtModal.jsx        # Borç ekleme (mode='today'/'past', hizmet+ilaç sekmeleri, toplu satır)
 │   │   │   ├── PaymentModal.jsx     # Tahsilat (waterfall)
-│   │   │   └── HistoryModal.jsx     # Borç işlem geçmişi
+│   │   │   ├── HistoryModal.jsx     # Borç işlem geçmişi
+│   │   │   ├── BatchReturnModal.jsx # Kalem seçimli toplu iade
+│   │   │   ├── CancelBatchModal.jsx # İşlem / kalem iptali (gerekçe zorunlu)
+│   │   │   └── RevertPaymentModal.jsx # Son tahsilatı geri alma (gerekçe zorunlu)
 │   │   └── ui/
 │   │       ├── ConfirmModal.jsx
 │   │       ├── Toast.jsx

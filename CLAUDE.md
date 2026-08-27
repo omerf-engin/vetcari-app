@@ -65,8 +65,9 @@ src/
 │   ├── layout/Header.jsx        # Nav header with tab switching
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
-│   ├── drugs/DrugsView          # Drug inventory & price management
-│   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal, BatchReturnModal
+│   ├── drugs/                   # DrugsView (inventory+price), PriceImpactModal (preview/revert)
+│   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal,
+│   │                            # BatchReturnModal, CancelBatchModal (batch+item), RevertPaymentModal
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
 ├── contexts/
 │   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)
@@ -75,7 +76,8 @@ src/
 ├── services/                    # firebase.js (init), firestoreOperations.js (all DB ops)
 ├── test/                        # Vitest helpers: setup.js, firebaseMock.js, renderWithCustomer.jsx
 └── utils/                       # formatters.js (tr-TR number/currency), dates.js (todayLocal),
-                                 # debtGrouping.js (groupDebtsByBatch)
+                                 # debtGrouping.js (groupDebtsByBatch),
+                                 # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards)
 ```
 
 ## Styling conventions

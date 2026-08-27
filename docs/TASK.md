@@ -1295,8 +1295,10 @@ cikti:
 - Yalnizca bu degisiklikten sonraki tahsilatlar geri alinabilir (eski loglarda `before` /
   `balanceDelta` yok); migration yapilmadi
 - Yalnizca **son** tahsilat; zincirleme geri alma yok
-- Tahsilati geri alinmis bir borcun **girisi** yine de iptal edilemez — `canCancelBatch` geri alma
-  logunu aktivite sayar. Net-sifir gecmis yorumlamak fail-closed ilkesine aykiri olurdu
+- ~~Tahsilati geri alinmis bir borcun **girisi** yine de iptal edilemez~~ — **TASK-035 ile
+  degisti.** Bu siniri "net-sifir gecmis yorumlamak fail-closed ilkesine aykiri olur" diye
+  savunmustum; kullanici pratikte yanlis oldugunu bildirdi ve haklıydı. Tam geri alma borcu odeme
+  oncesi haline dondurdugu icin iptal en az odeme oncesindeki kadar guvenli. Cozum `revertOf`
 - Yaris durumu penceresi TASK-033 kapsaminda
 
 ---

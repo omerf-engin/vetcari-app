@@ -38,7 +38,7 @@ export const mockDeleteDoc = vi.fn(() => Promise.resolve());
 // updateDoc mock
 export const mockUpdateDoc = vi.fn(() => Promise.resolve());
 
-/** deleteServiceDebtOperations vb. icin */
+/** getDoc kullanan operasyonlar icin (su an aktif kod yolunda yok, mock hazir dursun) */
 export const mockGetDoc = vi.fn(() =>
   Promise.resolve({
     exists() {
