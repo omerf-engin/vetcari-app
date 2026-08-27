@@ -1415,7 +1415,7 @@ duzenliyor).
 | **Priority** | P2 |
 | **Depends on** | TASK-019 |
 
-**Sonuc:** Test 255 → 318 · Lint 0 error 0 warning · Build basarili
+**Sonuc:** Test 255 → 336 · Lint 0 error 0 warning · Build basarili
 
 **Belirleyici bulgu — loglarda yapisal tutar yoktu:**
 `transactions` koleksiyonu bugune kadar para hareketini **anlati** olarak tutuyordu. Giris
@@ -1449,7 +1449,16 @@ projenin geri alma mimarisinin 1. kuralinin (yapisal veriyi loglara yaz) aynisi.
 - `flow` tasimayan eski kayitlar hicbir toplama katilmaz, sayilir ve kullaniciya bildirilir
 - Alacak degisimi uc durumludur: artis, azalis ve **degisim yok**. Hareket olup net etkisi
   sifir olan donem (acilan borcun ayni donemde iptali) azalis gibi okunmamalidir
-- Test: `reporting.test.js` 35 test + servis tarafinda 15 test + `ReportsView.test.jsx` 12 test
+- Test: `reporting.test.js` 35 + servis tarafinda 15 + `ReportsView.test.jsx` 12 +
+  `reporting.integration.test.js` 18 test
+
+**Yazim yolu ↔ rapor dikisi:**
+`firestoreOperations` `flow` dizgilerini yazar, `reporting` okur; iki taraf da kendi test
+dosyasinda kendi dizge kopyasiyla sinaniyordu — yarim kalmis bir yeniden adlandirma **iki
+paketi de gecerdi**. `reporting.integration.test.js` gercek yazim yolunu calistirip urettigi
+loglari dogrudan `summarizePeriod`'a verir ve `unmeasured === 0` bekler. Mutasyonla
+dogrulandi: yalnizca yazan tarafi (ve kendi testini) yeniden adlandirmak diger iki paketi
+kirmiyor, sadece bu dosyayi kiriyor.
 
 **Kasitli sapma — server-side sorgu kriteri dusuruldu:**
 Ilk tanim "`transactions` query'si server-side `where` + `orderBy` ile yapilir (client-side

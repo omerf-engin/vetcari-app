@@ -203,6 +203,9 @@ Para hareketi yaratan her log iki alan taşır:
 - **İşlem iptali siler, kalem iptali azaltır.** İşlem iptali guard'lı ve "bu hiç olmadı" demek → girişin bütün logları kendi döneminden silinir; iptal logunun kendisi de elenir (aynı `batchId`'yi taşıdığı için), aksi halde borç hem açılmamış hem silinmiş sayılıp iki kez düşerdi. Kalem iptali guard'sızdır ve kısmen ödenmiş gerçek bir borçta da kullanılır → giriş sayılır, iptal **azalış** olarak toplanır. Ayrım bedavaya gelir: işlem iptali `batchId` taşır, kalem iptali taşımaz
 - **Nakit hesabı:** `collected = Σ(collect) + net balanceDelta`. `applyPaymentOperations` içinde `receivedAmount = totalDeducted + balanceDelta` olduğu için bu tam olarak müşteriden alınan parayı verir. `balanceDelta` ödeme grubundaki **her** loga kopyalanır, ama yalnızca `flow: 'advance'` logundan okunur — grup başına bir tane olduğu için ayrıca tekilleştirme gerekmez
 - **Fail-closed:** `flow` taşımayan (ve `lock` olmayan) her log `unmeasured` sayılır, hiçbir toplama katılmaz ve arayüzde uyarı olarak gösterilir. Tanınmayan bir `flow` değeri de aynı kovaya düşer. Rapor bu yüzden **ileriye dönük** doğrudur; TASK-020 öncesi kayıtlar ölçülemez
+- **Alacak değişimi üç durumludur:** artış, azalış ve **değişim yok**. Hareket olup net etkisi sıfır olan bir dönem (açılan borcun aynı dönemde iptal edilmesi) azalış gibi okunmamalıdır
+
+**Yazım yolu ↔ rapor dikişi.** `firestoreOperations` `flow` dizgilerini yazar, `reporting` okur; iki taraf da kendi test dosyasında kendi dizge kopyasıyla sınanır, dolayısıyla yarım kalmış bir yeniden adlandırma **iki paketi de geçerdi**. `utils/reporting.integration.test.js` gerçek yazım yolunu çalıştırıp ürettiği logları doğrudan `summarizePeriod`'a verir ve `unmeasured === 0` bekler — yeni bir hareket türü eklenip raporda karşılığı unutulursa orası kırılır. Yeni bir `flow` değeri eklerken bu dosyaya da bir senaryo eklenmeli.
 
 ### Ekstre Sıralama Kuralı
 
@@ -353,7 +356,8 @@ vetcari-app/
 │   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
 │   │   ├── debtGrouping.test.js
 │   │   ├── reporting.js             # Dönemsel toplama (flow/amount tabanlı, fail-closed)
-│   │   └── reporting.test.js
+│   │   ├── reporting.test.js
+│   │   └── reporting.integration.test.js  # Yazım yolu → rapor dikişi (unmeasured === 0)
 │   │
 │   ├── App.jsx                      # activeTab ile sekme yönetimi
 │   ├── main.jsx
