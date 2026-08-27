@@ -107,6 +107,41 @@ describe('CustomerDetail — islem karti', () => {
     expect(screen.getByRole('button', { name: /Grup Ekstresi/ })).toBeInTheDocument();
   });
 
+  it('ilac kaleminde tek tek iptal secenegi vardir', () => {
+    // Yanlis girilen tek kalem icin Iade yerine Iptal: iade defterde gercek bir iade gibi gorunurdu
+    const onCancelItem = vi.fn();
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ batchId: 'b1' })],
+      onCancelItem
+    });
+    expandCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /^İptal$/ }));
+    fireEvent.change(screen.getByLabelText(/İptal Gerekçesi/), { target: { value: 'Yanlış ilaç' } });
+    fireEvent.click(screen.getByRole('button', { name: /İptali Onayla/ }));
+
+    expect(onCancelItem).toHaveBeenCalledTimes(1);
+    const [item, reason] = onCancelItem.mock.calls[0];
+    expect(item.id).toBe('dd1');
+    expect(reason).toBe('Yanlış ilaç');
+  });
+
+  it('odeme gormus kalemin iptalinde tahsilatin iade edilmeyecegi uyarilir', () => {
+    openDetail({
+      drugs: [makeDrug()],
+      serviceDebts: [],
+      drugDebts: [makeDrugDebt({ batchId: 'b1' })],
+      transactions: [{ id: 'l1', debtId: 'dd1', kind: 'payment', title: 'Tahsilat' }]
+    });
+    expandCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /^İptal$/ }));
+
+    expect(screen.getByText(/tahsil edilen tutar iade edilmez/i)).toBeInTheDocument();
+  });
+
   it('hizmet-only grupta kilit ve iade butonlari yoktur', () => {
     openDetail({
       drugs: [makeDrug()],

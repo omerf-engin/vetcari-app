@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds } from './batchCancel';
+import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds, cancelledDebtIds } from './batchCancel';
 
 const drugItem = (over = {}) => ({
   id: 'dd1', type: 'drug', batchId: 'b1', qty: 2, maxPrice: 100, ...over
@@ -55,6 +55,42 @@ describe('canCancelBatch', () => {
 
     expect(canCancelBatch(g, [log({ id: 'l1' }), log({ id: 'l2', batchId: undefined, kind: 'price' })]))
       .toEqual({ ok: false, reason: 'activity' });
+  });
+
+  it('geri alinmis tahsilat iptali engellemez', () => {
+    // Tam geri alma sonrasi borc odeme oncesi haline dondugu icin girisin iptali yeniden acilir.
+    // `revertOf` hangi grubun etkisiz kaldigini soyler.
+    const g = group([drugItem()]);
+    const logs = [
+      log({ id: 'l1' }),
+      log({ id: 'l2', batchId: 'pay1', kind: 'payment', title: 'Tahsilat' }),
+      log({ id: 'l3', batchId: 'rev1', kind: 'payment', title: 'Tahsilat İptali', revertOf: 'pay1' })
+    ];
+
+    expect(canCancelBatch(g, logs)).toEqual({ ok: true });
+  });
+
+  it('geri alinmis zam da iptali engellemez', () => {
+    const g = group([drugItem()]);
+    const logs = [
+      log({ id: 'l1' }),
+      log({ id: 'l2', batchId: 'zam1', kind: 'price' }),
+      log({ id: 'l3', batchId: 'rev1', kind: 'price', revertOf: 'zam1' })
+    ];
+
+    expect(canCancelBatch(g, logs)).toEqual({ ok: true });
+  });
+
+  it('geri alinmamis tahsilat hala engeller', () => {
+    const g = group([drugItem()]);
+    const logs = [
+      log({ id: 'l1' }),
+      log({ id: 'l2', batchId: 'pay1', kind: 'payment' }),
+      log({ id: 'l3', batchId: 'pay2', kind: 'payment' }),
+      log({ id: 'l4', batchId: 'rev1', kind: 'payment', revertOf: 'pay1' }) // yalnizca pay1 geri alindi
+    ];
+
+    expect(canCancelBatch(g, logs)).toEqual({ ok: false, reason: 'activity' });
   });
 
   it('kilit degisimi iptali engellemez', () => {
@@ -140,6 +176,22 @@ describe('cancelBlockedMessage', () => {
     expect(cancelBlockedMessage('activity')).toMatch(/tahsilat/i);
     expect(cancelBlockedMessage('legacy')).toMatch(/Eski kayıt/);
     expect(cancelBlockedMessage('empty')).toMatch(/iptal edilemiyor/);
+  });
+});
+
+describe('cancelledDebtIds', () => {
+  it('yalnizca kalem iptallerini (batchId siz) toplar', () => {
+    const logs = [
+      log({ id: 'l1', kind: 'cancel', batchId: 'b1', debtId: 'islemIptali' }),
+      log({ id: 'l2', kind: 'cancel', batchId: undefined, debtId: 'dd1' }),
+      log({ id: 'l3', kind: 'entry', batchId: undefined, debtId: 'dd2' })
+    ];
+
+    expect([...cancelledDebtIds(logs)]).toEqual(['dd1']);
+  });
+
+  it('bos girdide bos kume doner', () => {
+    expect(cancelledDebtIds(undefined).size).toBe(0);
   });
 });
 

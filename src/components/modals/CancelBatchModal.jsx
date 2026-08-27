@@ -3,17 +3,20 @@ import { Ban, AlertTriangle } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 
 /**
- * Yanlış girilen bir işlemin tamamını gerekçeyle iptal eder.
+ * Yanlış girilen bir işlemi (veya tek bir kalemi) gerekçeyle iptal eder.
  *
  * Gerekçe zorunludur: bir yıl sonra ekstreye bakan kişi kaydın neden iptal edildiğini
  * görebilmeli. `ToastContext`'teki `confirm(title, message)` metin girişi desteklemediği için
  * paylaşılan onay modalı yerine ayrı bir bileşen kullanılıyor.
  *
- * @param {object} group — `groupDebtsByBatch` çıktısındaki grup
+ * @param {object} group — `groupDebtsByBatch` çıktısındaki grup; `variant='item'` iken tek kalemli
+ * @param {'batch'|'item'} [variant] — işlemin tamamı mı, tek kalem mi
+ * @param {boolean} [hasMoneyHistory] — kaleme tahsilat/iade işlenmişse uyarı gösterilir
  * @param {(reason: string) => void} onConfirm
  */
-export default function CancelBatchModal({ group, onConfirm, onClose }) {
+export default function CancelBatchModal({ group, variant = 'batch', hasMoneyHistory = false, onConfirm, onClose }) {
   const [reason, setReason] = useState('');
+  const isItem = variant === 'item';
 
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -30,9 +33,11 @@ export default function CancelBatchModal({ group, onConfirm, onClose }) {
         <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
           <div>
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Ban className="w-5 h-5 text-rose-600" /> İşlemi İptal Et
+              <Ban className="w-5 h-5 text-rose-600" /> {isItem ? 'Kalemi İptal Et' : 'İşlemi İptal Et'}
             </h2>
-            <p className="text-sm text-slate-500 mt-1">{fmtDate(group.date)} · {group.itemCount} kalemlik işlem</p>
+            <p className="text-sm text-slate-500 mt-1">
+              {fmtDate(group.date)}{isItem ? ' · tek kalem' : ` · ${group.itemCount} kalemlik işlem`}
+            </p>
           </div>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
         </div>
@@ -41,13 +46,27 @@ export default function CancelBatchModal({ group, onConfirm, onClose }) {
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm flex gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-amber-800">
-              Bu işlemin borç kayıtları silinecek. Ekstre satırları <strong>silinmez</strong>,
-              gerekçesiyle birlikte <strong>iptal edilmiş</strong> olarak işaretlenir.
+              {isItem
+                ? <>Yalnızca bu kalemin borç kaydı silinecek; işlemdeki diğer kalemler etkilenmez.</>
+                : <>Bu işlemin borç kayıtları silinecek.</>}
+              {' '}Ekstre satırları <strong>silinmez</strong>, gerekçesiyle birlikte
+              {' '}<strong>iptal edilmiş</strong> olarak işaretlenir.
             </p>
           </div>
 
+          {isItem && hasMoneyHistory && (
+            // Hizmet borcundaki mevcut "kalanı sil" davranışının karşılığı: ödeme görmüş bir
+            // kalem de iptal edilebilir, ama tahsil edilen para iade edilmez
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm text-rose-800">
+              Bu kaleme daha önce <strong>tahsilat veya iade</strong> işlenmiş. İptal yalnızca
+              kalan borcu kapatır; <strong>tahsil edilen tutar iade edilmez</strong>.
+            </div>
+          )}
+
           <div>
-            <p className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">İptal Edilecek Kalemler</p>
+            <p className="text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">
+              {isItem ? 'İptal Edilecek Kalem' : 'İptal Edilecek Kalemler'}
+            </p>
             {group.items.length === 0 && (
               // Kısmi tahsilat sonrası kalan 10 TL altına düştüyse süpürücü borcu hiç yazmaz;
               // geriye yalnızca ekstre satırları kalır

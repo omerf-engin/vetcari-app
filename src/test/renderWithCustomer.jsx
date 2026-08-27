@@ -62,7 +62,7 @@ export function renderWithCustomer(ui, { value = {} } = {}) {
     transactions: [],
     onToggleLock: vi.fn(),
     onReturnDrug: vi.fn(),
-    onDeleteServiceDebt: vi.fn(),
+    onCancelItem: vi.fn(),
     onToggleBatchLock: vi.fn(),
     onReturnBatch: vi.fn(),
     onApplyPayment: vi.fn(),

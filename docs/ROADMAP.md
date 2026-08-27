@@ -219,6 +219,8 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
       dokuman id'siyle geri geliyor (TASK-034, P1)
 - [x] Avans hareketleri ekstrede gorunuyor + bakiye hatasi duzeltildi (TASK-034)
 - [x] Test 201 → 245
+- [x] Geri alma sonrasi iptal aciliyor (`revertOf`) + kalem bazli iptal (TASK-035, P1)
+- [x] Test 245 → 255
 - [ ] Esszamanlilik: borc dokumanlarinda `rev` + `runTransaction` (TASK-033, P3)
 
 > Ilgili tasklar: TASK-031, TASK-032

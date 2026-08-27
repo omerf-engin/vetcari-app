@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Undo2, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import { groupDebtsByBatch } from '../../utils/debtGrouping';
-import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds } from '../../utils/batchCancel';
+import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds, cancelledDebtIds } from '../../utils/batchCancel';
 import { canRevertPayment, revertPaymentBlockedMessage } from '../../utils/paymentRevert';
 import PaymentModal from '../modals/PaymentModal';
 import HistoryModal from '../modals/HistoryModal';
@@ -13,7 +13,7 @@ import RevertPaymentModal from '../modals/RevertPaymentModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
-  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onDeleteServiceDebt, onToggleBatchLock, onReturnBatch, onCancelBatch, onRevertPayment } = useCustomer();
+  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onCancelItem, onToggleBatchLock, onReturnBatch, onCancelBatch, onRevertPayment } = useCustomer();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
@@ -25,6 +25,7 @@ export default function CustomerDetail({ onBack }) {
   const [historyBatchId, setHistoryBatchId] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [isRevertPaymentOpen, setRevertPaymentOpen] = useState(false);
+  const [cancelItem, setCancelItem] = useState(null);
 
   const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
 
@@ -86,8 +87,10 @@ export default function CustomerDetail({ onBack }) {
   const grossDebt = totalServiceDebt + totalDrugDebt;
   const netDebt = Math.max(0, grossDebt - customer.balance);
 
-  // İptal durumu ayrı bir alanda saklanmaz, iptal loglarından türetilir
+  // İptal durumu ayrı bir alanda saklanmaz, iptal loglarından türetilir — işlem bazında
+  // (`batchId`) ve kalem bazında (`debtId`) ayrı ayrı
   const cancelledBatches = useMemo(() => cancelledBatchIds(transactions), [transactions]);
+  const cancelledDebts = useMemo(() => cancelledDebtIds(transactions), [transactions]);
 
   // Her log'a kaynak etiketi (ilaç/hizmet adı) ve ait olduğu işlem grubu bilgisi eklenir
   const decorateLogs = useCallback((logs) => {
@@ -115,7 +118,9 @@ export default function CustomerDetail({ onBack }) {
     });
 
     return logs.map((log) => {
-      const cancelled = Boolean(log.batchId && cancelledBatches.has(log.batchId));
+      const cancelled = Boolean(
+        (log.batchId && cancelledBatches.has(log.batchId)) || cancelledDebts.has(log.debtId)
+      );
       const group = groupByDebtId.get(log.debtId);
       if (group) {
         const item = group.items.find((it) => it.id === log.debtId);
@@ -187,7 +192,7 @@ export default function CustomerDetail({ onBack }) {
         groupLabel: 'Kapalı / silinmiş borçlar'
       };
     });
-  }, [debtGroups, drugs, cancelledBatches]);
+  }, [debtGroups, drugs, cancelledBatches, cancelledDebts]);
 
   const customerAggregateLogs = useMemo(() => {
     const debtIds = new Set([
@@ -366,8 +371,8 @@ export default function CustomerDetail({ onBack }) {
                                     <p className="font-bold text-red-600 text-xl">{fmtTL(d.amount)}</p>
                                   </div>
                                   <button
-                                    onClick={() => onDeleteServiceDebt(d.id)}
-                                    title="Borcu Sil / İptal Et"
+                                    onClick={() => setCancelItem(d)}
+                                    title="Kalemi İptal Et"
                                     className="text-slate-300 hover:text-rose-500 transition-colors bg-white hover:bg-rose-50 p-2 rounded-md border border-transparent hover:border-rose-100 border-l border-l-slate-200 ml-2"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -421,6 +426,15 @@ export default function CustomerDetail({ onBack }) {
                                     >
                                       <Undo className="w-3.5 h-3.5" /> İade
                                     </button>
+                                    {/* Yanlış girilen tek kalem: iade defterde gerçek bir iade
+                                        gibi görünürdü, iptal doğru olanı söyler */}
+                                    <button
+                                      onClick={() => setCancelItem(d)}
+                                      title="Kalemi İptal Et"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                                    >
+                                      <Ban className="w-3.5 h-3.5" /> İptal
+                                    </button>
                                   </div>
                                 </div>
                               </li>
@@ -472,6 +486,27 @@ export default function CustomerDetail({ onBack }) {
           group={batchReturnGroup}
           onConfirm={onReturnBatch}
           onClose={() => setBatchReturnId(null)}
+        />
+      )}
+
+      {cancelItem && (
+        <CancelBatchModal
+          key={cancelItem.id}
+          variant="item"
+          hasMoneyHistory={transactions.some(
+            t => t.debtId === cancelItem.id && (t.kind === 'payment' || t.kind === 'return')
+          )}
+          group={{
+            batchId: cancelItem.id,
+            date: cancelItem.date,
+            items: [cancelItem],
+            itemCount: 1,
+            total: cancelItem.type === 'service'
+              ? (cancelItem.amount || 0)
+              : (cancelItem.tlValue ?? cancelItem.qty * cancelItem.maxPrice)
+          }}
+          onConfirm={(reason) => onCancelItem(cancelItem, reason)}
+          onClose={() => setCancelItem(null)}
         />
       )}
 

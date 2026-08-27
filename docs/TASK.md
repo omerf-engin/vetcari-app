@@ -1301,6 +1301,60 @@ cikti:
 
 ---
 
+## TASK-035: Geri Alma Sonrasi Iptal + Kalem Bazli Iptal
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE |
+| **Priority** | P1 |
+| **Depends on** | TASK-031, TASK-032, TASK-034 |
+
+**Problem (kullanici bildirimi):**
+
+1. **Yanlis tahsilat geri alindiktan sonra "Islemi Iptal Et" acilmiyordu.** TASK-034'te bunu
+   bilincli bir sinir olarak yazmistim ama pratikte yanlis: tam geri alma sonrasi borc odeme
+   oncesi haline donuyor, dolayisiyla iptal en az odeme oncesindeki kadar guvenli.
+   Kok neden: geri alma loglari (`:221`, `:655`) yalnizca kendi `batchId`'lerini tasiyordu,
+   **neyi geri aldiklarini kaydetmiyorlardi**; guard hem odeme hem geri alma logunu "sonradan
+   aktivite" sayiyordu
+2. **Bir islemdeki 3 kalemden yalnizca birini iptal etmenin yolu yoktu.** Bu aslinda bir
+   tutarsizlikti: hizmet kalemi tek tek silinebiliyordu (cop kutusu), ilac kaleminde yalnizca
+   **Iade** vardi — yanlis giris defterde gercek bir iade gibi gorunuyordu
+
+**Sonuc:** Test 245 → 255 · Lint 0 error 0 warning · Build basarili
+
+**Yapilanlar:**
+- **`revertOf` alani:** geri alma loglari (tahsilat ve zam) hangi grubu etkisiz kildiklarini
+  yaziyor. `canCancelBatch` / `canCancelOrphanBatch` artik geri alinmis grubun loglarini **ve**
+  geri alma loglarinin kendisini aktivite saymiyor → tam geri alma sonrasi iptal aciliyor.
+  Ileriye donuk; eski geri almalarda `revertOf` yok, davranis degismiyor
+- **`cancelDebtItemOperations(customerId, item, reason, userId)`:** tek borc kalemini gerekceyle
+  iptal eder (hizmet veya ilac). Iptal logu **`batchId` tasimaz** — ayni islemdeki diger kalemler
+  etkilenmemeli
+- **Kalem bazli iptal isareti:** `cancelledDebtIds` eklendi; `decorateLogs` iptali artik hem
+  `batchId` hem `debtId` uzerinden turetiyor. Onceden tek kalem iptal edilse tum grubun loglari
+  iptal gorunurdu
+- `CancelBatchModal` `variant='item'` modu kazandi; ilac kalemine "Iptal" butonu eklendi, hizmet
+  kaleminin cop kutusu da ayni gerekceli akisa gecti
+- **Olu kod:** `deleteServiceDebtOperations` kaldirildi (yerini `cancelDebtItemOperations` aldi);
+  `getDoc` importu da gereksiz kaldigi icin temizlendi
+
+**Kasitli tasarim karari — kalem iptalinde guard yok:**
+Islem iptalinin aksine kalem iptali serbesttir. Hizmet borcundaki mevcut "kalani sil" yetenegi
+buydu ve odeme gormus bir kalemde de anlamlidir (tahsil edilen para iade edilmez, yalnizca kalan
+borc kapanir). Sert guard koymak bu yetenegi geriletirdi. Modal, kaleme tahsilat/iade islenmisse
+**"tahsil edilen tutar iade edilmez"** uyarisini gosteriyor.
+
+**Tarayicida dogrulanan senaryolar** (gecici ZZTEST musterisi, sonunda silindi):
+- 3 kalemli islem (hizmet + 2 ilac, 22.312 TL) → ARMAPEN kalemi tek basina iptal edildi →
+  **3 kalem → 2 kalem**, 22.312 → 2.312 TL, diger iki kalem etkilenmedi
+- Kalan borca 1.000 TL tahsilat → "Islemi Iptal Et" **pasif** (beklenen)
+- Tahsilat geri alindi → borc 2.312 TL'ye dondu, hizmet kalemi geri geldi ve
+  **"Islemi Iptal Et" aktif oldu** (bildirilen sorun cozuldu)
+- Iptal, temizlik icin de kullanildi; musteri silindi
+
+---
+
 ## TASK-033: Esszamanlilik — Borc Dokumanlarinda Surum Kontrolu
 
 | Alan | Deger |

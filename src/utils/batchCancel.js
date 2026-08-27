@@ -15,6 +15,24 @@
 const NON_BLOCKING_KINDS = new Set(['lock', 'cancel']);
 
 /**
+ * Bir logun "sonradan gelen aktivite" sayilip sayilmayacagi.
+ *
+ * Tamamen geri alinmis bir islem borcu eski haline dondurur; o islem artik borca dokunmuyor
+ * sayilir ve girisin iptali yeniden acilir. `revertOf` alani hangi grubun etkisiz kaldigini
+ * soyler (TASK-035 sonrasi yazilan geri alma loglari tasir); geri alma logunun kendisi de
+ * engellemez.
+ */
+const isNeutralized = (log, neutralizedBatchIds) =>
+  Boolean(log.revertOf) || (log.batchId && neutralizedBatchIds.has(log.batchId));
+
+/** Geri alinmis (etkisiz kalmis) islem gruplarinin kimlikleri. */
+const neutralizedBatches = (logs) => {
+  const set = new Set();
+  for (const log of logs) if (log.revertOf) set.add(log.revertOf);
+  return set;
+};
+
+/**
  * @param {object} group — `groupDebtsByBatch` ciktisindaki bir grup
  * @param {Array<object>} transactions — musteriye ait ekstre loglari
  * @returns {{ok: boolean, reason?: 'empty' | 'legacy' | 'activity'}}
@@ -40,8 +58,10 @@ export const canCancelBatch = (group, transactions) => {
 
   // Fail-closed: kind'i taninmayan (veya hic olmayan) bir log da engeller
   const itemIds = new Set(items.map(i => i.id));
+  const neutralized = neutralizedBatches(logs);
   const blocked = logs.some(t =>
-    itemIds.has(t.debtId) && t.batchId !== batchId && !NON_BLOCKING_KINDS.has(t.kind)
+    itemIds.has(t.debtId) && t.batchId !== batchId
+      && !NON_BLOCKING_KINDS.has(t.kind) && !isNeutralized(t, neutralized)
   );
 
   return blocked ? { ok: false, reason: 'activity' } : { ok: true };
@@ -67,8 +87,10 @@ export const canCancelOrphanBatch = (batchId, transactions) => {
   if (logs.some(t => t.batchId === batchId && t.kind === 'cancel')) return { ok: false, reason: 'cancelled' };
 
   const debtIds = new Set(entryLogs.map(t => t.debtId));
+  const neutralized = neutralizedBatches(logs);
   const blocked = logs.some(t =>
-    debtIds.has(t.debtId) && t.batchId !== batchId && !NON_BLOCKING_KINDS.has(t.kind)
+    debtIds.has(t.debtId) && t.batchId !== batchId
+      && !NON_BLOCKING_KINDS.has(t.kind) && !isNeutralized(t, neutralized)
   );
 
   return blocked ? { ok: false, reason: 'activity' } : { ok: true };
@@ -94,6 +116,21 @@ export const cancelledBatchIds = (transactions) => {
   const set = new Set();
   for (const t of transactions || []) {
     if (t.kind === 'cancel' && t.batchId) set.add(t.batchId);
+  }
+  return set;
+};
+
+/**
+ * Tek tek iptal edilmis borclarin kimlikleri.
+ *
+ * Kalem iptali (`cancelDebtItemOperations`) bilincli olarak `batchId` yazmaz — ayni islemdeki
+ * diger kalemler etkilenmemeli. Bu yuzden iptal isareti `batchId` yaninda `debtId` uzerinden
+ * de turetilir.
+ */
+export const cancelledDebtIds = (transactions) => {
+  const set = new Set();
+  for (const t of transactions || []) {
+    if (t.kind === 'cancel' && !t.batchId && t.debtId) set.add(t.debtId);
   }
   return set;
 };

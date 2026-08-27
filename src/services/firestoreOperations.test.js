@@ -46,7 +46,7 @@ const {
   cancelDebtTransactionOperations,
   revertDrugPriceOperations,
   revertPaymentOperations,
-  deleteServiceDebtOperations,
+  cancelDebtItemOperations,
 } = await import('./firestoreOperations');
 
 // Uygulama ile ayni yerel tarih kaynagi; UTC kullanilirsa gece 00:00-03:00
@@ -120,15 +120,39 @@ describe('Validasyon', () => {
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 
-  it('hizmet borcu silinirken iptal logu yazar', async () => {
-    await deleteServiceDebtOperations('sd1', 'uid1');
-    expect(mockGetDoc).toHaveBeenCalled();
+  it('hizmet kalemi gerekceyle iptal edilir', async () => {
+    const item = { id: 'sd1', type: 'service', desc: 'Muayene', amount: 500 };
+    await cancelDebtItemOperations('cust1', item, 'Yanlış girildi', 'uid1');
+
     expect(mockBatch.commit).toHaveBeenCalled();
-    const sets = mockBatch.operations.filter((op) => op.type === 'set');
-    const cancelLog = sets.find((op) => op.data?.title === 'Hizmet Borcu İptali');
-    expect(cancelLog).toBeDefined();
+    const cancelLog = mockBatch.operations.find((op) => op.data?.title === 'Hizmet Borcu İptali');
     expect(cancelLog.data.userId).toBe('uid1');
-    expect(mockBatch.operations.some((op) => op.type === 'delete')).toBe(true);
+    expect(cancelLog.data.message).toMatch(/Yanlış girildi/);
+    expect(mockBatch.operations.some((op) => op.ref?.path === 'serviceDebts/sd1' && op.type === 'delete')).toBe(true);
+  });
+
+  it('ilac kalemi gerekceyle iptal edilir ve dogru koleksiyondan silinir', async () => {
+    const item = { id: 'dd1', type: 'drug', drugId: 'drug1', drugName: 'Amoksisilin', qty: 2, maxPrice: 100 };
+    await cancelDebtItemOperations('cust1', item, 'Yanlış ilaç', 'uid1');
+
+    const cancelLog = mockBatch.operations.find((op) => op.data?.title === 'İlaç Borcu İptali');
+    expect(cancelLog.data.drugId).toBe('drug1');
+    expect(cancelLog.data.message).toMatch(/Amoksisilin/);
+    expect(mockBatch.operations.some((op) => op.ref?.path === 'drugDebts/dd1' && op.type === 'delete')).toBe(true);
+  });
+
+  it('kalem iptal logu batchId tasimaz — ayni islemdeki diger kalemler etkilenmez', async () => {
+    const item = { id: 'dd1', type: 'drug', drugId: 'drug1', qty: 1, maxPrice: 100, batchId: 'b1' };
+    await cancelDebtItemOperations('cust1', item, 'Hatalı', 'uid1');
+
+    const cancelLog = mockBatch.operations.find((op) => op.data?.kind === 'cancel');
+    expect(cancelLog.data.batchId).toBeUndefined();
+    expect(cancelLog.data.debtId).toBe('dd1');
+  });
+
+  it('gerekce yoksa kalem iptali islem yapmaz', async () => {
+    expect(await cancelDebtItemOperations('cust1', { id: 'dd1', type: 'drug' }, '  ', 'uid1')).toBe(false);
+    expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 
   it('negatif miktarla ilac borcu eklemez', async () => {

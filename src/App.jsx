@@ -26,7 +26,7 @@ import {
   cancelDebtTransactionOperations,
   revertDrugPriceOperations,
   revertPaymentOperations,
-  deleteServiceDebtOperations,
+  cancelDebtItemOperations,
   addDebtTransactionOperations,
   applyPaymentOperations
 } from './services/firestoreOperations';
@@ -202,16 +202,15 @@ export default function App() {
     } catch (err) { handleError(err, 'İşlem İptali'); }
   }, [selectedCustomerId, transactions, currentUser, toast, handleError]);
 
-  const deleteServiceDebt = useCallback(async (debtId) => {
-    const ok = await confirm(
-      "Hizmet Kaydı İptali",
-      "Bu hizmet kaydını iptal etmek istediğinize emin misiniz? Ödenmiş kısımlar iade edilmez, sadece kalan tutar silinir."
-    );
-    if (ok) {
-      try { await deleteServiceDebtOperations(debtId, currentUser.uid); }
-      catch (err) { handleError(err, 'Hizmet Borcu Silme'); }
-    }
-  }, [confirm, currentUser, handleError]);
+  /** Tek bir borç kalemini (hizmet veya ilaç) gerekçeyle iptal eder. */
+  const handleCancelItem = useCallback(async (item, reason) => {
+    if (!item || !reason) return;
+    const customerId = item.customerId ?? selectedCustomerId;
+    try {
+      await cancelDebtItemOperations(customerId, item, reason, currentUser.uid);
+      toast.success('Kalem iptal edildi');
+    } catch (err) { handleError(err, 'Kalem İptali'); }
+  }, [selectedCustomerId, currentUser, toast, handleError]);
 
   /** Bir ziyarette girilen hizmet ve ilaç kalemlerini tek atomik işlem olarak yazar. */
   const addDebtTransaction = useCallback(async (customerId, payload) => {
@@ -272,13 +271,13 @@ export default function App() {
       onToggleBatchLock: toggleBatchLockHandler, onReturnBatch: handleBatchReturn,
       onCancelBatch: handleCancelBatch,
       onRevertPayment: handleRevertPayment,
-      onDeleteServiceDebt: deleteServiceDebt,
+      onCancelItem: handleCancelItem,
       onAddDebtTransaction: (payload) => addDebtTransaction(selectedCustomerId, payload),
       onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
     };
   }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
       toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
-      handleCancelBatch, handleRevertPayment, deleteServiceDebt, addDebtTransaction, applyPayment]);
+      handleCancelBatch, handleRevertPayment, handleCancelItem, addDebtTransaction, applyPayment]);
 
   if (loading) {
     return (

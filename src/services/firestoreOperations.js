@@ -6,7 +6,6 @@ import {
   deleteDoc,
   writeBatch,
   getDocs,
-  getDoc,
   query,
   where
 } from 'firebase/firestore';
@@ -196,6 +195,7 @@ export const revertDrugPriceOperations = async (drugId, priceLogs, userId) => {
 
   const batch = writeBatch(db);
   const revertBatchId = doc(collection(db, 'transactions')).id;
+  const revertOf = logs.find(l => l.batchId)?.batchId;
   const drugPriceBefore = logs.find(l => l.drugPriceBefore != null)?.drugPriceBefore;
 
   if (drugPriceBefore != null) {
@@ -218,7 +218,9 @@ export const revertDrugPriceOperations = async (drugId, priceLogs, userId) => {
       // `maxPriceBefore` bilinçli olarak yazılmıyor: iptal logu yeni bir "geri alınabilir zam"
       // sayılmamalı, aksi halde geri almanın geri alınması zinciri açılırdı. Guard bu logu
       // yalnızca "daha yeni bir fiyat işlemi var" (not-latest) sinyali olarak görür.
-      { kind: 'price', batchId: revertBatchId }
+      // `revertOf` hangi grubun etkisiz kaldığını söyler: tam geri alma sonrası borç zam
+      // öncesi haline döndüğü için o giriş yeniden iptal edilebilir olmalı.
+      { kind: 'price', batchId: revertBatchId, revertOf }
     ));
   }
 
@@ -358,31 +360,48 @@ export const returnBatchOperations = async (items, customerBalance, userId) => {
   await batch.commit();
 };
 
-export const deleteServiceDebtOperations = async (debtId, userId) => {
-  const debtRef = doc(db, 'serviceDebts', debtId);
-  const snap = await getDoc(debtRef);
+/**
+ * **Tek bir borç kalemini** gerekçeyle iptal eder (hizmet veya ilaç).
+ *
+ * İşlem iptalinin (`cancelDebtTransactionOperations`) aksine burada guard yoktur: bu, hizmet
+ * borcunda bugüne kadar var olan "kalanı sil" yeteneğinin karşılığıdır ve ödeme görmüş bir
+ * kalemde de anlamlıdır (tahsil edilen para iade edilmez, yalnızca kalan borç kapanır). Modal
+ * bu durumu kullanıcıya açıkça söyler.
+ *
+ * İptal logu **`batchId` taşımaz**: yalnızca bu kalemin logları iptal işaretlenmeli, aynı
+ * işlemdeki diğer kalemler etkilenmemelidir (iptal durumu `debtId` üzerinden türetilir).
+ *
+ * @param {object} item — `groupDebtsByBatch` grubundaki kalem (`type`, `id`, tutar alanları)
+ * @param {string} reason — kullanıcının yazdığı gerekçe (zorunlu)
+ */
+export const cancelDebtItemOperations = async (customerId, item, reason, userId) => {
+  const trimmedReason = (reason || '').trim();
+  if (!item?.id || !trimmedReason) return false;
+
+  const isService = item.type === 'service';
   const batch = writeBatch(db);
-  if (snap.exists()) {
-    const d = snap.data();
-    const logRef = doc(collection(db, 'transactions'));
-    const cid = d.customerId;
-    batch.set(
-      logRef,
-      createLog(
-        debtId,
-        'Hizmet Borcu İptali',
-        `${d.desc || 'Hizmet'} — ${fmtTL(Number(d.amount) || 0)} borç kaydı silindi.`,
-        'warning',
-        cid,
-        undefined,
-        userId,
-        undefined,
-        { kind: 'cancel' }
-      )
-    );
-  }
-  batch.delete(debtRef);
+
+  batch.delete(doc(db, isService ? 'serviceDebts' : 'drugDebts', item.id));
+
+  const label = isService
+    ? `${item.desc || 'Hizmet'} — ${fmtTL(Number(item.amount) || 0)}`
+    : `${item.drugName || 'İlaç'} — ${fmtQty(item.qty)} adet (${fmtTL(item.tlValue ?? item.qty * item.maxPrice)})`;
+
+  const logRef = doc(collection(db, 'transactions'));
+  batch.set(logRef, createLog(
+    item.id,
+    isService ? 'Hizmet Borcu İptali' : 'İlaç Borcu İptali',
+    `${label} borç kaydı hatalı giriş olarak iptal edildi. Gerekçe: ${trimmedReason}`,
+    'warning',
+    customerId,
+    isService ? undefined : item.drugId,
+    userId,
+    undefined,
+    { kind: 'cancel' }
+  ));
+
   await batch.commit();
+  return true;
 };
 
 /**
@@ -630,6 +649,7 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, use
 
   const batch = writeBatch(db);
   const revertBatchId = doc(collection(db, 'transactions')).id;
+  const revertOf = (paymentLogs || []).find(l => l?.batchId)?.batchId;
 
   logs.forEach((log) => {
     const isService = log.before.desc !== undefined;
@@ -652,7 +672,7 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, use
       undefined,
       // `balanceDelta` bilinçli olarak yazılmıyor: iptal logu yeni bir "geri alınabilir tahsilat"
       // sayılmamalı. Guard onu yalnızca `not-latest` sinyali olarak görür.
-      { kind: 'payment', batchId: revertBatchId }
+      { kind: 'payment', batchId: revertBatchId, revertOf }
     ));
   });
 
@@ -669,7 +689,7 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, use
       undefined,
       userId,
       undefined,
-      { kind: 'payment', batchId: revertBatchId }
+      { kind: 'payment', batchId: revertBatchId, revertOf }
     ));
   }
 
