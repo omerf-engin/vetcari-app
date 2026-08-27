@@ -4,6 +4,7 @@ import DashboardView from './components/dashboard/DashboardView';
 import CustomersView from './components/customers/CustomersView';
 import CustomerDetail from './components/customers/CustomerDetail';
 import DrugsView from './components/drugs/DrugsView';
+import ReportsView from './components/reports/ReportsView';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/auth/Login';
 import { useFirestore } from './hooks/useFirestore';
@@ -340,6 +341,10 @@ export default function App() {
             onAddDrug={handleAddDrug}
             onDeleteDrug={handleDeleteDrug}
           />
+        )}
+
+        {activeTab === 'reports' && (
+          <ReportsView transactions={transactions} />
         )}
 
         {activeTab === 'customerDetail' && selectedCustomerId && customerProviderValue && (

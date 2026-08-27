@@ -1,5 +1,5 @@
 import React from 'react';
-import { Stethoscope, LayoutDashboard, Users, Pill, LogOut } from 'lucide-react';
+import { Stethoscope, LayoutDashboard, Users, Pill, BarChart3, LogOut } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 
@@ -30,7 +30,13 @@ export default function Header({ activeTab, onNavigate }) {
           >
             <Pill className="w-4 h-4" /> İlaçlar & Fiyatlar
           </button>
-          
+          <button
+            onClick={() => onNavigate('reports')}
+            className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center gap-2 ${activeTab === 'reports' ? 'bg-indigo-600 shadow-sm' : 'hover:bg-indigo-600/50 text-indigo-100'}`}
+          >
+            <BarChart3 className="w-4 h-4" /> Raporlar
+          </button>
+
           <button
             onClick={() => signOut(auth)}
             title="Sistemden Çıkış Yap"
