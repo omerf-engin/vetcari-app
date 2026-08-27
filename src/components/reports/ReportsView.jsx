@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart3, TrendingDown, TrendingUp, Wallet, AlertTriangle, CheckCircle2, CalendarRange } from 'lucide-react';
+import { BarChart3, TrendingDown, TrendingUp, Minus, Wallet, AlertTriangle, CheckCircle2, CalendarRange } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 import { todayLocal } from '../../utils/dates';
 import {
@@ -31,7 +31,21 @@ export default function ReportsView({ transactions }) {
   );
 
   const isEmpty = summary && summary.movementCount === 0 && summary.unmeasured === 0;
-  const receivableUp = summary ? summary.receivableChange > 0 : false;
+
+  // Üç durum: sıfır değişim "azaldı" sayılmamalı — hareket olup net etkisi olmayan bir dönem
+  // (ör. açılan borcun aynı dönemde iptal edilmesi) yanlış yönde okunurdu.
+  const change = summary?.receivableChange ?? 0;
+  const receivable = change > 0
+    ? { tone: 'rose', sign: '+', icon: <TrendingUp className="w-6 h-6" />, note: 'Toplam alacak bu dönemde arttı' }
+    : change < 0
+      ? { tone: 'emerald', sign: '', icon: <TrendingDown className="w-6 h-6" />, note: 'Toplam alacak bu dönemde azaldı' }
+      : { tone: 'slate', sign: '', icon: <Minus className="w-6 h-6" />, note: 'Toplam alacak bu dönemde değişmedi' };
+
+  const RECEIVABLE_TONE = {
+    rose: { border: 'border-l-rose-500', text: 'text-rose-600', badge: 'bg-rose-50 text-rose-600' },
+    emerald: { border: 'border-l-emerald-500', text: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-600' },
+    slate: { border: 'border-l-slate-400', text: 'text-slate-600', badge: 'bg-slate-100 text-slate-500' }
+  }[receivable.tone];
 
   return (
     <div className="space-y-6">
@@ -143,21 +157,17 @@ export default function ReportsView({ transactions }) {
                   <p className="text-xs text-slate-400 mt-4 font-medium">Dönemde girilen hizmet ve ilaç borcu</p>
                 </div>
 
-                <div className={`bg-white rounded-xl p-6 shadow-sm border border-slate-200 border-l-4 hover:shadow-md transition-shadow ${receivableUp ? 'border-l-rose-500' : 'border-l-emerald-500'}`}>
+                <div className={`bg-white rounded-xl p-6 shadow-sm border border-slate-200 border-l-4 hover:shadow-md transition-shadow ${RECEIVABLE_TONE.border}`}>
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Alacak Değişimi</p>
-                      <h3 className={`text-3xl font-bold mt-2 ${receivableUp ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {receivableUp ? '+' : ''}{fmtTL(summary.receivableChange)}
+                      <h3 className={`text-3xl font-bold mt-2 ${RECEIVABLE_TONE.text}`}>
+                        {receivable.sign}{fmtTL(summary.receivableChange)}
                       </h3>
                     </div>
-                    <div className={`p-3 rounded-lg ${receivableUp ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {receivableUp ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                    </div>
+                    <div className={`p-3 rounded-lg ${RECEIVABLE_TONE.badge}`}>{receivable.icon}</div>
                   </div>
-                  <p className="text-xs text-slate-400 mt-4 font-medium">
-                    {receivableUp ? 'Toplam alacak bu dönemde arttı' : 'Toplam alacak bu dönemde azaldı'}
-                  </p>
+                  <p className="text-xs text-slate-400 mt-4 font-medium">{receivable.note}</p>
                 </div>
               </div>
 

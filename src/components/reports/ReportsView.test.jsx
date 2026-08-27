@@ -80,6 +80,19 @@ describe('ReportsView — toplamlar', () => {
     expect(screen.getByText(/Toplam alacak bu dönemde azaldı/)).toBeInTheDocument();
   });
 
+  it('net etkisi sifir olan donem "azaldi" gostermez', () => {
+    // Acilan borc ayni donemde kalem olarak iptal edilmis: hareket var, net etki yok.
+    // Iki durumlu bir kontrol bunu yanlislikla "azaldi" tarafina dusururdu.
+    openReports([
+      log({ id: 'a', flow: 'debt', amount: 2000, batchId: 'b1' }),
+      log({ id: 'c', kind: 'cancel', flow: 'cancel', amount: 2000, debtId: 'd1' })
+    ]);
+
+    expect(screen.getByText(/Toplam alacak bu dönemde değişmedi/)).toBeInTheDocument();
+    expect(screen.queryByText(/azaldı/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/arttı/)).not.toBeInTheDocument();
+  });
+
   it('hareket dokumu satirlari gosterilir', () => {
     openReports([log({ flow: 'inflation', amount: 75 })]);
 

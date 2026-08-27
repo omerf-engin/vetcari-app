@@ -44,6 +44,32 @@ describe('resolvePeriod', () => {
       .toEqual({ start: '2026-08-01', end: '2026-08-30' });
   });
 
+  it('son 30 gun ay sinirini gecer', () => {
+    expect(resolvePeriod('last30', null, null, '2026-08-15'))
+      .toEqual({ start: '2026-07-17', end: '2026-08-15' });
+  });
+
+  it('son 30 gun yil sinirini gecer', () => {
+    expect(resolvePeriod('last30', null, null, '2026-01-10'))
+      .toEqual({ start: '2025-12-12', end: '2026-01-10' });
+  });
+
+  it('gecen ay 31 gunluk aydan 30 gunluk aya dogru hesaplanir', () => {
+    // Ay uzunlugu farkinin klasik tuzagi: 31 Mayis'tan geriye giderken Nisan 30 cekmeli
+    expect(resolvePeriod('lastMonth', null, null, '2026-05-31'))
+      .toEqual({ start: '2026-04-01', end: '2026-04-30' });
+  });
+
+  it('gecen ay artik yilda subatin 29 gununu bulur', () => {
+    expect(resolvePeriod('lastMonth', null, null, '2028-03-10'))
+      .toEqual({ start: '2028-02-01', end: '2028-02-29' });
+  });
+
+  it('bu ay ayin ilk gununde de dogru calisir', () => {
+    expect(resolvePeriod('thisMonth', null, null, '2026-08-01'))
+      .toEqual({ start: '2026-08-01', end: '2026-08-01' });
+  });
+
   it('ozel aralik verilen tarihleri aynen dondurur', () => {
     expect(resolvePeriod('custom', '2026-01-05', '2026-02-09', '2026-08-27'))
       .toEqual({ start: '2026-01-05', end: '2026-02-09' });
