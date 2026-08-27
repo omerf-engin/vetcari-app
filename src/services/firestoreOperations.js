@@ -46,6 +46,22 @@ const commitDeletesInBatches = async (refs) => {
  *
  * `meta.batchId` ise logu açıldığı işleme bağlar: aynı `batchId`'yi taşıyan loglar girişin
  * parçasıdır (gömülü geçmiş tahsilat, süpürücü, enflasyon dahil), sonraki aktivite değildir.
+ *
+ * `meta.flow` + `meta.amount` para hareketini **ölçülebilir** kılar (dönemsel raporlama).
+ * `kind` bunun için yetmez: tek başına `kind: 'entry'` beş ayrı olayı kapsar (borç açılışı,
+ * gömülü tahsilat, süpürücü, enflasyon). Ayrımı başlıktan yapmak yasak — başlıklar zaten
+ * `HistoryModal`'da metin olarak eşleşiyor. `flow` bu ayrımı yapısal hale getirir:
+ *
+ *   `debt`      borç açıldı            `collect`   para tahsil edildi
+ *   `writeoff`  alacak silindi         `inflation` borç enflasyonla arttı
+ *   `priceUp`   borç zamla arttı       `return`    mal iade edildi
+ *   `cancel`    borç iptal edildi      `advance`   avans hareketi (`balanceDelta`)
+ *
+ * `amount` **her zaman pozitif büyüklüktür**; yönü `flow` belirler. Raporun okuduğu tek tutar
+ * alanı budur — `deduct` tahsilat geri almaya ait iç alan olarak kalır, `balanceDelta` işaretli.
+ * Geri alma logları (`Tahsilat İptali`, `Fiyat Güncellemesi İptali`) bilinçli olarak `flow`
+ * taşımaz: kendilerini yeni bir hareket saydırmazlar, `revertOf` ile hangi grubu etkisiz
+ * kıldıklarını söylerler ve rapor o grubu bütünüyle eler.
  */
 const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, userId, dateOverride, meta = {}) => {
   const o = {
@@ -168,6 +184,8 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId
       undefined,
       {
         kind: 'price',
+        flow: 'priceUp',
+        amount: Math.round(diffTl * 100) / 100,
         batchId: priceBatchId,
         maxPriceBefore: debt.maxPrice,
         maxPriceAfter: newPrice,
@@ -267,12 +285,14 @@ const applyReturnToBatch = (batch, debt, returnQty, userId) => {
       batch.delete(doc(db, 'drugDebts', debt.id));
     }
 
+    const returnedTl = Math.round(returnQty * debt.maxPrice * 100) / 100;
+
     const logRef1 = doc(collection(db, 'transactions'));
-    batch.set(logRef1, createLog(debt.id, 'İade İşlemi', `${fmtQty(returnQty)} adet iade edildi. Kalan yeni borç: ${fmtQty(finalQty)} adet (${fmtTL(remainingTl)}).`, 'info', debt.customerId, debt.drugId, userId, undefined, { kind: 'return' }));
+    batch.set(logRef1, createLog(debt.id, 'İade İşlemi', `${fmtQty(returnQty)} adet iade edildi. Kalan yeni borç: ${fmtQty(finalQty)} adet (${fmtTL(remainingTl)}).`, 'info', debt.customerId, debt.drugId, userId, undefined, { kind: 'return', flow: 'return', amount: returnedTl }));
 
     if (isSwept) {
       const logRef2 = doc(collection(db, 'transactions'));
-      batch.set(logRef2, createLog(debt.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için sistem borcu sıfırladı.`, 'success', debt.customerId, debt.drugId, userId, undefined, { kind: 'return' }));
+      batch.set(logRef2, createLog(debt.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainingTl)}) olduğu için sistem borcu sıfırladı.`, 'success', debt.customerId, debt.drugId, userId, undefined, { kind: 'return', flow: 'writeoff', amount: Math.round(remainingTl * 100) / 100 }));
     }
 
     return 0;
@@ -283,8 +303,12 @@ const applyReturnToBatch = (batch, debt, returnQty, userId) => {
 
   batch.delete(doc(db, 'drugDebts', debt.id));
 
+  // `amount` yalnızca borca sayılan kısımdır; avansa yazılan fazlalık `refund` alanında durur,
+  // aksi halde rapor iadeyi olduğundan büyük bir alacak azalması sayardı.
+  const closedTl = Math.round(debt.qty * debt.maxPrice * 100) / 100;
+
   const logRef = doc(collection(db, 'transactions'));
-  batch.set(logRef, createLog(debt.id, 'Fazla İade (Avans)', `Tüm borç kapatıldı. Artan ${fmtQty(excessQty)} adet karşılığı ${fmtTL(refundTl)} avans yazıldı.`, 'success', debt.customerId, debt.drugId, userId, undefined, { kind: 'return' }));
+  batch.set(logRef, createLog(debt.id, 'Fazla İade (Avans)', `Tüm borç kapatıldı. Artan ${fmtQty(excessQty)} adet karşılığı ${fmtTL(refundTl)} avans yazıldı.`, 'success', debt.customerId, debt.drugId, userId, undefined, { kind: 'return', flow: 'return', amount: closedTl, refund: refundTl }));
 
   return refundTl;
 };
@@ -383,9 +407,13 @@ export const cancelDebtItemOperations = async (customerId, item, reason, userId)
 
   batch.delete(doc(db, isService ? 'serviceDebts' : 'drugDebts', item.id));
 
+  const cancelledTl = Math.round((isService
+    ? (Number(item.amount) || 0)
+    : (item.tlValue ?? item.qty * item.maxPrice)) * 100) / 100;
+
   const label = isService
-    ? `${item.desc || 'Hizmet'} — ${fmtTL(Number(item.amount) || 0)}`
-    : `${item.drugName || 'İlaç'} — ${fmtQty(item.qty)} adet (${fmtTL(item.tlValue ?? item.qty * item.maxPrice)})`;
+    ? `${item.desc || 'Hizmet'} — ${fmtTL(cancelledTl)}`
+    : `${item.drugName || 'İlaç'} — ${fmtQty(item.qty)} adet (${fmtTL(cancelledTl)})`;
 
   const logRef = doc(collection(db, 'transactions'));
   batch.set(logRef, createLog(
@@ -397,7 +425,7 @@ export const cancelDebtItemOperations = async (customerId, item, reason, userId)
     isService ? undefined : item.drugId,
     userId,
     undefined,
-    { kind: 'cancel' }
+    { kind: 'cancel', flow: 'cancel', amount: cancelledTl }
   ));
 
   await batch.commit();
@@ -450,7 +478,7 @@ export const cancelDebtTransactionOperations = async (customerId, items, batchId
     undefined,
     userId,
     undefined,
-    { kind: 'cancel', batchId }
+    { kind: 'cancel', flow: 'cancel', amount: total, batchId }
   ));
 
   await batch.commit();
@@ -474,20 +502,20 @@ const appendServiceDebtToBatch = (batch, ctx) => {
   let isSwept = false;
 
   const logRef1 = doc(collection(db, 'transactions'));
-  batch.set(logRef1, createLog(debtRef.id, isToday ? 'Hizmet Borcu' : 'Geçmiş Hizmet Borcu', `${trimmed} — ${fmtTL(amount)} tutarında hizmet borcu eklendi.`, 'info', customerId, undefined, userId, isToday ? undefined : date, { kind: 'entry', batchId }));
+  batch.set(logRef1, createLog(debtRef.id, isToday ? 'Hizmet Borcu' : 'Geçmiş Hizmet Borcu', `${trimmed} — ${fmtTL(amount)} tutarında hizmet borcu eklendi.`, 'info', customerId, undefined, userId, isToday ? undefined : date, { kind: 'entry', flow: 'debt', amount, batchId }));
 
   if (paidAmount > 0) {
     finalAmount = Math.round((amount - paidAmount) * 100) / 100;
     if (finalAmount < 0) finalAmount = 0;
     const logRef2 = doc(collection(db, 'transactions'));
-    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. Kalan borç: ${fmtTL(finalAmount)}.`, 'success', customerId, undefined, userId, paidDate, { kind: 'entry', batchId }));
+    batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(paidAmount)} tahsilat düşüldü. Kalan borç: ${fmtTL(finalAmount)}.`, 'success', customerId, undefined, userId, paidDate, { kind: 'entry', flow: 'collect', amount: paidAmount, batchId }));
 
     if (finalAmount <= 10) {
       isSwept = true;
       const logRef3 = doc(collection(db, 'transactions'));
       // Süpürücü bu dalda yalnızca gömülü tahsilatın sonucu olarak tetiklenir; anlattığı olay
       // o tahsilatla aynı gün gerçekleşmiştir. `timestamp` gerçek giriş anını tutmaya devam eder.
-      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId, paidDate || (isToday ? undefined : date), { kind: 'entry', batchId }));
+      batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(finalAmount)}) olduğu için borç sıfırlandı.`, 'success', customerId, undefined, userId, paidDate || (isToday ? undefined : date), { kind: 'entry', flow: 'writeoff', amount: finalAmount, batchId }));
     }
   }
 
@@ -525,7 +553,7 @@ const appendDrugItemsToBatch = (batch, ctx) => {
     let isSwept = false;
 
     const logRef1 = doc(collection(db, 'transactions'));
-    batch.set(logRef1, createLog(debtRef.id, isToday ? 'Borç Açıldı' : 'Geçmiş İlaç Borcu', `${fmtQty(item.qty)} adet × ${fmtTL(item.unitPrice)} = ${fmtTL(itemTotal)} borç eklendi.`, 'info', customerId, item.drug.id, userId, isToday ? undefined : date, { kind: 'entry', batchId }));
+    batch.set(logRef1, createLog(debtRef.id, isToday ? 'Borç Açıldı' : 'Geçmiş İlaç Borcu', `${fmtQty(item.qty)} adet × ${fmtTL(item.unitPrice)} = ${fmtTL(itemTotal)} borç eklendi.`, 'info', customerId, item.drug.id, userId, isToday ? undefined : date, { kind: 'entry', flow: 'debt', amount: itemTotal, batchId }));
 
     if (paidRemaining > 0 && grandTotal > 0) {
       const isLast = i === valid.length - 1;
@@ -540,13 +568,13 @@ const appendDrugItemsToBatch = (batch, ctx) => {
         paidRemaining = Math.round((paidRemaining - actualShare) * 100) / 100;
 
         const logRef2 = doc(collection(db, 'transactions'));
-        batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(actualShare)} tahsilat düşüldü. ${fmtQty(qtyDeducted)} adet düşüldü. Kalan: ${fmtQty(finalQty)} adet (${fmtTL(remainTl)}).`, 'success', customerId, item.drug.id, userId, paidDate, { kind: 'entry', batchId }));
+        batch.set(logRef2, createLog(debtRef.id, 'Geçmiş Tahsilat', `${fmtTL(actualShare)} tahsilat düşüldü. ${fmtQty(qtyDeducted)} adet düşüldü. Kalan: ${fmtQty(finalQty)} adet (${fmtTL(remainTl)}).`, 'success', customerId, item.drug.id, userId, paidDate, { kind: 'entry', flow: 'collect', amount: actualShare, batchId }));
 
         if (remainTl <= 10) {
           isSwept = true;
           const logRef3 = doc(collection(db, 'transactions'));
           // Bkz. hizmet dalındaki not: süpürücünün tarihi onu tetikleyen tahsilatın tarihidir
-          batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, item.drug.id, userId, paidDate || (isToday ? undefined : date), { kind: 'entry', batchId }));
+          batch.set(logRef3, createLog(debtRef.id, 'Süpürücü (Silindi)', `Kalan tutar 10 TL'nin altında (${fmtTL(remainTl)}) olduğu için borç sıfırlandı.`, 'success', customerId, item.drug.id, userId, paidDate || (isToday ? undefined : date), { kind: 'entry', flow: 'writeoff', amount: remainTl, batchId }));
         }
       }
     }
@@ -556,7 +584,7 @@ const appendDrugItemsToBatch = (batch, ctx) => {
       const oldRemaining = Math.round(finalQty * item.unitPrice * 100) / 100;
       const newRemaining = Math.round(finalQty * item.drug.price * 100) / 100;
       const logRef4 = doc(collection(db, 'transactions'));
-      batch.set(logRef4, createLog(debtRef.id, 'Enflasyon Güncellemesi', `Birim fiyat ${fmtTL(item.unitPrice)} → ${fmtTL(item.drug.price)} olarak güncellendi. Kalan borç ${fmtTL(oldRemaining)} → ${fmtTL(newRemaining)}.`, 'warning', customerId, item.drug.id, userId, undefined, { kind: 'entry', batchId }));
+      batch.set(logRef4, createLog(debtRef.id, 'Enflasyon Güncellemesi', `Birim fiyat ${fmtTL(item.unitPrice)} → ${fmtTL(item.drug.price)} olarak güncellendi. Kalan borç ${fmtTL(oldRemaining)} → ${fmtTL(newRemaining)}.`, 'warning', customerId, item.drug.id, userId, undefined, { kind: 'entry', flow: 'inflation', amount: Math.round((newRemaining - oldRemaining) * 100) / 100, batchId }));
     }
 
     if (!isSwept) {
@@ -755,13 +783,14 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
       batch.set(logRef1, createLog(item.id, 'Tahsilat',
         `${fmtTL(item.deduct)} ödendi. Kalan borç: ${fmtTL(newAmount)}.`,
         'success', customer.id, undefined, userId, undefined,
-        { ...meta, deduct: item.deduct, removed, before }));
+        { ...meta, flow: 'collect', amount: item.deduct, deduct: item.deduct, removed, before }));
 
       if (removed && newAmount > 0) {
         const logRef2 = doc(collection(db, 'transactions'));
         batch.set(logRef2, createLog(item.id, 'Süpürücü (Kapatıldı)',
           `Kalan mikro küsurat 10 TL altında olduğu için silindi.`,
-          'success', customer.id, undefined, userId, undefined, meta));
+          'success', customer.id, undefined, userId, undefined,
+          { ...meta, flow: 'writeoff', amount: newAmount }));
       }
     } else {
       const qtyToDeduct = Math.round((item.deduct / debt.maxPrice) * 100) / 100;
@@ -771,12 +800,12 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
 
       const logRef1 = doc(collection(db, 'transactions'));
       batch.set(logRef1, createLog(item.id, 'Tahsilat', `${fmtTL(item.deduct)} ödendi. ${fmtQty(qtyToDeduct)} adet borçtan düşüldü. Kalan yeni borç: ${fmtQty(newQty)} adet (${fmtTL(remainingTl)}).`, 'success', customer.id, debt.drugId, userId, undefined,
-        { ...meta, deduct: item.deduct, qtyDeducted: qtyToDeduct, removed, before }));
+        { ...meta, flow: 'collect', amount: item.deduct, deduct: item.deduct, qtyDeducted: qtyToDeduct, removed, before }));
 
       if (removed) {
         if (remainingTl > 0) {
           const logRef2 = doc(collection(db, 'transactions'));
-          batch.set(logRef2, createLog(item.id, 'Süpürücü (Kapatıldı)', `Kalan mikro küsurat 10 TL altında olduğu için silindi.`, 'success', customer.id, debt.drugId, userId, undefined, meta));
+          batch.set(logRef2, createLog(item.id, 'Süpürücü (Kapatıldı)', `Kalan mikro küsurat 10 TL altında olduğu için silindi.`, 'success', customer.id, debt.drugId, userId, undefined, { ...meta, flow: 'writeoff', amount: remainingTl }));
         }
         batch.delete(doc(db, 'drugDebts', item.id));
       } else {
@@ -793,7 +822,10 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
       balanceDelta > 0
         ? `${fmtTL(balanceDelta)} borçlara dağıtılmadı, avansa yazıldı.`
         : `${fmtTL(Math.abs(balanceDelta))} mevcut avanstan kullanıldı.`,
-      'success', customer.id, undefined, userId, undefined, meta));
+      'success', customer.id, undefined, userId, undefined,
+      // Tutar `balanceDelta`'da ve işaretlidir; `amount` yazılmaz ki avans hareketi
+      // pozitif büyüklük olarak ikinci kez toplanmasın.
+      { ...meta, flow: 'advance' }));
   }
 
   batch.update(doc(db, 'customers', customer.id), {

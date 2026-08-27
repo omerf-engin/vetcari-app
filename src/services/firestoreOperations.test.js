@@ -1354,3 +1354,143 @@ describe('cancelDebtTransactionOperations', () => {
     expect(mockBatch.commit).not.toHaveBeenCalled();
   });
 });
+
+// =============================================
+// PARA HAREKETI ALANLARI (flow + amount) — TASK-020
+// =============================================
+
+describe('log para hareketi alanlari (flow + amount)', () => {
+  const logs = () => mockBatch.operations.filter(op => op.type === 'set' && op.data.title !== undefined);
+  const byTitle = (title) => logs().find(op => op.data.title === title)?.data;
+  const allByTitle = (title) => logs().filter(op => op.data.title === title).map(op => op.data);
+
+  it('hizmet borcu acilisi brut tutari tasir', async () => {
+    await addService('Muayene', 750);
+    expect(byTitle('Hizmet Borcu')).toMatchObject({ flow: 'debt', amount: 750 });
+  });
+
+  it('ilac borcu acilisi kalem toplamini tasir', async () => {
+    await addDrugs([item({ id: 'drug1', price: 200 }, 3, 150)]);
+    expect(byTitle('Borç Açıldı')).toMatchObject({ flow: 'debt', amount: 450 });
+  });
+
+  it('gomulu gecmis tahsilat collect olarak tahsil edilen tutari tasir', async () => {
+    await addService('Muayene', 1000, '2026-01-20', { paidAmount: 400, paidDate: '2026-01-21' });
+
+    expect(byTitle('Geçmiş Hizmet Borcu')).toMatchObject({ flow: 'debt', amount: 1000 });
+    expect(byTitle('Geçmiş Tahsilat')).toMatchObject({ flow: 'collect', amount: 400 });
+  });
+
+  it('supurucu silinen kalani writeoff olarak tasir', async () => {
+    // 1000 borc, 995 tahsilat -> kalan 5, supurulur
+    await addService('Muayene', 1000, '2026-01-20', { paidAmount: 995, paidDate: '2026-01-21' });
+    expect(byTitle('Süpürücü (Silindi)')).toMatchObject({ flow: 'writeoff', amount: 5 });
+  });
+
+  it('enflasyon logu borc artisini tasir', async () => {
+    // 5 adet, 100'den girilmis, guncel fiyat 120 -> kalan borc 500 -> 600
+    await addDrugs([item({ id: 'drug1', price: 120 }, 5, 100)], '2026-01-20', { applyInflation: true });
+    expect(byTitle('Enflasyon Güncellemesi')).toMatchObject({ flow: 'inflation', amount: 100 });
+  });
+
+  it('tahsilat logu deduct ile ayni tutari amount olarak da tasir', async () => {
+    const customer = { id: 'cust1', balance: 0 };
+    await applyPaymentOperations(
+      customer, 300,
+      [{ id: 's1', type: 'service', deduct: 300 }],
+      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], 'uid1'
+    );
+
+    expect(byTitle('Tahsilat')).toMatchObject({ flow: 'collect', amount: 300, deduct: 300 });
+  });
+
+  it('avans girisi amount tasimaz, tutar isaretli balanceDelta da durur', async () => {
+    const customer = { id: 'cust1', balance: 0 };
+    await applyPaymentOperations(
+      customer, 500,
+      [{ id: 's1', type: 'service', deduct: 200 }],
+      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], 'uid1'
+    );
+
+    const advance = byTitle('Avans Girişi');
+    expect(advance).toMatchObject({ flow: 'advance', balanceDelta: 300 });
+    // `amount` pozitif buyukluktur; avans isaretli oldugu icin ikinci kez toplanmamali
+    expect(advance.amount).toBeUndefined();
+  });
+
+  it('tahsilat yolundaki supurucu de writeoff tasir', async () => {
+    const customer = { id: 'cust1', balance: 0 };
+    await applyPaymentOperations(
+      customer, 994,
+      [{ id: 's1', type: 'service', deduct: 994 }],
+      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], 'uid1'
+    );
+
+    expect(byTitle('Süpürücü (Kapatıldı)')).toMatchObject({ flow: 'writeoff', amount: 6 });
+  });
+
+  it('iade logu iade edilen tutari tasir', async () => {
+    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, 4, 0, 'uid1');
+    expect(byTitle('İade İşlemi')).toMatchObject({ flow: 'return', amount: 200 });
+  });
+
+  it('fazla iadede amount yalnizca borca sayilan kisim, fazlasi refund alaninda', async () => {
+    // 5 adetlik borc, 8 adet iade -> 250 borc kapanir, 150 avansa yazilir
+    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 50 }, 8, 0, 'uid1');
+    expect(byTitle('Fazla İade (Avans)')).toMatchObject({ flow: 'return', amount: 250, refund: 150 });
+  });
+
+  it('zam logu borc artisini tasir', async () => {
+    await updateDrugPrice('drug1', 120, [
+      { id: 'dd1', drugId: 'drug1', customerId: 'cust1', qty: 5, maxPrice: 100, isFixed: false }
+    ], 'uid1', 100);
+
+    expect(byTitle('Fiyat Güncellemesi (Zam)')).toMatchObject({ flow: 'priceUp', amount: 100 });
+  });
+
+  it('kalem iptali iptal edilen tutari tasir', async () => {
+    await cancelDebtItemOperations('cust1', { id: 'dd1', type: 'drug', qty: 4, maxPrice: 25, drugId: 'drug1' }, 'Hatalı', 'uid1');
+    expect(byTitle('İlaç Borcu İptali')).toMatchObject({ flow: 'cancel', amount: 100 });
+  });
+
+  it('islem iptali toplam tutari tasir', async () => {
+    await cancelDebtTransactionOperations('cust1', [
+      { id: 's1', type: 'service', amount: 500 },
+      { id: 'd1', type: 'drug', qty: 2, maxPrice: 75 }
+    ], 'b1', 'Hatalı giriş', 'uid1');
+
+    expect(byTitle('İşlem İptali')).toMatchObject({ flow: 'cancel', amount: 650, batchId: 'b1' });
+  });
+
+  it('geri alma loglari flow tasimaz — kendilerini yeni bir hareket saydirmazlar', async () => {
+    await revertPaymentOperations(
+      { id: 'cust1', balance: 500 },
+      [{ debtId: 's1', batchId: 'pb1', deduct: 300, balanceDelta: 100, before: { customerId: 'cust1', desc: 'Muayene', amount: 1000 } }],
+      'Yanlış tahsilat', 'uid1'
+    );
+
+    const reverts = allByTitle('Tahsilat İptali');
+    expect(reverts.length).toBeGreaterThan(0);
+    expect(reverts.every(l => l.flow === undefined)).toBe(true);
+    expect(reverts.every(l => l.revertOf === 'pb1')).toBe(true);
+  });
+
+  it('zam geri alma logu da flow tasimaz', async () => {
+    await revertDrugPriceOperations('drug1', [
+      { debtId: 'dd1', batchId: 'zb1', customerId: 'cust1', maxPriceBefore: 100, maxPriceAfter: 120, drugPriceBefore: 100 }
+    ], 'uid1');
+
+    const revert = byTitle('Fiyat Güncellemesi İptali');
+    expect(revert.flow).toBeUndefined();
+    expect(revert.revertOf).toBe('zb1');
+  });
+
+  it('kilit loglari para hareketi degildir, flow tasimaz', async () => {
+    await toggleBatchLockOperations([
+      { id: 'dd1', customerId: 'cust1', drugId: 'drug1', isFixed: false }
+    ], 'uid1');
+
+    expect(byTitle('Fiyat Sabitlendi').flow).toBeUndefined();
+  });
+});
+
