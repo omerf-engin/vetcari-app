@@ -1425,10 +1425,19 @@ TASK-034'ten once yazildigi icin). Hepsi borc dokumanina yaziyor, hepsi damgaliy
 **modal'in tasidigi bayat `priceLogs`**'u geciyordu. `handleRevertPayment` bunu dogru yapiyordu.
 Artik `fresh.batch.logs` kullaniliyor; `DrugsView` de gereksiz log argumanini gecmiyor.
 
+**Tarayici dogrulamasinda yakalanan regresyon (duzeltildi):**
+Ilk uygulamada `revertPaymentOperations` supurulmus borcun **yoklugunu** dogrulamak icin
+dokumani okuyordu. Var olmayan bir dokumani okumak `permission-denied` veriyor —
+guvenlik kurali `resource.data`ya dokundugu surece `exists() === false` donmuyor. Sonuc: tam
+tahsilatin geri alinmasi (en sik senaryo) tumuyle kirildi. Birim testler bunu yakalayamazdi,
+mock guvenlik kurallarini modellemiyor. Duzeltme: `removed` kalemler **okunmuyor**; aradan islem
+gecmesi zaten `canRevertPayment` guard'inda yakalaniyor.
+
 **Notes:**
-⚠️ `firestore.rules` degisikligi **Firebase Console'dan yayinlanmali** — repo'daki dosya tek
-basina yeterli degil. Yayindan once `rev` uyusmazligi dali calisir, "borc silinmis" dali
-permission-denied alir.
+`firestore.rules`'daki `resource == null` dali bir **iyilestirme**, zorunluluk degil: baska bir
+cihazin sildigi bir borcu okurken teknik `permission-denied` yerine duzgun "kayit degisti"
+mesaji verilmesini saglar. Yayinlanmasi icin Firebase Console veya
+`firebase deploy --only firestore:rules` gerekir; yayinlanmasa da kod dogru calisir.
 
 Test notu: "ayni damga" testleri ilk halinde tesadufen geciyordu — `Date.now()` siki donguda
 ayni milisaniyeyi donduruyor, dolayisiyla dokuman basina damgalama hatasi gizleniyordu.

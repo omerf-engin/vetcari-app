@@ -804,19 +804,16 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, use
     { kind: 'payment', batchId: revertBatchId, revertOf }
   );
 
-  return runGuarded(async (tx) => {
-    const snaps = await Promise.all(entries.map(e => tx.get(e.ref)));
+  // Süpürülmüş borçlar (`removed`) **okunmaz**: tahsilat onları silmişti, yani dokümanın
+  // yok olması beklenir. Var olmayan bir dokümanı okumak, güvenlik kuralı `resource.data`ya
+  // dokunduğu sürece `permission-denied` verir — `exists() === false` değil. Bu, geri almanın
+  // en sık senaryosunu (tam tahsilatın geri alınması) tümüyle kırıyordu. Aradan işlem geçmiş
+  // olması durumu zaten `canRevertPayment` guard'ında yakalanıyor.
+  const toVerify = entries.filter(e => !e.log.removed);
 
-    snaps.forEach((snap, i) => {
-      const { log } = entries[i];
-      // Tazelik ölçütü logun kendisinden gelir: tahsilat bu borcu süpürdüyse (`removed`)
-      // dokümanın **yok olması** beklenir — şimdi varsa biri onu yeniden yaratmış demektir.
-      if (log.removed) {
-        if (snap.exists()) throw new StaleWriteError();
-        return;
-      }
-      assertUnchanged(snap, expectedRevs[log.debtId]);
-    });
+  return runGuarded(async (tx) => {
+    const snaps = await Promise.all(toVerify.map(e => tx.get(e.ref)));
+    snaps.forEach((snap, i) => assertUnchanged(snap, expectedRevs[toVerify[i].log.debtId]));
 
     entries.forEach(({ log, ref, logRef, entry }) => {
       // `before` `rev` taşımaz (bkz. `snapshotOf`); geri yüklenen borç taze damga alır

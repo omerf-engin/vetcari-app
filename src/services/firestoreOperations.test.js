@@ -1216,11 +1216,26 @@ describe('revertPaymentOperations', () => {
     expect(mockBatch.operations).toHaveLength(0);
   });
 
-  it('supurulmus borc yeniden yaratilmissa geri alma yazilmaz', async () => {
-    // `removed: true` -> dokumanin YOK olmasi beklenir; varsa biri onu geri getirmis
-    seedDebts('drugDebts/d1');
-
+  it('supurulmus borc okunmaz — yoklugunu dogrulamak permission-denied verirdi', async () => {
+    // `removed: true` dokuman silinmis demektir. Var olmayan bir dokumani okumak, guvenlik
+    // kurali `resource.data`ya dokundugu surece permission-denied verir ve tam tahsilatin
+    // geri alinmasi tumuyle kirilirdi. Aradan islem gecmesi `canRevertPayment`'ta yakalanir.
     const res = await revertPaymentOperations(customer, [drugLog({ removed: true })], 'Hatalı', 'uid1');
+
+    expect(res.ok).toBe(true);
+    expect(mockRunTransaction.mock.calls).toHaveLength(1);
+    // Hicbir okuma yapilmamali
+    expect(mockBatch.operations.some(op => op.ref.path === 'drugDebts/d1')).toBe(true);
+  });
+
+  it('supurulmus ve yasayan borc bir arada: yalnizca yasayan dogrulanir', async () => {
+    seedDoc('drugDebts/d2', { customerId: 'cust1', rev: 999 });   // yasayan borc degismis
+
+    const res = await revertPaymentOperations(
+      customer,
+      [drugLog({ removed: true }), drugLog({ debtId: 'd2' })],
+      'Hatalı', 'uid1', { d2: 111 }
+    );
 
     expect(res).toEqual({ ok: false, reason: 'stale' });
     expect(mockBatch.operations).toHaveLength(0);
