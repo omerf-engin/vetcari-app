@@ -63,6 +63,21 @@ const commitDeletesInBatches = async (refs) => {
  * taşımaz: kendilerini yeni bir hareket saydırmazlar, `revertOf` ile hangi grubu etkisiz
  * kıldıklarını söylerler ve rapor o grubu bütünüyle eler.
  */
+/**
+ * Borç dokümanlarının sürüm damgası (optimistic lock).
+ *
+ * Sayaç değil **monoton damga**: `revertPaymentOperations` borcu `set(ref, before)` ile geri
+ * yüklüyor ve süpürülmüş borcu aynı doküman id'siyle yeniden yaratıyor — bir sayaç bu yollarda
+ * geriye sarardı. Damga sarmaz, dolayısıyla "gördüğümden beri değişti mi" sorusu eşitlik
+ * karşılaştırmasıyla güvenle cevaplanır.
+ *
+ * **Operasyon başına bir kez** çağrılmalı: aynı işlemin dokunduğu tüm borçlar aynı damgayı taşır.
+ *
+ * Bilinen sınır: aynı milisaniyede iki farklı cihazdan aynı dokümana yazım damgayı eşitleyebilir.
+ * Tek kullanıcılı bir defterde pratik bir senaryo değil.
+ */
+const newRev = () => Date.now();
+
 const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, userId, dateOverride, meta = {}) => {
   const o = {
     debtId,
@@ -162,6 +177,7 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId
   if (newPrice <= 0) return;
   const batch = writeBatch(db);
   const priceBatchId = doc(collection(db, 'transactions')).id;
+  const rev = newRev();
 
   batch.update(doc(db, 'drugs', drugId), { price: newPrice });
 
@@ -170,7 +186,7 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId
     const newTotalTl = debt.qty * newPrice;
     const diffTl = newTotalTl - oldTotalTl;
 
-    batch.update(doc(db, 'drugDebts', debt.id), { maxPrice: newPrice });
+    batch.update(doc(db, 'drugDebts', debt.id), { maxPrice: newPrice, rev });
 
     const logRef = doc(collection(db, 'transactions'));
     batch.set(logRef, createLog(
@@ -248,7 +264,7 @@ export const revertDrugPriceOperations = async (drugId, priceLogs, userId) => {
 
 export const toggleDebtLock = async (debt, userId) => {
   const batch = writeBatch(db);
-  batch.update(doc(db, 'drugDebts', debt.id), { isFixed: !debt.isFixed });
+  batch.update(doc(db, 'drugDebts', debt.id), { isFixed: !debt.isFixed, rev: newRev() });
 
   const logRef = doc(collection(db, 'transactions'));
   batch.set(logRef, createLog(
@@ -271,7 +287,7 @@ export const toggleDebtLock = async (debt, userId) => {
  * Hem tekli (`returnDrug`) hem toplu (`returnBatchOperations`) iade bu yardımcıyı kullanır.
  * @returns {number} Avansa yazılması gereken fazla iade tutarı (yoksa 0)
  */
-const applyReturnToBatch = (batch, debt, returnQty, userId) => {
+const applyReturnToBatch = (batch, debt, returnQty, userId, rev) => {
   if (returnQty <= debt.qty) {
     let finalQty = Math.round((debt.qty - returnQty) * 100) / 100;
     const remainingTl = finalQty * debt.maxPrice;
@@ -280,7 +296,7 @@ const applyReturnToBatch = (batch, debt, returnQty, userId) => {
     if (remainingTl <= 10) { isSwept = true; finalQty = 0; }
 
     if (finalQty > 0) {
-      batch.update(doc(db, 'drugDebts', debt.id), { qty: finalQty });
+      batch.update(doc(db, 'drugDebts', debt.id), { qty: finalQty, rev });
     } else {
       batch.delete(doc(db, 'drugDebts', debt.id));
     }
@@ -326,9 +342,10 @@ export const toggleBatchLockOperations = async (debts, userId) => {
   if (changed.length === 0) return;
 
   const batch = writeBatch(db);
+  const rev = newRev();
 
   changed.forEach(debt => {
-    batch.update(doc(db, 'drugDebts', debt.id), { isFixed: target });
+    batch.update(doc(db, 'drugDebts', debt.id), { isFixed: target, rev });
 
     const logRef = doc(collection(db, 'transactions'));
     batch.set(logRef, createLog(
@@ -351,7 +368,7 @@ export const returnDrug = async (debt, returnQty, customerBalance, userId) => {
   if (returnQty <= 0) return;
   const batch = writeBatch(db);
 
-  const refundTl = applyReturnToBatch(batch, debt, returnQty, userId);
+  const refundTl = applyReturnToBatch(batch, debt, returnQty, userId, newRev());
   if (refundTl > 0) {
     batch.update(doc(db, 'customers', debt.customerId), { balance: customerBalance + refundTl });
   }
@@ -368,11 +385,12 @@ export const returnBatchOperations = async (items, customerBalance, userId) => {
   if (valid.length === 0) return;
 
   const batch = writeBatch(db);
+  const rev = newRev();
   let totalRefund = 0;
   let customerId = null;
 
   for (const { debt, returnQty } of valid) {
-    totalRefund += applyReturnToBatch(batch, debt, returnQty, userId);
+    totalRefund += applyReturnToBatch(batch, debt, returnQty, userId, rev);
     customerId = debt.customerId;
   }
 
@@ -490,7 +508,7 @@ export const cancelDebtTransactionOperations = async (customerId, items, batchId
  * @returns {boolean} batch'e bir şey yazıldıysa true
  */
 const appendServiceDebtToBatch = (batch, ctx) => {
-  const { customerId, desc, amount, date, isToday, paidAmount = 0, paidDate, batchId, createdAt, userId } = ctx;
+  const { customerId, desc, amount, date, isToday, paidAmount = 0, paidDate, batchId, createdAt, rev, userId } = ctx;
 
   if (!(amount > 0)) return false;
   const trimmed = (desc || '').trim();
@@ -520,7 +538,7 @@ const appendServiceDebtToBatch = (batch, ctx) => {
   }
 
   if (!isSwept) {
-    batch.set(debtRef, { customerId, desc: trimmed, amount: finalAmount, date, batchId, createdAt, userId });
+    batch.set(debtRef, { customerId, desc: trimmed, amount: finalAmount, date, batchId, createdAt, rev, userId });
   }
 
   return true;
@@ -532,7 +550,7 @@ const appendServiceDebtToBatch = (batch, ctx) => {
  * @returns {boolean} batch'e bir şey yazıldıysa true
  */
 const appendDrugItemsToBatch = (batch, ctx) => {
-  const { customerId, items, date, isToday, paidAmount = 0, paidDate, applyInflation, batchId, createdAt, userId } = ctx;
+  const { customerId, items, date, isToday, paidAmount = 0, paidDate, applyInflation, batchId, createdAt, rev, userId } = ctx;
 
   const valid = (items || []).filter(it => it?.drug && it.qty > 0 && it.unitPrice > 0);
   if (valid.length === 0) return false;
@@ -588,7 +606,7 @@ const appendDrugItemsToBatch = (batch, ctx) => {
     }
 
     if (!isSwept) {
-      batch.set(debtRef, { customerId, drugId: item.drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, batchId, createdAt, userId });
+      batch.set(debtRef, { customerId, drugId: item.drug.id, qty: finalQty, maxPrice: finalMaxPrice, isFixed: false, date, batchId, createdAt, rev, userId });
     }
   }
 
@@ -626,6 +644,7 @@ export const addDebtTransactionOperations = async (customerId, payload, userId) 
     isToday: effectiveDate === today,
     batchId: doc(collection(db, 'drugDebts')).id,
     createdAt: Date.now(),
+    rev: newRev(),
     userId
   };
 
@@ -678,11 +697,13 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, use
   const batch = writeBatch(db);
   const revertBatchId = doc(collection(db, 'transactions')).id;
   const revertOf = (paymentLogs || []).find(l => l?.batchId)?.batchId;
+  const rev = newRev();
 
   logs.forEach((log) => {
     const isService = log.before.desc !== undefined;
     const ref = doc(db, isService ? 'serviceDebts' : 'drugDebts', log.debtId);
-    batch.set(ref, log.before);
+    // `before` `rev` tasimaz (bkz. `snapshotOf`); geri yuklenen borc taze damga alir
+    batch.set(ref, { ...log.before, rev });
 
     const restored = isService
       ? fmtTL(log.before.amount)
@@ -729,10 +750,17 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, use
   return true;
 };
 
-/** Borç dokümanının geri yükleme için saklanacak anlık görüntüsü (`id` doküman yolunda taşınır). */
+/**
+ * Borç dokümanının geri yükleme için saklanacak anlık görüntüsü.
+ *
+ * `id` doküman yolunda taşınır. `rev` **bilinçli olarak elenir**: geri yükleme taze bir damga
+ * almalı. Eski damgayı geri yazmak sürüm sayacını geriye sarardı ve bayat bir sekme borcu
+ * "değişmemiş" sanardı (ABA). Ayrıca denetim logunu sürüm verisiyle kirletmez.
+ */
 const snapshotOf = (debt) => {
   const copy = { ...debt };
   delete copy.id;
+  delete copy.rev;
   return copy;
 };
 
@@ -753,6 +781,7 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
 
   const batch = writeBatch(db);
   const paymentBatchId = doc(collection(db, 'transactions')).id;
+  const rev = newRev();
 
   // Loglar `balanceDelta`'yı taşıyacağı için toplam, yazımdan önce hesaplanır
   const resolved = (distributionArr || [])
@@ -777,7 +806,7 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
       const removed = newAmount <= 10;
 
       if (removed) batch.delete(doc(db, 'serviceDebts', item.id));
-      else batch.update(doc(db, 'serviceDebts', item.id), { amount: newAmount });
+      else batch.update(doc(db, 'serviceDebts', item.id), { amount: newAmount, rev });
 
       const logRef1 = doc(collection(db, 'transactions'));
       batch.set(logRef1, createLog(item.id, 'Tahsilat',
@@ -809,7 +838,7 @@ export const applyPaymentOperations = async (customer, receivedAmount, distribut
         }
         batch.delete(doc(db, 'drugDebts', item.id));
       } else {
-        batch.update(doc(db, 'drugDebts', item.id), { qty: newQty });
+        batch.update(doc(db, 'drugDebts', item.id), { qty: newQty, rev });
       }
     }
   });

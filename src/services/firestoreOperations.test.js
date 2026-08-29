@@ -41,6 +41,7 @@ const {
   returnDrug,
   applyPaymentOperations,
   addDebtTransactionOperations,
+  toggleDebtLock,
   toggleBatchLockOperations,
   returnBatchOperations,
   cancelDebtTransactionOperations,
@@ -1099,9 +1100,23 @@ describe('revertPaymentOperations', () => {
 
     expect(ok).toBe(true);
     const restored = sets().find(op => op.ref.path === 'drugDebts/d1');
-    expect(restored.data).toEqual({
+    const { rev, ...fields } = restored.data;
+    expect(fields).toEqual({
       customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false
     });
+    // Geri yuklenen borc TAZE damga alir: eski damgayi geri yazmak surumu geriye sarardi
+    expect(rev).toBeGreaterThan(0);
+  });
+
+  it('geri yukleme before daki eski damgayi degil taze damga yazar', async () => {
+    const stale = drugLog({ removed: true });
+    stale.before = { ...stale.before, rev: 1 };   // bayat damga tasiyan eski bir log
+
+    await revertPaymentOperations(customer, [stale], 'Yanlış tahsilat', 'uid1');
+
+    const restored = sets().find(op => op.ref.path === 'drugDebts/d1');
+    expect(restored.data.rev).not.toBe(1);
+    expect(restored.data.rev).toBeGreaterThan(1);
   });
 
   it('yasayan borcu odeme oncesi haline geri yazar', async () => {
@@ -1352,6 +1367,113 @@ describe('cancelDebtTransactionOperations', () => {
     expect(await cancelDebtTransactionOperations('cust1', [drugItem()], 'b1', '   ', 'uid1')).toBe(false);
     expect(await cancelDebtTransactionOperations('cust1', [drugItem()], '', 'Hatalı giriş', 'uid1')).toBe(false);
     expect(mockBatch.commit).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================
+// SURUM DAMGASI (rev) — TASK-033
+// =============================================
+
+describe('surum damgasi (rev)', () => {
+  const debtWrites = () => mockBatch.operations.filter(
+    op => (op.type === 'set' && op.data.title === undefined) || op.type === 'update'
+  );
+  const revsOf = (ops) => ops.map(op => op.data.rev);
+
+  it('yeni acilan borc dokumanlari damga tasir', async () => {
+    await addService('Muayene', 500);
+    const debt = serviceSets()[0];
+    expect(debt.data.rev).toBeGreaterThan(0);
+  });
+
+  it('bir islemdeki tum borclar AYNI damgayi tasir', async () => {
+    // `Date.now` her cagrida artsin: gercek saatle test hizli calistigi icin dokuman basina
+    // damgalama da tesadufen ayni degeri uretir ve hata gizlenirdi.
+    let tick = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => ++tick);
+
+    try {
+      await addDebtTransactionOperations('cust1', {
+        date: TODAY,
+        service: { desc: 'Muayene', amount: 500 },
+        drugItems: [
+          item({ id: 'drug1', price: 100 }, 2, 100),
+          item({ id: 'drug2', price: 50 }, 3, 50)
+        ]
+      }, 'uid1');
+
+      const revs = new Set([...serviceSets(), ...drugSets()].map(op => op.data.rev));
+      expect(revs.size).toBe(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('tahsilat dokunulan borclarin damgasini yeniler', async () => {
+    await applyPaymentOperations(
+      { id: 'cust1', balance: 0 }, 300,
+      [{ id: 's1', type: 'service', deduct: 300 }],
+      [{ id: 's1', customerId: 'cust1', amount: 1000, rev: 111 }], [], 'uid1'
+    );
+
+    const upd = mockBatch.operations.find(op => op.type === 'update' && op.data.amount !== undefined);
+    expect(upd.data.rev).toBeGreaterThan(111);
+  });
+
+  it('iade damgayi yeniler ve grup iadesinde tek damga kullanilir', async () => {
+    let tick = 1000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => ++tick);
+
+    try {
+      await returnBatchOperations([
+        { debt: { id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, returnQty: 2 },
+        { debt: { id: 'dd2', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, returnQty: 3 }
+      ], 0, 'uid1');
+
+      const qtyUpdates = mockBatch.operations.filter(op => op.type === 'update' && op.data.qty !== undefined);
+      expect(qtyUpdates).toHaveLength(2);
+      expect(new Set(revsOf(qtyUpdates)).size).toBe(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('zam ve kilit degisimi damgayi yeniler', async () => {
+    await updateDrugPrice('drug1', 120, [
+      { id: 'dd1', drugId: 'drug1', customerId: 'cust1', qty: 5, maxPrice: 100, isFixed: false }
+    ], 'uid1', 100);
+    expect(mockBatch.operations.find(op => op.type === 'update' && op.data.maxPrice !== undefined).data.rev)
+      .toBeGreaterThan(0);
+
+    mockBatch.operations.length = 0;
+    await toggleDebtLock({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', isFixed: false }, 'uid1');
+    expect(mockBatch.operations.find(op => op.type === 'update' && op.data.isFixed !== undefined).data.rev)
+      .toBeGreaterThan(0);
+  });
+
+  it('borc dokumanina dokunan her yazim damga tasir', async () => {
+    // Fail-closed: damgasiz bir yazim yolu kalirsa o borc surum kontrolunden kacar
+    await addDebtTransactionOperations('cust1', {
+      date: '2026-01-20',
+      service: { desc: 'Muayene', amount: 1000, paidAmount: 400, paidDate: '2026-01-21' },
+      drugItems: [item({ id: 'drug1', price: 120 }, 5, 100)],
+      applyInflation: true
+    }, 'uid1');
+
+    expect(debtWrites().length).toBeGreaterThan(0);
+    expect(debtWrites().every(op => op.data.rev !== undefined)).toBe(true);
+  });
+
+  it('snapshotOf damgayi eler — before icinde rev bulunmaz', async () => {
+    await applyPaymentOperations(
+      { id: 'cust1', balance: 0 }, 300,
+      [{ id: 's1', type: 'service', deduct: 300 }],
+      [{ id: 's1', customerId: 'cust1', desc: 'Muayene', amount: 1000, rev: 999 }], [], 'uid1'
+    );
+
+    const log = mockBatch.operations.find(op => op.type === 'set' && op.data.title === 'Tahsilat');
+    expect(log.data.before.rev).toBeUndefined();
+    expect(log.data.before).toEqual({ customerId: 'cust1', desc: 'Muayene', amount: 1000 });
   });
 });
 
