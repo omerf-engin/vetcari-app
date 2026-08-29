@@ -148,15 +148,30 @@ Tahsilat, borçları düşüren/silen ve bakiyeyi değiştiren tek işlemdir; ge
 - **Bakiye kuralı:** düşüm yalnızca borç gerçekten bulunduysa bakiyeyi etkiler. Önceden bulunamayan borçta da bakiye düşüyordu, yani para kayboluyordu
 - **Etkileşim:** tahsilat tam olarak geri alındığında borç ödeme öncesi haline döndüğü için o girişin iptali **yeniden açılır** — geri alma logundaki `revertOf` sayesinde `canCancelBatch` hem ödeme hem geri alma loglarını yok sayar (TASK-035)
 
-### Guard'ların Bilinen Sınırları
+### Guard'ların Katmanları
 
-İptal (`canCancelBatch`) ve zam geri alma (`canRevertPriceUpdate`) guard'ları **istemcideki anlık görüntüye** bakar; `writeBatch` ise ön koşulsuz yazar. Firestore tarafında "guard'ın gördüğü durum hâlâ geçerli mi" kontrolü yoktur.
+İptal (`canCancelBatch`), zam geri alma (`canRevertPriceUpdate`) ve tahsilat geri alma (`canRevertPayment`) guard'ları **istemcideki anlık görüntüye** bakar. Üç katman vardır:
 
-- **Buton durumu canlıdır:** guard'lar `useMemo` ile `transactions`'a bağlı, `useFirestore` da `onSnapshot` dinliyor — başka bir cihazda yapılan tahsilat butonu bir round-trip içinde pasifleştirir
-- **Onay anında ikinci kontrol:** modal açıkken (kullanıcı gerekçe yazarken) durum değişebileceği için `handleCancelBatch` / `handleRevertDrugPrice` yazımdan hemen önce guard'ı taze veriyle tekrar çalıştırır ve geçmiyorsa toast ile durur
-- **Kalan pencere:** onay ile commit arasındaki birkaç yüz milisaniye ve çevrimdışı kuyruğa alınmış yazmalar. Kapatmak için borç dokümanlarında sürüm kontrolü gerekir — bkz. TASK-033
-- **Neden `runTransaction` tek başına yetmiyor:** Firestore istemci SDK'sında transaction içinde **sorgu çalıştırılamaz**, yalnızca `transaction.get(docRef)` yapılabilir; "yeni log inmiş mi" sorusu bu yüzden transaction içinde sorulamaz. Doğru yaklaşım borç dokümanına `rev` alanı koyup onu doğrulamaktır
-- Guard'lar bu yüzden **fail-closed** kurulmuştur: tanınmayan bir log iptali engeller, aksi yönde değil
+1. **Buton durumu canlıdır:** guard'lar `useMemo` ile `transactions`'a bağlı, `useFirestore` da `onSnapshot` dinliyor — başka bir cihazda yapılan tahsilat butonu bir round-trip içinde pasifleştirir
+2. **Onay anında ikinci kontrol:** modal açıkken (kullanıcı gerekçe yazarken) durum değişebileceği için `App.jsx` handler'ları yazımdan hemen önce guard'ı taze veriyle tekrar çalıştırır ve geçmiyorsa toast ile durur
+3. **Yazım anında sürüm kontrolü** (aşağıya bakınız) — onay ile commit arasındaki pencereyi kapatır
+
+Guard'lar **fail-closed** kurulmuştur: tanınmayan bir log iptali engeller, aksi yönde değil.
+
+**Neden `runTransaction` guard'ın yerini tutamaz:** Firestore istemci SDK'sında transaction içinde **sorgu çalıştırılamaz**, yalnızca `transaction.get(docRef)` yapılabilir. "Bu borca yeni log inmiş mi" sorusu bu yüzden transaction içinde sorulamaz. Ama sorulmasına gerek de yoktur: guard'ın asıl sorduğu şey "bu borç dokümanı değişti mi" ve tahsilat/iade `qty`/`amount` düşürüyor ya da dokümanı siliyor — **doküman düzeyinde sürüm kontrolü yeterlidir.**
+
+### Sürüm Kontrolü (`rev`)
+
+Borç dokümanları `rev` alanı taşır: **monoton damga** (`Date.now()`), operasyon başına bir kez üretilir, o işlemin dokunduğu tüm borçlara yazılır. Karşılaştırma eşitliktir, "arttı mı" değil.
+
+- **Neden sayaç değil damga:** `revertPaymentOperations` borcu `set(ref, before)` ile geri yüklüyor ve süpürülmüş borcu **aynı doküman id'siyle** yeniden yaratıyor. Bir sayaç bu yollarda geriye sarar ve bayat bir sekme borcu "değişmemiş" sanardı (ABA). Damga sarmaz. `snapshotOf` bu yüzden `rev`'i eler — geri yükleme taze damga alır
+- **Hangi işlemler transaction'lı:** yalnızca `cancelDebtTransactionOperations`, `revertDrugPriceOperations`, `revertPaymentOperations`. Sürüm uyuşmazlığında hiçbir şey yazılmaz ve `{ok: false, reason: 'stale'}` döner
+- **Neden yalnızca onlar — çevrimdışı bedeli:** `persistentLocalCache()` açık olduğu için `writeBatch` bağlantı yokken kuyruğa girer, ama **`runTransaction` çevrimdışı çalışmaz**, anında reddedilir. Günlük akış (tahsilat, borç girişi, iade, kilit) bu yüzden `writeBatch` kalır ve yalnızca `rev` damgalar; sahada bağlantı kopukken çalışmaya devam eder. Bedeli nadir geri alma/iptal işlemlerinin çevrimdışı yapılamaması
+- **Eski kayıtlar (migration yok):** `rev` alanı olmayan doküman `undefined` taşır, beklenen de `undefined` ise eşit sayılır. Koruma kaybı **yok**: başka bir sekmenin yaptığı her yazım artık damgalıyor, dolayısıyla `undefined !== <damga>` ile yakalanır; silme de `exists()` ile
+- **`revertPaymentOperations`'ın ölçütü farklıdır:** log'un kendisinden gelir. `removed: true` olan borcun **yok olması** beklenir (tahsilat onu süpürmüştü; şimdi varsa biri yeniden yaratmış), diğerleri var olmalı ve damgaları eşleşmeli
+- **Retry tuzağı:** `runTransaction` callback'i yeniden çalıştırılabilir. Doküman id'leri ve log nesneleri (dolayısıyla `timestamp`) callback **dışında** üretilir; callback saf kalır
+- **`firestore.rules` bağımlılığı:** "borç silinmiş mi" sorusu silinmiş bir dokümanı okumayı gerektirir. Kural `resource.data.userId` okuduğunda `resource` null olur ve **permission-denied** döner. Bu yüzden `allow read` kuralına `resource == null` dalı eklendi — kimlik doğrulaması hâlâ zorunlu
+- **Bilinen sınır:** aynı milisaniyede iki farklı cihazdan aynı dokümana yazım damgayı eşitleyebilir. Tek kullanıcılı bir defterde pratik bir senaryo değil
 
 **Kısmen süpürülmüş işlemler:** bir işlemde bazı kalemler süpürülüp (dokümanı yok) bazıları yazılmış olabilir. `decorateLogs` bu durumda dokümansız kalemin loglarını da **yaşayan kartın grubuna** katar (anahtar: ortak `batchId`) ve başlığı tarih bazlı işlem başlığına çevirir — aksi halde işlem ekstrede iki ayrı başlık altında görünür, `İlaç: A` başlığı altında B'nin logları çıkardı. Yaşayan grup varken orphan loglara `cancellableBatchId` atanmaz: iptal yalnızca kartın kendi butonundan yapılır, ekstrede ikinci bir yol oluşmaz.
 
@@ -409,6 +424,7 @@ erDiagram
         string date "Borç tarihi (YYYY-MM-DD)"
         string batchId "Aynı işlemde açılan borçların ortak kimliği (eski kayıtlarda yok)"
         number createdAt "Gerçek oluşturma zamanı (ms)"
+        number rev "Sürüm damgası — her yazımda yenilenir (optimistic lock, eski kayıtlarda yok)"
         string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 
@@ -422,6 +438,7 @@ erDiagram
         string date "Borç tarihi (YYYY-MM-DD)"
         string batchId "Aynı işlemde açılan borçların ortak kimliği (eski kayıtlarda yok)"
         number createdAt "Gerçek oluşturma zamanı (ms) — aynı gün içindeki işlemleri ayırır"
+        number rev "Sürüm damgası — her yazımda yenilenir (optimistic lock, eski kayıtlarda yok)"
         string userId "Sahibi kullanıcı UID (Firebase Auth)"
     }
 
@@ -498,7 +515,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{collection}/{docId} {
-      allow read, update, delete: if request.auth != null
+      // `resource == null` dalı sürüm kontrolü için şart (TASK-033)
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid == resource.data.userId);
+      allow update, delete: if request.auth != null
         && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.userId;
@@ -508,6 +528,10 @@ service cloud.firestore {
 ```
 
 > **Not:** Her kullanıcı yalnızca kendi oluşturduğu müşteri/ilaç/borç verilerine erişebilir. İzolasyon Firestore Security Rules + `userId` filtreli `onSnapshot` sorguları ile çift katmanlı olarak sağlanmaktadır (TASK-014).
+
+> **`resource == null` neden gerekli:** Sürüm kontrolü "borç dokümanı silinmiş mi" sorusunu `transaction.get()` ile sorar. Var olmayan bir dokümanda `resource` null olur ve kural `resource.data.userId` okuduğunda **permission-denied** döner — `exists() === false` yerine hata alınır. Bu dal olmadan silinmiş borç tespit edilemez. Kimlik doğrulaması hâlâ zorunludur ve var olan dokümanlarda sahiplik kontrolü değişmemiştir.
+
+> ⚠️ **Kural değişiklikleri repo'daki dosyayı düzenlemekle yayına girmez** — Firebase Console'dan veya `firebase deploy --only firestore:rules` ile yayınlanmalıdır.
 
 ---
 

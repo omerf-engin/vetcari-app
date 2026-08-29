@@ -1361,9 +1361,11 @@ borc kapanir). Sert guard koymak bu yetenegi geriletirdi. Modal, kaleme tahsilat
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE |
 | **Priority** | P3 |
 | **Depends on** | TASK-031, TASK-032 |
+
+**Sonuc:** Test 336 → 357 · Lint 0 error 0 warning · Build basarili
 
 **Problem:**
 Iptal (`canCancelBatch`) ve zam geri alma (`canRevertPriceUpdate`) guard'lari istemcideki anlik
@@ -1383,15 +1385,17 @@ icinde sorulamaz. Ama sorulmasina gerek de yok: guard'in asil sordugu sey "bu bo
 degisti mi" ve tahsilat/iade `qty`/`amount` dusuruyor ya da dokumani siliyor. **Doküman duzeyinde
 surum kontrolu yeterli.**
 
-**Deliverables:**
-- `drugDebts` ve `serviceDebts` dokumanlarina `rev` (integer sayac) alani; dokumana dokunan her
-  operasyon (`addDebtTransactionOperations`, `applyPaymentOperations`, `applyReturnToBatch`,
-  `updateDrugPrice`, `revertDrugPriceOperations`, `toggleDebtLock`) artirir
-- Guard'lar gordukleri `rev` degerini tasisin
-- `cancelDebtTransactionOperations` ve `revertDrugPriceOperations` `writeBatch` yerine
-  `runTransaction` kullansin: her borc dokumanini oku, `rev` degismisse veya dokuman silinmisse
-  islemi iptal et ve kullaniciya sebebini soyle
-- Migration yok: `rev` alani olmayan eski dokumanlar `rev ?? 0` ile ele alinir
+**Yapilanlar:**
+- **`rev` monoton damga** (`Date.now()`) — borc dokumanina dokunan **her** yazim yolu damgalar:
+  giris, tahsilat, iade, grup iadesi, zam, zam geri alma, kilit, grup kilidi, tahsilat geri alma.
+  Operasyon basina bir kez uretilir, o islemin dokundugu tum borclar ayni degeri tasir
+- **Uc islem `runTransaction`'a gecti** — `cancelDebtTransactionOperations`,
+  `revertDrugPriceOperations`, `revertPaymentOperations`. Dokuman okunur, `rev` uyusmazsa veya
+  dokuman silinmisse **hicbir sey yazilmaz**, `{ok: false, reason: 'stale'}` doner
+- Uc guard util'ine `reason: 'stale'` mesaji; `App.jsx` handler'lari `expectedRevs` kurup toast gosterir
+- `firestore.rules`'a `resource == null` dali (silinmis dokuman okunabilsin diye)
+- Test altyapisi: `firebaseMock`'a dokuman deposu (`seedDoc`), `runTransaction` mock'u ve
+  transaction sink — mevcut `sets()`/`updates()`/`deletes()` yardimcilari degismeden calisiyor
 
 **Kabul Kriterleri:**
 - Iki sekmede ayni islem acikken birinde tahsilat yapilirsa digerindeki iptal **yazilmaz**,
@@ -1399,11 +1403,36 @@ surum kontrolu yeterli.**
 - Mevcut davranis (tek sekme, normal akis) degismez
 - Lint 0/0 · Test gecer · Build basarili
 
+**Kasitli sapma 1 — damga, sayac degil:**
+Ilk tanim "integer sayac" diyordu. `revertPaymentOperations` borcu `set(ref, before)` ile geri
+yukluyor ve supurulmus borcu **ayni dokuman id'siyle** yeniden yaratiyor; bir sayac bu yollarda
+geriye sarar ve bayat bir sekme borcu "degismemis" sanardi (ABA). Monoton damga sarmaz.
+`snapshotOf` bu yuzden `rev`'i eliyor — aksi halde eski damga geri yazilirdi.
+
+**Kasitli sapma 2 — kapsam yalnizca geri alma/iptal:**
+`runTransaction` **cevrimdisi calismaz**; `persistentLocalCache()` yalnizca `writeBatch`'i
+kuyruga alir. Gunluk akis (tahsilat, borc girisi, iade, kilit) transaction'a cevrilseydi sahada
+baglanti kopukken **tahsilat yapilamaz** hale gelirdi. Bu yuzden onlar `writeBatch` kaldi ve
+yalnizca `rev` damgaliyor. Bedeli: nadir geri alma/iptal islemleri cevrimdisi yapilamaz.
+
+**Ilk tanimdaki eksik (duzeltildi):**
+Deliverable listesi `toggleBatchLockOperations`, `cancelDebtItemOperations`,
+`cancelDebtTransactionOperations` ve `revertPaymentOperations`'i saymamisti (sonuncusu
+TASK-034'ten once yazildigi icin). Hepsi borc dokumanina yaziyor, hepsi damgaliyor.
+
+**Yol boyunca duzeltilen mevcut hata:**
+`handleRevertDrugPrice` guard'i yazimdan once tekrar calistirip `fresh` uretiyor ama yazima
+**modal'in tasidigi bayat `priceLogs`**'u geciyordu. `handleRevertPayment` bunu dogru yapiyordu.
+Artik `fresh.batch.logs` kullaniliyor; `DrugsView` de gereksiz log argumanini gecmiyor.
+
 **Notes:**
-Tek kullanicili bir defterde getirisi sinirli oldugu icin P3. `writeBatch` → `runTransaction`
-donusumu ve `rev`'in tum yazma yollarinda tasinmasi mekanik ama genis bir degisiklik; tahsilat
-geri alma taskiyla birlikte ele alinmasi mantikli olabilir (ikisi de yazma yolunu yeniden
-duzenliyor).
+⚠️ `firestore.rules` degisikligi **Firebase Console'dan yayinlanmali** — repo'daki dosya tek
+basina yeterli degil. Yayindan once `rev` uyusmazligi dali calisir, "borc silinmis" dali
+permission-denied alir.
+
+Test notu: "ayni damga" testleri ilk halinde tesadufen geciyordu — `Date.now()` siki donguda
+ayni milisaniyeyi donduruyor, dolayisiyla dokuman basina damgalama hatasi gizleniyordu.
+`Date.now` artan degerlerle spy'landi.
 
 ---
 

@@ -4,7 +4,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /{collection}/{docId} {
-      allow read, update, delete: if request.auth != null
+      // `resource == null` dali surum kontrolu icin sart (TASK-033): silinmis bir dokumani
+      // okumak `resource.data.userId` uzerinden degerlendirilirse kural permission-denied
+      // verir ve `snap.exists() === false` yerine hata doner. O zaman "borc silinmis mi"
+      // sorusu transaction icinde sorulamaz. Kimlik dogrulamasi hala zorunlu; var olan
+      // dokumanlarda sahiplik kontrolu degismedi.
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid == resource.data.userId);
+      allow update, delete: if request.auth != null
         && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.userId;
