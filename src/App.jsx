@@ -32,6 +32,16 @@ import {
   applyPaymentOperations
 } from './services/firestoreOperations';
 
+/**
+ * `debtId → rev` haritası: guard'ın gördüğü sürümleri yazma yoluna taşır (TASK-033).
+ * Yazım anında doküman bu sürümden farklıysa işlem yazılmaz ve kullanıcıya bildirilir.
+ */
+const revsOf = (...debtArrays) => {
+  const out = {};
+  for (const arr of debtArrays) for (const d of arr || []) out[d.id] = d.rev;
+  return out;
+};
+
 export default function App() {
   const { currentUser, loading } = useAuth();
   const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(currentUser);
@@ -139,14 +149,18 @@ export default function App() {
    * Bir ilacın son zammını geri alır; hangi grubun geri alınacağına guard karar verir.
    * Modal açıkken araya işlem girebileceği için guard yazımdan hemen önce tekrar çalışır.
    */
-  const handleRevertDrugPrice = async (drugId, priceLogs) => {
+  const handleRevertDrugPrice = async (drugId) => {
     const fresh = canRevertPriceUpdate(drugId, transactions, drugDebts);
     if (!fresh.ok) {
       toast.error(revertBlockedMessage(fresh.reason));
       return;
     }
     try {
-      await revertDrugPriceOperations(drugId, priceLogs, currentUser.uid);
+      // Modal'ın taşıdığı `priceLogs` bayat olabilir; yazıma guard'ın taze grubu gider
+      const res = await revertDrugPriceOperations(
+        drugId, fresh.batch.logs, currentUser.uid, revsOf(drugDebts)
+      );
+      if (!res.ok) { toast.error(revertBlockedMessage(res.reason)); return; }
       toast.success('Zam geri alındı');
     }
     catch (err) { handleError(err, 'Zam Geri Alma'); }
@@ -198,10 +212,14 @@ export default function App() {
 
     const customerId = group.items?.[0]?.customerId ?? selectedCustomerId;
     try {
-      await cancelDebtTransactionOperations(customerId, group.items, group.batchId, reason, currentUser.uid);
+      const res = await cancelDebtTransactionOperations(
+        customerId, group.items, group.batchId, reason, currentUser.uid,
+        revsOf(serviceDebts, drugDebts)
+      );
+      if (!res.ok) { toast.error(cancelBlockedMessage(res.reason)); return; }
       toast.success('İşlem iptal edildi');
     } catch (err) { handleError(err, 'İşlem İptali'); }
-  }, [selectedCustomerId, transactions, currentUser, toast, handleError]);
+  }, [selectedCustomerId, transactions, serviceDebts, drugDebts, currentUser, toast, handleError]);
 
   /** Tek bir borç kalemini (hizmet veya ilaç) gerekçeyle iptal eder. */
   const handleCancelItem = useCallback(async (item, reason) => {
@@ -243,10 +261,14 @@ export default function App() {
     }
 
     try {
-      await revertPaymentOperations(customer, fresh.batch.logs, reason, currentUser.uid);
+      const res = await revertPaymentOperations(
+        customer, fresh.batch.logs, reason, currentUser.uid,
+        revsOf(serviceDebts, drugDebts)
+      );
+      if (!res.ok) { toast.error(revertPaymentBlockedMessage(res.reason)); return; }
       toast.success('Tahsilat geri alındı');
     } catch (err) { handleError(err, 'Tahsilat Geri Alma'); }
-  }, [customers, selectedCustomerId, transactions, currentUser, toast, handleError]);
+  }, [customers, selectedCustomerId, transactions, serviceDebts, drugDebts, currentUser, toast, handleError]);
 
   const applyPayment = useCallback(async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);

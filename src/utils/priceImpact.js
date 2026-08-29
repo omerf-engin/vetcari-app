@@ -169,6 +169,9 @@ export const revertBlockedMessage = (reason) => {
       return 'Zamdan sonra bu borçlara tahsilat veya iade işlenmiş. Önce o işlemi geri alın.';
     case 'legacy':
       return 'Bu zam eski kayıt — geri alma için gereken fiyat bilgisi tutulmamış.';
+    case 'stale':
+      // Surum kontrolu (TASK-033): yazim anindan once baska bir cihaz borca dokunmus
+      return 'Kayıt siz bakarken değişti. Ekranı kontrol edip tekrar deneyin.';
     default:
       return 'Bu zam geri alınamıyor.';
   }

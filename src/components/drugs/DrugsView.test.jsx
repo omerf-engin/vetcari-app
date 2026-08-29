@@ -127,7 +127,7 @@ describe('DrugsView — son zammi geri al', () => {
     expect(screen.queryByRole('button', { name: /Son Zammı Geri Al/ })).not.toBeInTheDocument();
   });
 
-  it('geri alma onaylandiginda grubun loglariyla cagrilir', () => {
+  it('geri alma onaylandiginda ilac id si ile cagrilir', () => {
     const { onRevertPrice } = renderView({
       drugDebts: [openDebt({ maxPrice: 200 })],
       transactions: [priceLog()]
@@ -136,9 +136,9 @@ describe('DrugsView — son zammi geri al', () => {
     fireEvent.click(screen.getByRole('button', { name: /Son Zammı Geri Al/ }));
     fireEvent.click(screen.getByRole('button', { name: /Geri Almayı Onayla/ }));
 
+    // Loglar bilincli olarak gecilmez: App guard'i yazimdan hemen once tekrar calistirip
+    // taze grubu kullanir, modal'in anlik goruntusu bayat olabilir (TASK-033)
     expect(onRevertPrice).toHaveBeenCalledTimes(1);
-    const [drugId, logs] = onRevertPrice.mock.calls[0];
-    expect(drugId).toBe('drug1');
-    expect(logs.map(l => l.debtId)).toEqual(['d1']);
+    expect(onRevertPrice.mock.calls[0]).toEqual(['drug1']);
   });
 });

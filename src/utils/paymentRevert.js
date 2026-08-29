@@ -80,6 +80,9 @@ export const revertPaymentBlockedMessage = (reason) => {
       return 'Tahsilattan sonra bu borçlara başka bir işlem uygulanmış. Önce onu geri alın.';
     case 'legacy':
       return 'Bu tahsilat eski kayıt — geri alma için gereken borç bilgisi tutulmamış.';
+    case 'stale':
+      // Surum kontrolu (TASK-033): yazim anindan once baska bir cihaz borca dokunmus
+      return 'Kayıt siz bakarken değişti. Ekranı kontrol edip tekrar deneyin.';
     default:
       return 'Bu tahsilat geri alınamıyor.';
   }

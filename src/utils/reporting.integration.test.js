@@ -11,12 +11,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createMockBatch, mockDoc, mockCollection, mockAddDoc,
-  mockDeleteDoc, mockUpdateDoc, mockGetDoc, resetMocks
+  mockDeleteDoc, mockUpdateDoc, mockGetDoc, mockRunTransaction, setTransactionSink, seedDoc, resetMocks
 } from '../test/firebaseMock';
 import { todayLocal } from './dates';
 import { summarizePeriod } from './reporting';
 
 const mockBatch = createMockBatch();
+// Surum kontrollu islemler transaction kullaniyor; yazmalari ayni diziye dussun
+setTransactionSink(mockBatch.operations);
 
 vi.mock('firebase/firestore', () => ({
   collection: (...args) => mockCollection(...args),
@@ -29,6 +31,7 @@ vi.mock('firebase/firestore', () => ({
   query: vi.fn((...args) => args),
   where: vi.fn(() => ({})),
   writeBatch: () => mockBatch,
+  runTransaction: (...args) => mockRunTransaction(...args),
 }));
 
 vi.mock('../services/firebase', () => ({ db: { type: 'mock-db' } }));
@@ -213,13 +216,16 @@ describe('yazim yolu -> rapor: eleme', () => {
     await applyPaymentOperations(
       { id: 'cust1', balance: 0 }, 1500,
       [{ id: 's1', type: 'service', deduct: 1000 }],
-      [{ id: 's1', customerId: 'cust1', amount: 2000 }], [], 'uid1'
+      // `desc` sart: `revertPaymentOperations` koleksiyonu `before.desc` varligindan secer
+      [{ id: 's1', customerId: 'cust1', desc: 'Muayene', amount: 2000 }], [], 'uid1'
     );
 
     // Geri alma, odeme gruubunun kendi loglariyla beslenir (uygulamadaki akisin aynisi)
     const paymentLogs = writtenLogs();
     expect(summarize().collected).toBe(1500);
 
+    // Surum kontrolu (TASK-033): geri alinacak borc dokumani var olmali
+    seedDoc('serviceDebts/s1', { customerId: 'cust1', desc: 'Muayene', amount: 1000 });
     await revertPaymentOperations({ id: 'cust1', balance: 500 }, paymentLogs, 'Yanlış', 'uid1');
 
     const s = summarize();
@@ -238,6 +244,7 @@ describe('yazim yolu -> rapor: eleme', () => {
     const entryBatchId = writtenLogs()[0].batchId;
     expect(summarize().debtOpened).toBe(1000);
 
+    seedDoc('serviceDebts/s1', { customerId: 'cust1', amount: 1000 });
     await cancelDebtTransactionOperations(
       'cust1', [{ id: 's1', type: 'service', amount: 1000 }], entryBatchId, 'Hatalı giriş', 'uid1'
     );

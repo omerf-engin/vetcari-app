@@ -70,7 +70,9 @@ export default function DrugsView({
 
   const confirmPending = () => {
     if (!pending) return;
-    if (pending.mode === 'revert') onRevertPrice(pending.drug.id, pending.batch.logs);
+    // Loglar gecilmez: App guard'i yazimdan hemen once tekrar calistirip taze grubu kullanir.
+    // Modal'in anlik goruntusu bayat olabilirdi (TASK-033).
+    if (pending.mode === 'revert') onRevertPrice(pending.drug.id);
     else onUpdatePrice(pending.drug.id, pending.newPrice);
   };
 

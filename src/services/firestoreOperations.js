@@ -5,6 +5,7 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
+  runTransaction,
   getDocs,
   query,
   where
@@ -77,6 +78,46 @@ const commitDeletesInBatches = async (refs) => {
  * Tek kullanıcılı bir defterde pratik bir senaryo değil.
  */
 const newRev = () => Date.now();
+
+/** `runTransaction` callback'ini durduran işaret; dışarıda `reason: 'stale'`e çevrilir. */
+class StaleWriteError extends Error {
+  constructor() {
+    super('stale');
+    this.name = 'StaleWriteError';
+  }
+}
+
+/**
+ * Borç dokümanı, guard'ın gördüğü halden beri değişmiş mi?
+ *
+ * Doküman silinmişse veya `rev` uyuşmuyorsa işlem durur. Eski kayıtlarda iki taraf da
+ * `undefined` olur ve eşit sayılır — bu bir koruma kaybı **değil**: başka bir sekmenin
+ * yaptığı her yazım artık damgalıyor, dolayısıyla `undefined !== <damga>` ile yakalanır.
+ */
+const assertUnchanged = (snap, expectedRev) => {
+  if (!snap.exists()) throw new StaleWriteError();
+  if ((snap.data()?.rev ?? undefined) !== (expectedRev ?? undefined)) throw new StaleWriteError();
+};
+
+/**
+ * Sürüm kontrollü yazım sarmalayıcısı.
+ *
+ * `writeBatch` ön koşulsuz yazıyor; guard'ın gördüğü durumla commit arasındaki pencereyi
+ * ancak transaction kapatabilir. **Bedeli:** `runTransaction` çevrimdışı çalışmaz
+ * (`persistentLocalCache` yalnızca `writeBatch`'i kuyruğa alır). Bu yüzden yalnızca nadir
+ * geri alma/iptal işlemleri bu yoldan geçer; günlük akış `writeBatch` kalır.
+ *
+ * @returns {Promise<{ok: boolean, reason?: 'stale'}>}
+ */
+const runGuarded = async (work) => {
+  try {
+    await runTransaction(db, work);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof StaleWriteError) return { ok: false, reason: 'stale' };
+    throw err;
+  }
+};
 
 const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, userId, dateOverride, meta = {}) => {
   const o = {
@@ -222,25 +263,24 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, userId
  * verir (fail-closed); bu fonksiyon yalnızca o guard'ın verdiği grubun loglarıyla çağrılır.
  *
  * @param {Array<object>} priceLogs — geri alınacak zam grubunun logları (`batch.logs`)
+ * @param {Object<string, number>} [expectedRevs] — `debtId → rev`; guard'ın gördüğü sürümler
+ * @returns {Promise<{ok: boolean, reason?: 'legacy' | 'stale'}>}
  */
-export const revertDrugPriceOperations = async (drugId, priceLogs, userId) => {
+export const revertDrugPriceOperations = async (drugId, priceLogs, userId, expectedRevs = {}) => {
   const logs = (priceLogs || []).filter(l => l?.debtId && l.maxPriceBefore != null);
-  if (!drugId || logs.length === 0) return false;
+  if (!drugId || logs.length === 0) return { ok: false, reason: 'legacy' };
 
-  const batch = writeBatch(db);
   const revertBatchId = doc(collection(db, 'transactions')).id;
   const revertOf = logs.find(l => l.batchId)?.batchId;
   const drugPriceBefore = logs.find(l => l.drugPriceBefore != null)?.drugPriceBefore;
+  const rev = newRev();
 
-  if (drugPriceBefore != null) {
-    batch.update(doc(db, 'drugs', drugId), { price: drugPriceBefore });
-  }
-
-  for (const log of logs) {
-    batch.update(doc(db, 'drugDebts', log.debtId), { maxPrice: log.maxPriceBefore });
-
-    const logRef = doc(collection(db, 'transactions'));
-    batch.set(logRef, createLog(
+  // Ref'ler ve loglar callback dışında üretilir (retry'da yeniden çalışır — bkz. `runGuarded`)
+  const entries = logs.map(log => ({
+    log,
+    ref: doc(db, 'drugDebts', log.debtId),
+    logRef: doc(collection(db, 'transactions')),
+    entry: createLog(
       log.debtId,
       'Fiyat Güncellemesi İptali',
       `Zam geri alındı. Birim fiyat ${fmtTL(log.maxPriceAfter)} -> ${fmtTL(log.maxPriceBefore)} olarak eski değerine döndürüldü.`,
@@ -255,11 +295,21 @@ export const revertDrugPriceOperations = async (drugId, priceLogs, userId) => {
       // `revertOf` hangi grubun etkisiz kaldığını söyler: tam geri alma sonrası borç zam
       // öncesi haline döndüğü için o giriş yeniden iptal edilebilir olmalı.
       { kind: 'price', batchId: revertBatchId, revertOf }
-    ));
-  }
+    )
+  }));
 
-  await batch.commit();
-  return true;
+  return runGuarded(async (tx) => {
+    const snaps = await Promise.all(entries.map(e => tx.get(e.ref)));
+    snaps.forEach((snap, i) => assertUnchanged(snap, expectedRevs[entries[i].log.debtId]));
+
+    if (drugPriceBefore != null) {
+      tx.update(doc(db, 'drugs', drugId), { price: drugPriceBefore });
+    }
+    entries.forEach(({ log, ref, logRef, entry }) => {
+      tx.update(ref, { maxPrice: log.maxPriceBefore, rev });
+      tx.set(logRef, entry);
+    });
+  });
 };
 
 export const toggleDebtLock = async (debt, userId) => {
@@ -466,26 +516,29 @@ export const cancelDebtItemOperations = async (customerId, item, reason, userId)
  * @param {Array<object>} items — `groupDebtsByBatch` grubundaki kalemler (`type: 'service'|'drug'`)
  * @param {string} batchId
  * @param {string} reason — kullanıcının yazdığı gerekçe (zorunlu)
- * @returns {boolean} iptal yazıldıysa true
+ * @param {Object<string, number>} [expectedRevs] — `debtId → rev`; guard'ın gördüğü sürümler.
+ *        Aradan başka bir cihazdan yazım geçmişse iptal yazılmaz.
+ * @returns {Promise<{ok: boolean, reason?: 'empty' | 'stale'}>}
  */
-export const cancelDebtTransactionOperations = async (customerId, items, batchId, reason, userId) => {
+export const cancelDebtTransactionOperations = async (customerId, items, batchId, reason, userId, expectedRevs = {}) => {
   const trimmedReason = (reason || '').trim();
-  if (!batchId || !trimmedReason) return false;
+  if (!batchId || !trimmedReason) return { ok: false, reason: 'empty' };
 
   const list = items || [];
-  const batch = writeBatch(db);
 
   let total = 0;
   for (const item of list) {
-    batch.delete(doc(db, item.type === 'service' ? 'serviceDebts' : 'drugDebts', item.id));
     total += item.type === 'service'
       ? (Number(item.amount) || 0)
       : (item.tlValue ?? item.qty * item.maxPrice);
   }
   total = Math.round(total * 100) / 100;
 
+  // Ref'ler ve log callback **dışında** üretilir: transaction retry'da callback yeniden
+  // çalışır, içeride üretilen doküman id'si ve `timestamp` her denemede değişirdi.
+  const refs = list.map(item => doc(db, item.type === 'service' ? 'serviceDebts' : 'drugDebts', item.id));
   const logRef = doc(collection(db, 'transactions'));
-  batch.set(logRef, createLog(
+  const log = createLog(
     batchId,
     'İşlem İptali',
     list.length > 0
@@ -497,10 +550,16 @@ export const cancelDebtTransactionOperations = async (customerId, items, batchId
     userId,
     undefined,
     { kind: 'cancel', flow: 'cancel', amount: total, batchId }
-  ));
+  );
 
-  await batch.commit();
-  return true;
+  return runGuarded(async (tx) => {
+    // Firestore kuralı: transaction'da TÜM okumalar TÜM yazmalardan önce gelmeli
+    const snaps = await Promise.all(refs.map(ref => tx.get(ref)));
+    snaps.forEach((snap, i) => assertUnchanged(snap, expectedRevs[list[i].id]));
+
+    refs.forEach(ref => tx.delete(ref));
+    tx.set(logRef, log);
+  });
 };
 
 /**
@@ -686,68 +745,91 @@ export const addDebtTransactionOperations = async (customerId, payload, userId) 
  *
  * @param {Array<object>} paymentLogs — geri alınacak ödeme grubunun logları (`batch.logs`)
  * @param {string} reason — kullanıcının yazdığı gerekçe (zorunlu)
+ * @param {Object<string, number>} [expectedRevs] — `debtId → rev`; yaşayan borçların guard
+ *        anındaki sürümleri. Süpürülmüş borçlar (`log.removed`) burada yer almaz.
+ * @returns {Promise<{ok: boolean, reason?: 'empty' | 'stale'}>}
  */
-export const revertPaymentOperations = async (customer, paymentLogs, reason, userId) => {
+export const revertPaymentOperations = async (customer, paymentLogs, reason, userId, expectedRevs = {}) => {
   const trimmedReason = (reason || '').trim();
   const logs = (paymentLogs || []).filter(l => l?.debtId && l.before);
   const balanceDelta = (paymentLogs || []).find(l => l?.balanceDelta != null)?.balanceDelta ?? 0;
 
-  if (!customer?.id || !trimmedReason || (logs.length === 0 && balanceDelta === 0)) return false;
+  if (!customer?.id || !trimmedReason || (logs.length === 0 && balanceDelta === 0)) {
+    return { ok: false, reason: 'empty' };
+  }
 
-  const batch = writeBatch(db);
   const revertBatchId = doc(collection(db, 'transactions')).id;
   const revertOf = (paymentLogs || []).find(l => l?.batchId)?.batchId;
   const rev = newRev();
 
-  logs.forEach((log) => {
+  // Ref'ler ve loglar callback dışında üretilir (retry'da yeniden çalışır — bkz. `runGuarded`)
+  const entries = logs.map((log) => {
     const isService = log.before.desc !== undefined;
-    const ref = doc(db, isService ? 'serviceDebts' : 'drugDebts', log.debtId);
-    // `before` `rev` tasimaz (bkz. `snapshotOf`); geri yuklenen borc taze damga alir
-    batch.set(ref, { ...log.before, rev });
-
     const restored = isService
       ? fmtTL(log.before.amount)
       : `${fmtQty(log.before.qty)} adet (${fmtTL(Math.round(log.before.qty * log.before.maxPrice * 100) / 100)})`;
 
-    const logRef = doc(collection(db, 'transactions'));
-    batch.set(logRef, createLog(
-      log.debtId,
-      'Tahsilat İptali',
-      `${fmtTL(log.deduct ?? 0)} tahsilat geri alındı. Borç ${restored} olarak eski haline döndü. Gerekçe: ${trimmedReason}`,
-      'warning',
-      customer.id,
-      log.drugId,
-      userId,
-      undefined,
-      // `balanceDelta` bilinçli olarak yazılmıyor: iptal logu yeni bir "geri alınabilir tahsilat"
-      // sayılmamalı. Guard onu yalnızca `not-latest` sinyali olarak görür.
-      { kind: 'payment', batchId: revertBatchId, revertOf }
-    ));
+    return {
+      log,
+      ref: doc(db, isService ? 'serviceDebts' : 'drugDebts', log.debtId),
+      logRef: doc(collection(db, 'transactions')),
+      entry: createLog(
+        log.debtId,
+        'Tahsilat İptali',
+        `${fmtTL(log.deduct ?? 0)} tahsilat geri alındı. Borç ${restored} olarak eski haline döndü. Gerekçe: ${trimmedReason}`,
+        'warning',
+        customer.id,
+        log.drugId,
+        userId,
+        undefined,
+        // `balanceDelta` bilinçli olarak yazılmıyor: iptal logu yeni bir "geri alınabilir tahsilat"
+        // sayılmamalı. Guard onu yalnızca `not-latest` sinyali olarak görür.
+        { kind: 'payment', batchId: revertBatchId, revertOf }
+      )
+    };
   });
 
-  if (balanceDelta !== 0) {
-    const logRef = doc(collection(db, 'transactions'));
-    batch.set(logRef, createLog(
-      revertBatchId,
-      'Tahsilat İptali',
-      balanceDelta > 0
-        ? `Avansa yazılan ${fmtTL(balanceDelta)} geri alındı. Gerekçe: ${trimmedReason}`
-        : `Kullanılan ${fmtTL(Math.abs(balanceDelta))} avans iade edildi. Gerekçe: ${trimmedReason}`,
-      'warning',
-      customer.id,
-      undefined,
-      userId,
-      undefined,
-      { kind: 'payment', batchId: revertBatchId, revertOf }
-    ));
-  }
+  const advanceLogRef = doc(collection(db, 'transactions'));
+  const advanceLog = balanceDelta === 0 ? null : createLog(
+    revertBatchId,
+    'Tahsilat İptali',
+    balanceDelta > 0
+      ? `Avansa yazılan ${fmtTL(balanceDelta)} geri alındı. Gerekçe: ${trimmedReason}`
+      : `Kullanılan ${fmtTL(Math.abs(balanceDelta))} avans iade edildi. Gerekçe: ${trimmedReason}`,
+    'warning',
+    customer.id,
+    undefined,
+    userId,
+    undefined,
+    { kind: 'payment', batchId: revertBatchId, revertOf }
+  );
 
-  batch.update(doc(db, 'customers', customer.id), {
-    balance: Math.round((customer.balance - balanceDelta) * 100) / 100
+  return runGuarded(async (tx) => {
+    const snaps = await Promise.all(entries.map(e => tx.get(e.ref)));
+
+    snaps.forEach((snap, i) => {
+      const { log } = entries[i];
+      // Tazelik ölçütü logun kendisinden gelir: tahsilat bu borcu süpürdüyse (`removed`)
+      // dokümanın **yok olması** beklenir — şimdi varsa biri onu yeniden yaratmış demektir.
+      if (log.removed) {
+        if (snap.exists()) throw new StaleWriteError();
+        return;
+      }
+      assertUnchanged(snap, expectedRevs[log.debtId]);
+    });
+
+    entries.forEach(({ log, ref, logRef, entry }) => {
+      // `before` `rev` taşımaz (bkz. `snapshotOf`); geri yüklenen borç taze damga alır
+      tx.set(ref, { ...log.before, rev });
+      tx.set(logRef, entry);
+    });
+
+    if (advanceLog) tx.set(advanceLogRef, advanceLog);
+
+    tx.update(doc(db, 'customers', customer.id), {
+      balance: Math.round((customer.balance - balanceDelta) * 100) / 100
+    });
   });
-
-  await batch.commit();
-  return true;
 };
 
 /**
