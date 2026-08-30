@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Download, FileSpreadsheet, CalendarRange, AlertTriangle } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, CalendarRange, AlertTriangle, Loader2 } from 'lucide-react';
 import {
   PERIOD_PRESETS,
   resolvePeriod,
@@ -7,7 +7,8 @@ import {
   periodBlockedMessage
 } from '../../utils/reporting';
 import { buildCustomerStatement } from '../../utils/statementExport';
-import { downloadTextFile } from '../../utils/download';
+import { buildStatementPdfModel } from '../../utils/statementPdfModel';
+import { downloadTextFile, downloadBlob } from '../../utils/download';
 import { todayLocal } from '../../utils/dates';
 import { useToast } from '../../hooks/useToast';
 
@@ -18,6 +19,11 @@ const labelCls = 'block text-xs font-bold text-slate-600 mb-1.5 uppercase tracki
 // "Tum Zamanlar" donemsel bir raporda anlamsiz olurdu. Bu secenek yalnizca disa aktarmaya ait.
 const ALL_ID = 'all';
 const EXPORT_PRESETS = [{ id: ALL_ID, label: 'Tüm İşlemler' }, ...PERIOD_PRESETS];
+
+const FORMATS = [
+  { id: 'csv', label: 'CSV (Excel)', icon: FileSpreadsheet, hint: 'Excel’de açılır, hesaplama ve filtreleme için' },
+  { id: 'pdf', label: 'PDF (Yazdır)', icon: FileText, hint: 'Müşteriye verilecek basılı ekstre' }
+];
 
 /**
  * Musteri ekstresini CSV olarak indirir.
@@ -33,6 +39,8 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
   const { toast } = useToast();
   const today = todayLocal();
   const [preset, setPreset] = useState(ALL_ID);
+  const [format, setFormat] = useState('csv');
+  const [busy, setBusy] = useState(false);
   const initial = resolvePeriod('thisMonth', null, null, today);
   const [customStart, setCustomStart] = useState(initial.start);
   const [customEnd, setCustomEnd] = useState(initial.end);
@@ -57,15 +65,37 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
     [validity.ok, customerName, logs, period, advanceBalance, today]
   );
 
-  const handleDownload = () => {
-    if (!statement) return;
+  const handleDownload = async () => {
+    if (!statement || busy) return;
     if (statement.rowCount === 0) {
       toast.warning('Bu aralıkta dışa aktarılacak kayıt yok.');
       return;
     }
-    downloadTextFile(statement.filename, statement.csv);
-    toast.success(`${statement.rowCount} satır indirildi.`);
-    onClose();
+
+    if (format === 'csv') {
+      downloadTextFile(statement.fileName('csv'), statement.toCsv());
+      toast.success(`${statement.rowCount} satır indirildi.`);
+      onClose();
+      return;
+    }
+
+    // PDF yolu: `@react-pdf/renderer` + gomulu yazi tipi ~500 KB. Lazy import ile ilk
+    // yuklenmeye hic girmiyor, yalnizca PDF secilince indiriliyor.
+    setBusy(true);
+    try {
+      const { renderStatementPdf } = await import('../../utils/statementPdfRenderer');
+      const blob = await renderStatementPdf(buildStatementPdfModel(statement, statement.meta));
+      downloadBlob(statement.fileName('pdf'), blob);
+      toast.success(`${statement.rowCount} satır indirildi.`);
+      onClose();
+    } catch (err) {
+      // En olasi sebep: cevrimdisiyken yazi tipi indirilemedi. Sessizce bos kutulu bir PDF
+      // uretmektense kullaniciya ne oldugunu soyluyoruz.
+      console.error('[VetCari] PDF üretilemedi:', err);
+      toast.error('PDF oluşturulamadı. Çevrimdışıysan bağlantını kontrol edip tekrar dene.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -83,6 +113,38 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
+          <div>
+            <span className={labelCls}>Biçim</span>
+            <div className="grid grid-cols-2 gap-2">
+              {FORMATS.map((f) => {
+                // Degisken olarak atanıyor, parametre destructure'i olarak degil: projede
+                // `eslint-plugin-react` yok, JSX'teki kullanim referans sayilmiyor ve
+                // `varsIgnorePattern: ^[A-Z_]` yalnizca degiskenlere uygulaniyor
+                const Icon = f.icon;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFormat(f.id)}
+                    aria-pressed={format === f.id}
+                    className={`text-left px-3.5 py-3 rounded-lg border-2 transition-colors ${
+                      format === f.id
+                        ? 'border-indigo-600 bg-indigo-50'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className={`flex items-center gap-2 font-semibold text-sm ${
+                      format === f.id ? 'text-indigo-700' : 'text-slate-700'
+                    }`}>
+                      <Icon className="w-4 h-4" /> {f.label}
+                    </span>
+                    <span className="block text-[11px] text-slate-400 mt-1 leading-snug">{f.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <div className="flex items-center gap-2 mb-3">
               <CalendarRange className="w-4 h-4 text-slate-500" />
@@ -146,7 +208,7 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
                   <strong>{statement.rowCount}</strong> satır dışa aktarılacak.
                 </p>
                 <p className="text-slate-500 text-xs">
-                  Dosya adı: <code className="text-slate-700">{statement.filename}</code>
+                  Dosya adı: <code className="text-slate-700">{statement.fileName(format)}</code>
                 </p>
               </div>
 
@@ -155,14 +217,17 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
                   <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                   <p className="text-amber-800">
                     {statement.unmeasured} kayıt tutar bilgisi tutulmadan yazılmış (dönemsel
-                    raporlama öncesi). Dosyada <strong>Ölçülemiyor</strong> olarak görünecek ve
-                    bakiyeye dahil edilmeyecek.
+                    raporlama öncesi). {format === 'csv'
+                      ? <>Dosyada <strong>Ölçülemiyor</strong> olarak görünecek ve bakiyeye dahil edilmeyecek.</>
+                      : <>Dosyada <strong>tutar kaydı yok</strong> notuyla görünecek ve bakiyeye dahil edilmeyecek.</>}
                   </p>
                 </div>
               )}
 
               <p className="text-xs text-slate-400 leading-relaxed">
-                Dosya noktalı virgülle ayrılmış, Excel'in Türkçe ayarıyla doğrudan açılır.
+                {format === 'csv'
+                  ? 'Dosya noktalı virgülle ayrılmış, Excel\'in Türkçe ayarıyla doğrudan açılır. '
+                  : 'A4 dikey, her sayfada sütun başlığı ve sayfa numarası ile. '}
                 Bakiye sütunu brüt borcu izler; avans ayrı bir hesapta tutulur.
               </p>
             </>
@@ -179,11 +244,15 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
           </button>
           <button
             type="button"
-            disabled={!validity.ok}
+            disabled={!validity.ok || busy}
             onClick={handleDownload}
             className="px-7 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <FileSpreadsheet className="w-5 h-5" /> CSV İndir
+            {busy
+              ? <><Loader2 className="w-5 h-5 animate-spin" /> PDF Hazırlanıyor…</>
+              : format === 'csv'
+                ? <><FileSpreadsheet className="w-5 h-5" /> CSV İndir</>
+                : <><FileText className="w-5 h-5" /> PDF İndir</>}
           </button>
         </div>
       </div>

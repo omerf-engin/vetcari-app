@@ -2,10 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ToastProvider } from '../../contexts/ToastContext';
 import StatementExportModal from './StatementExportModal';
-import { downloadTextFile } from '../../utils/download';
+import { downloadTextFile, downloadBlob } from '../../utils/download';
+import { renderStatementPdf } from '../../utils/statementPdfRenderer';
 
 // Indirme DOM'a ve `URL.createObjectURL`e dokunan tek yer; jsdom'da yok, mock'lanir.
-vi.mock('../../utils/download', () => ({ downloadTextFile: vi.fn() }));
+vi.mock('../../utils/download', () => ({ downloadTextFile: vi.fn(), downloadBlob: vi.fn() }));
+
+// PDF yolu lazy import ediyor; gercek @react-pdf/renderer testte calistirilmaz (agir ve
+// jsdom'da yazi tipi indiremez). Sozlesme: dogru model ve dosya adiyla cagrilmasi.
+vi.mock('../../utils/statementPdfRenderer', () => ({
+  renderStatementPdf: vi.fn(async () => new Blob(['%PDF-1.7'], { type: 'application/pdf' }))
+}));
 
 let seq = 0;
 const log = (over = {}) => ({
@@ -125,5 +132,79 @@ describe('StatementExportModal', () => {
 
     expect(downloadTextFile).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('StatementExportModal — PDF bicimi', () => {
+  const pickPdf = () => fireEvent.click(screen.getByRole('button', { name: /PDF \(Yazdır\)/ }));
+  const pdfButton = () => screen.getByRole('button', { name: /PDF İndir/ });
+
+  it('varsayilan bicim CSV', () => {
+    openModal();
+    expect(screen.getByRole('button', { name: /CSV \(Excel\)/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /CSV İndir/ })).toBeInTheDocument();
+  });
+
+  it('PDF secilince buton ve dosya adi uzantisi degisir', () => {
+    openModal();
+    pickPdf();
+
+    expect(screen.getByRole('button', { name: /PDF \(Yazdır\)/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(pdfButton()).toBeInTheDocument();
+    expect(screen.getByText(/ali-veli-ekstre-.*\.pdf/)).toBeInTheDocument();
+  });
+
+  it('PDF indirmede renderer cagrilir ve blob .pdf adiyla iner', async () => {
+    const { onClose } = openModal();
+    pickPdf();
+    fireEvent.click(pdfButton());
+
+    await vi.waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+
+    expect(renderStatementPdf).toHaveBeenCalledTimes(1);
+    expect(downloadTextFile).not.toHaveBeenCalled();
+    const [filename, blob] = downloadBlob.mock.calls[0];
+    expect(filename).toMatch(/^ali-veli-ekstre-\d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(blob).toBeInstanceOf(Blob);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('renderer modeli baslik ve satirlarla alir', async () => {
+    openModal({ logs: [log({ message: 'Muayene borcu' })] });
+    pickPdf();
+    fireEvent.click(pdfButton());
+
+    await vi.waitFor(() => expect(renderStatementPdf).toHaveBeenCalled());
+
+    const model = renderStatementPdf.mock.calls[0][0];
+    expect(model.header.customerName).toBe('Ali Veli');
+    expect(model.tableRows).toHaveLength(1);
+    expect(model.tableRows[0]).toMatchObject({ title: 'Borç Açıldı', debit: '500,00 ₺' });
+  });
+
+  it('bos ekstrede PDF de uretilmez', () => {
+    openModal({ logs: [] });
+    pickPdf();
+    fireEvent.click(pdfButton());
+
+    expect(renderStatementPdf).not.toHaveBeenCalled();
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(screen.getByText('Bu aralıkta dışa aktarılacak kayıt yok.')).toBeInTheDocument();
+  });
+
+  // Cevrimdisiyken yazi tipi indirilemez. Sessizce bos kutulu bir PDF uretmektense
+  // kullaniciya ne oldugunu soyluyoruz.
+  it('renderer hata verirse indirme olmaz ve hata toast gosterilir', async () => {
+    renderStatementPdf.mockRejectedValueOnce(new Error('font indirilemedi'));
+    const { onClose } = openModal();
+    pickPdf();
+    fireEvent.click(pdfButton());
+
+    await vi.waitFor(() =>
+      expect(screen.getByText(/PDF oluşturulamadı/)).toBeInTheDocument()
+    );
+
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
