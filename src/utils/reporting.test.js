@@ -3,7 +3,10 @@ import {
   resolvePeriod,
   validatePeriod,
   periodBlockedMessage,
-  summarizePeriod
+  summarizePeriod,
+  classifyLog,
+  buildExclusions,
+  FLOW_RECEIVABLE_SIGN
 } from './reporting';
 
 const log = (over = {}) => ({
@@ -294,5 +297,103 @@ describe('summarizePeriod — alacak degisimi', () => {
     expect(pick(s, ['collected', 'debtOpened', 'receivableChange', 'unmeasured', 'movementCount']))
       .toEqual({ collected: 0, debtOpened: 0, receivableChange: 0, unmeasured: 0, movementCount: 0 });
     expect(summarizePeriod(null, period).collected).toBe(0);
+  });
+});
+
+describe('classifyLog', () => {
+  const none = { cancelledBatches: new Set(), neutralized: new Set() };
+
+  it('normal para hareketi sayilir ve yonunu haritadan alir', () => {
+    expect(classifyLog(log({ flow: 'debt', amount: 100 }), none))
+      .toEqual({ status: 'counted', flow: 'debt', sign: 1, amount: 100 });
+  });
+
+  it('geri alma logu (revertOf) olmamis sayilir', () => {
+    expect(classifyLog(log({ revertOf: 'b1' }), none).status).toBe('reverted');
+  });
+
+  it('etkisiz kilinmis grubun uyesi olmamis sayilir', () => {
+    const ex = { ...none, neutralized: new Set(['b1']) };
+    expect(classifyLog(log({ flow: 'collect', amount: 50, batchId: 'b1' }), ex).status)
+      .toBe('reverted');
+  });
+
+  it('iptal edilmis islemin uyesi hic acilmamis sayilir', () => {
+    const ex = { ...none, cancelledBatches: new Set(['b1']) };
+    expect(classifyLog(log({ flow: 'debt', amount: 50, batchId: 'b1' }), ex).status)
+      .toBe('cancelled');
+  });
+
+  it('fiyat kilidi bilgi satiridir', () => {
+    expect(classifyLog(log({ kind: 'lock' }), none).status).toBe('info');
+  });
+
+  it('flow tasimayan eski kayit olculemez', () => {
+    expect(classifyLog(log({ amount: 100 }), none).status).toBe('unmeasured');
+  });
+
+  it('taninmayan flow sessizce sayilmaz — fail-closed', () => {
+    const r = classifyLog(log({ flow: 'yeniAkis', amount: 100 }), none);
+    expect(r).toMatchObject({ status: 'unmeasured', flow: 'yeniAkis', sign: 0 });
+  });
+
+  it('avans alacagi etkilemez ama yine de sayilan bir harekettir', () => {
+    expect(classifyLog(log({ flow: 'advance', balanceDelta: 100, amount: 100 }), none))
+      .toMatchObject({ status: 'counted', sign: 0 });
+  });
+
+  // `statementExport` bakiyeyi yururken yalnizca `counted` satirlari topluyor. Bu invariant
+  // olmasa "sayilmayan ama yonu olan" bir durum bakiyeyi sessizce kaydirirdi.
+  it.each(['reverted', 'cancelled', 'info', 'unmeasured'])(
+    '%s durumundaki satirin yonu her zaman sifir',
+    (status) => {
+      const samples = {
+        reverted: log({ flow: 'debt', amount: 100, revertOf: 'x' }),
+        cancelled: log({ flow: 'debt', amount: 100, batchId: 'b1' }),
+        info: log({ flow: 'debt', amount: 100, kind: 'lock' }),
+        unmeasured: log({ amount: 100 })
+      };
+      const ex = { ...none, cancelledBatches: new Set(['b1']) };
+      const r = classifyLog(samples[status], ex);
+      expect(r.status).toBe(status);
+      expect(r.sign).toBe(0);
+    }
+  );
+
+  it('bos girdide patlamaz', () => {
+    expect(classifyLog(null, none).status).toBe('unmeasured');
+    expect(classifyLog(log({ flow: 'debt', amount: 1 }), undefined).status).toBe('counted');
+  });
+});
+
+describe('buildExclusions', () => {
+  it('iptal ve geri alma kumelerini birlikte cikarir', () => {
+    const ex = buildExclusions([
+      log({ kind: 'cancel', batchId: 'c1' }),
+      log({ revertOf: 'p1' })
+    ]);
+    expect([...ex.cancelledBatches]).toEqual(['c1']);
+    expect([...ex.neutralized]).toEqual(['p1']);
+  });
+});
+
+describe('FLOW_RECEIVABLE_SIGN — switch ile dikis', () => {
+  const period = { start: '2026-08-01', end: '2026-08-31' };
+
+  // Haritadaki her akisin `summarizePeriod` icinde gercekten bir kovasi olmali. Yeni bir
+  // akis eklenip switch unutulursa `default` dali onu `unmeasured` yapar ve bu test isirir.
+  it.each(Object.entries(FLOW_RECEIVABLE_SIGN))(
+    'flow %s: alacak degisimi isaret x tutar',
+    (flow, sign) => {
+      const s = summarizePeriod([log({ flow, amount: 200, balanceDelta: 200 })], period);
+      expect(s.receivableChange).toBe(200 * sign);
+      expect(s.unmeasured).toBe(0);
+      expect(s.movementCount).toBe(1);
+    }
+  );
+
+  it('haritada olmayan akis toplamlara sizmaz', () => {
+    const s = summarizePeriod([log({ flow: 'bilinmeyen', amount: 200 })], period);
+    expect(s).toMatchObject({ receivableChange: 0, unmeasured: 1, movementCount: 0 });
   });
 });

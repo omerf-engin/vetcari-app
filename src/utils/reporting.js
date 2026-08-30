@@ -82,6 +82,73 @@ export const periodBlockedMessage = (reason) => {
   }
 };
 
+/**
+ * Bir `flow` degerinin **alacak** (musteriden olan brut borc) uzerindeki yonu.
+ *
+ * `0` = alacagi hic etkilemez. Avans boyle: musteri para yatirdiginda brut borc degismez,
+ * ayri bir hesapta (`customer.balance`) durur. Yonu burada tutmanin sebebi tek kaynak
+ * olmasi — `summarizePeriod` de, ekstre disa aktarma da (`utils/statementExport.js`)
+ * bu haritadan okur. Iki yerde ayri isaret mantigi olsaydi ekrandaki "Alacak Degisimi"
+ * ile CSV'nin bakiye sutunu sessizce ayrisabilirdi.
+ */
+export const FLOW_RECEIVABLE_SIGN = {
+  debt: +1,
+  inflation: +1,
+  priceUp: +1,
+  collect: -1,
+  writeoff: -1,
+  return: -1,
+  cancel: -1,
+  advance: 0
+};
+
+/**
+ * Eleme icin gereken grup kumelerini bir kez hesaplar.
+ * Cagiran **tum** loglari vermeli — iptal/geri alma logu donem disinda kalsa bile
+ * donem icindeki kardeslerini elemeli.
+ */
+export const buildExclusions = (allLogs) => ({
+  cancelledBatches: cancelledBatchIds(allLogs || []),
+  neutralized: neutralizedBatchIds(allLogs || [])
+});
+
+/**
+ * Tek bir logu siniflandirir: doneme girer mi, alacagi hangi yonde etkiler?
+ *
+ * Eleme sirasi burada, **tek yerde** durur. `summarizePeriod` sayilmayanlari atlar;
+ * ekstre disa aktarma ayni loglari `status` ile isaretleyip gosterir — bu yuzden eleme
+ * "atla" degil "etiketle" seklinde ifade edildi.
+ *
+ * `status` degerleri:
+ *   `counted`     para hareketi, toplamlara girer
+ *   `reverted`    geri alma logu ya da etkisiz kilinmis grubun uyesi — olmamis sayilir
+ *   `cancelled`   iptal edilmis **islemin** uyesi — hic acilmamis sayilir
+ *   `info`        fiyat kilidi; para hareketi degil
+ *   `unmeasured`  `flow` tasimayan (TASK-020 oncesi) ya da taninmayan `flow` — fail-closed
+ *
+ * @param {object} log
+ * @param {{cancelledBatches: Set<string>, neutralized: Set<string>}} exclusions
+ * @returns {{status: string, flow: string|null, sign: number, amount: number}}
+ */
+export const classifyLog = (log, exclusions) => {
+  const { cancelledBatches, neutralized } = exclusions || {};
+  const amount = Number(log?.amount) || 0;
+  const out = (status, flow = null, sign = 0) => ({ status, flow, sign, amount });
+
+  if (log?.revertOf) return out('reverted');
+  if (log?.batchId && neutralized?.has(log.batchId)) return out('reverted');
+  if (log?.batchId && cancelledBatches?.has(log.batchId)) return out('cancelled');
+  if (log?.kind === 'lock') return out('info');
+  if (!log?.flow) return out('unmeasured');
+
+  const sign = FLOW_RECEIVABLE_SIGN[log.flow];
+  // Taninmayan bir `flow` sessizce toplanmaz — `0` gecerli bir yon oldugu icin
+  // varlik kontrolu `=== undefined` ile yapilir, dogruluk (truthiness) ile degil.
+  if (sign === undefined) return out('unmeasured', log.flow);
+
+  return out('counted', log.flow, sign);
+};
+
 const emptySummary = () => ({
   collected: 0,
   debtOpened: 0,
@@ -125,8 +192,7 @@ export const summarizePeriod = (transactions, period) => {
   if (!start || !end || start > end) return sum;
 
   const all = transactions || [];
-  const cancelledBatches = cancelledBatchIds(all);
-  const neutralized = neutralizedBatchIds(all);
+  const exclusions = buildExclusions(all);
 
   // Isaretli avans hareketi ayri tutulur: `advanceIn` gorunume ait (iade fazlasini da
   // icerir), nakit hesabina yalnizca odeme yolundaki net delta girer.
@@ -136,18 +202,14 @@ export const summarizePeriod = (transactions, period) => {
   for (const t of all) {
     if (!t?.date || t.date < start || t.date > end) continue;
 
-    if (t.revertOf) continue;
-    if (t.batchId && neutralized.has(t.batchId)) continue;
-    if (t.batchId && cancelledBatches.has(t.batchId)) continue;
-    if (t.kind === 'lock') continue;
-
-    if (!t.flow) {
+    const { status, sign, amount } = classifyLog(t, exclusions);
+    if (status === 'unmeasured') {
       sum.unmeasured++;
       continue;
     }
+    if (status !== 'counted') continue;
 
     sum.movementCount++;
-    const amount = Number(t.amount) || 0;
 
     switch (t.flow) {
       case 'debt':
@@ -181,20 +243,25 @@ export const summarizePeriod = (transactions, period) => {
         break;
       }
       default:
-        // Taninmayan bir `flow` sessizce toplanmaz — fail-closed
+        // `FLOW_RECEIVABLE_SIGN` taniyip burada kovasi olmayan bir `flow` — fail-closed.
+        // Yeni bir akis eklenip bu switch unutulursa toplamlara sizmak yerine
+        // `unmeasured` olarak kullaniciya bildirilir.
         sum.movementCount--;
         sum.unmeasured++;
+        continue;
     }
+
+    // Alacak degisimi kova toplamlarindan yeniden turetilmez; her satirin yonu
+    // `FLOW_RECEIVABLE_SIGN`'dan okunur. Boylece isaret mantigi tek kaynakta kalir ve
+    // CSV ekstresinin bakiye sutunuyla ayrisamaz.
+    sum.receivableChange += sign * amount;
   }
 
   // Kasaya giren gercek nakit = borclara dagitilan + avansa yazilan − avanstan kullanilan.
   // (`applyPaymentOperations`: receivedAmount = totalDeducted + balanceDelta)
   sum.collected = round2(collect + advanceDelta);
 
-  sum.receivableChange = round2(
-    sum.debtOpened + sum.inflation + sum.priceUp - collect - sum.writeoff - sum.returned - sum.cancelled
-  );
-
+  sum.receivableChange = round2(sum.receivableChange);
   sum.debtOpened = round2(sum.debtOpened);
   sum.inflation = round2(sum.inflation);
   sum.priceUp = round2(sum.priceUp);
