@@ -1526,9 +1526,9 @@ yapilmadi. Ihtiyac olursa ayri bir task olarak ele alinabilir.
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | Faz 1 (CSV) DONE — Faz 2 (PDF) TODO |
 | **Priority** | P2 |
-| **Depends on** | TASK-019 |
+| **Depends on** | TASK-019, TASK-020 |
 
 **Deliverables:**
 - CustomerDetail sidebar'a "Ekstreyi Indir" butonu (PDF ve CSV secenekleri)
@@ -1545,6 +1545,66 @@ yapilmadi. Ihtiyac olursa ayri bir task olarak ele alinabilir.
 
 **Notes:**
 `@react-pdf/renderer` bundle boyutunu ~200 KB arttirir; lazy import ile ilk yuklenme etkisi en aza indirilmeli. CSV export harici kutuphane gerektirmez; oncelikle CSV implemente edilebilir.
+
+---
+
+### Faz 1 — CSV (DONE, 2026-08-30)
+
+**Ne yapildi:**
+- `CustomerDetail` sidebar'ina "Ekstre" karti + `StatementExportModal` (donem secimi, canli
+  hareket sayisi ve dosya adi onizlemesi, olculemeyen kayit uyarisi)
+- `utils/csv.js` — kacis, tr-TR sayi bicimi, UTF-8 BOM, formul enjeksiyonu korumasi
+- `utils/statementExport.js` — cari ekstre satirlari, devir, bakiye yurutme, dosya adi
+- `utils/download.js` — `Blob` + gizli `<a download>`; DOM'a dokunan tek yer
+- `utils/formatters.js` → `fmtDateShort` (`YYYY-MM-DD` → `GG.AA.YYYY`)
+- `utils/reporting.js` → `classifyLog`, `buildExclusions`, `FLOW_RECEIVABLE_SIGN` disa acildi;
+  `summarizePeriod` bunlari kullanacak sekilde refaktor edildi (davranis degismedi)
+- Test 358 → 457 (`csv.test.js` 24, `statementExport.test.js` 41, `reporting.test.js` +23,
+  `StatementExportModal.test.jsx` 10)
+
+**Kabul kriterlerinden KASITLI SAPMALAR:**
+
+1. **8 sutunlu cari ekstre**, kriterdeki 4 sutun (`Tarih, Tur, Aciklama, Tutar`) yerine:
+   `Tarih; Tur; Kaynak; Aciklama; Borc; Alacak; Bakiye; Durum`. Klasik Turk cari ekstre duzeni;
+   her satirda yuruyen bakiye oldugu icin dosya muhasebeciye/musteriye dogrudan verilebiliyor.
+   Tek isaretli "Tutar" sutunu toplanabilir ama bakiye gostermez. Kullanici karari.
+2. **Basliksiz saf tablo degil:** ustte musteri/donem/olusturma blogu, altta TOPLAMLAR blogu.
+   Toplamlar `summarizePeriod`'dan gelir ve etiketleri ReportsView'daki "Hareket Dokumu" ile
+   birebir aynidir — ayni sayinin ekranda ve dosyada farkli adla gorunmesi tereddut yaratirdi.
+3. **Iptal/geri alma satirlari cikarilmadi**, `Durum` sutunuyla isaretlendi. Ekrandaki Genel
+   Ekstre ile satir satir ayni kalsin diye; cikarilsaydi musteri "bu kayit nerede" diye sorardi.
+4. **Bakiye brut borcu izler, avans ayri tutulur.** `FLOW_RECEIVABLE_SIGN.advance = 0` oldugu
+   icin avans satirlarinin para sutunlari bos kalir (`Durum` = `Avans hareketi`) ve tutar
+   TOPLAMLAR'da ayri satirdadir. Alternatif — avansi Alacak'a yazip bakiyeyi net pozisyona
+   cevirmek — `summarizePeriod`'un `receivableChange`'inden ayrisirdi; tek aritmetik korundu.
+5. **`PERIOD_PRESETS`'e `all` eklenmedi.** "Tum Islemler" yalnizca disa aktarma modalinda var;
+   ReportsView ayni listeyi map'liyor ve donemsel raporda "Tum Zamanlar" anlamsiz olurdu.
+6. **`StatementExportModal` `useToast()`'u dogrudan kullanir** — projedeki diger modallar toast'i
+   callback ile App'e biraktigi icin bu bir sapma. Indirme tamamen istemci tarafi oldugu ve veri
+   katmanina hic dokunmadigi icin App'e plumbing yapmak karsiliksiz olurdu; `ToastProvider`
+   zaten tum uygulamayi sariyor.
+
+**Dogrulama (gercek Firestore, ZZTEST musterisi):**
+1.234,56 ₺ borc + 500,25 ₺ tahsilat yazildi. Log `message` metni `1.234,6 ₺` / `500,3 ₺` derken
+CSV `1234,56` / `500,25` yazdi — tutarin `message`'dan okunamayacaginin canli kaniti. Bakiye
+1234,56 → 734,31 yurudu ve `Alacak degisimi` ile birebir tuttu. Kalem iptali sonrasi
+1234,56 → 734,31 → 0,00; `Acilan borc` 1234,56 ve `Iptal edilen borc kalemi` 734,31 olarak
+ayri ayri sayildi (islem iptali silerdi, kalem iptali azaltir kurali). Aciklamada gecen `;`
+karakteri dogru tirnaklandi, sutunlar kaymadi. Ilk 3 bayt `EF BB BF`.
+
+**Bilinen sinir:** kullanicinin mevcut verisindeki loglarin buyuk kismi TASK-020 oncesi yazildi
+ve `flow` tasimiyor. O kayitlar CSV'de `Olculemiyor` olarak gorunur, para sutunlari bos kalir ve
+bakiyeye girmez (fail-closed). Tarayicida bakilan bir musteride 30 kaydin 30'u da olculemezdi.
+Ekstre bu yuzden **ileriye donuk** dogrudur; gecmis veri icin tutar bilgisi yalnizca aciklama
+metninde kalir. Toplu geri doldurma ayri bir task olarak ele alinabilir (TASK-020 notlarindaki
+gerekce ile: `fmtTL` 1 ondalik yazdigi icin metinden geri okuma kayipli).
+
+### Faz 2 — PDF (TODO)
+
+CSV altyapisi hazir: `buildStatementRows` satirlari ve `summarizePeriod` toplamlari PDF'te
+aynen kullanilabilir, yalnizca sunum katmani yazilacak. `@react-pdf/renderer` lazy import ile
+eklenmeli. `StatementExportModal`'a format secici (CSV/PDF) o zaman eklenir — su an devre disi
+bir kontrol gostermek yerine hic gosterilmiyor.
 
 ---
 

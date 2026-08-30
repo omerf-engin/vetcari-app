@@ -1,7 +1,7 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 30 Agustos 2026 (TASK-020 donemsel raporlama + TASK-033 surum kontrolu
-> tamamlandi; test 358). Kalan: TASK-021 (CSV/PDF export), TASK-022 (stok), TASK-023 (TypeScript).
+> Son guncelleme: 30 Agustos 2026 (TASK-021 Faz 1 — CSV ekstre disa aktarma tamamlandi;
+> test 457). Kalan: TASK-021 Faz 2 (PDF), TASK-022 (stok), TASK-023 (TypeScript).
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -272,13 +272,20 @@ canli kurallar su an ayrisik durumda.
 - [x] Loglara `flow` + `amount` yapisal para alanlari — oncesinde tutar yalnizca `message`
       metnindeydi, dolayisiyla hicbir donemsel toplam hesaplanamazdi (TASK-020)
 - [x] Test 255 → 336
-- [ ] PDF ve CSV ekstre disa aktarma (musteriye yazili hesap ozeti) — CSV kutuphanesiz yapilabilir
+- [x] CSV ekstre disa aktarma: klasik cari ekstre duzeni (Borc/Alacak/Bakiye), donem secimi,
+      Excel tr-TR uyumu (`;` + BOM). Harici kutuphane yok (TASK-021 Faz 1, P2)
+- [x] Rapor ile ekstre ayni siniflandiriciyi paylasir (`classifyLog`, `FLOW_RECEIVABLE_SIGN`) —
+      CSV'nin bakiye sutunu ile ekrandaki "Alacak Degisimi" ayrisamaz (TASK-021 Faz 1)
+- [x] Test 358 → 457
+- [ ] PDF ekstre (`@react-pdf/renderer`, lazy import) — TASK-021 Faz 2
 - [ ] Ilac stok takibi (otomatik stok dusumu, kritik esik uyarisi)
 
 > Ilgili tasklar: TASK-020, TASK-021, TASK-022
 >
-> **Rapor ileriye donuk dogrudur:** `flow`/`amount` TASK-020 ile eklendi; oncesinde yazilmis
-> kayitlar olculemez, arayuzde sayilarak bildirilir (fail-closed).
+> **Rapor ve ekstre ileriye donuk dogrudur:** `flow`/`amount` TASK-020 ile eklendi; oncesinde
+> yazilmis kayitlar olculemez, arayuzde ve CSV'de sayilarak bildirilir (fail-closed). Mevcut
+> veride bu kayitlarin orani yuksek: tarayicida bakilan bir musteride 30 kaydin 30'u da
+> olculemezdi — CSV'de `Olculemiyor` cikar ve bakiyeye girmez.
 
 ---
 

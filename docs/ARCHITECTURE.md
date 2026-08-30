@@ -214,13 +214,35 @@ Para hareketi yaratan her log iki alan taşır:
 `utils/reporting.js` saf fonksiyonlardan oluşur, Firebase'e dokunmaz. `ReportsView` bunu `useFirestore`'un zaten bellekte tuttuğu `transactions` dizisi üzerinde çalıştırır — ayrı bir sorgu yoktur (bkz. TASK-020'deki gerekçe).
 
 - **Dönem alanı `date`, `timestamp` değil.** `date` olayın tarihidir; geçmiş tarihli bir borç girişi böylece gerçekten ait olduğu döneme düşer. Sınırlar dahildir (`>= start && <= end`), `YYYY-MM-DD` string karşılaştırmasıyla
-- **Eleme sırası:** (1) `revertOf` taşıyan loglar ve `neutralizedBatchIds`'in işaretlediği gruplar, (2) `cancelledBatchIds`'teki iptal edilmiş **işlemlerin** tüm logları, (3) `kind: 'lock'`
+- **Eleme sırası:** (1) `revertOf` taşıyan loglar ve `neutralizedBatchIds`'in işaretlediği gruplar, (2) `cancelledBatchIds`'teki iptal edilmiş **işlemlerin** tüm logları, (3) `kind: 'lock'`. Bu sıra `classifyLog` içinde **tek yerde** durur; `summarizePeriod` ve CSV ekstre dışa aktarma aynı fonksiyonu çağırır (bkz. "Ekstre Dışa Aktarma")
 - **İşlem iptali siler, kalem iptali azaltır.** İşlem iptali guard'lı ve "bu hiç olmadı" demek → girişin bütün logları kendi döneminden silinir; iptal logunun kendisi de elenir (aynı `batchId`'yi taşıdığı için), aksi halde borç hem açılmamış hem silinmiş sayılıp iki kez düşerdi. Kalem iptali guard'sızdır ve kısmen ödenmiş gerçek bir borçta da kullanılır → giriş sayılır, iptal **azalış** olarak toplanır. Ayrım bedavaya gelir: işlem iptali `batchId` taşır, kalem iptali taşımaz
 - **Nakit hesabı:** `collected = Σ(collect) + net balanceDelta`. `applyPaymentOperations` içinde `receivedAmount = totalDeducted + balanceDelta` olduğu için bu tam olarak müşteriden alınan parayı verir. `balanceDelta` ödeme grubundaki **her** loga kopyalanır, ama yalnızca `flow: 'advance'` logundan okunur — grup başına bir tane olduğu için ayrıca tekilleştirme gerekmez
 - **Fail-closed:** `flow` taşımayan (ve `lock` olmayan) her log `unmeasured` sayılır, hiçbir toplama katılmaz ve arayüzde uyarı olarak gösterilir. Tanınmayan bir `flow` değeri de aynı kovaya düşer. Rapor bu yüzden **ileriye dönük** doğrudur; TASK-020 öncesi kayıtlar ölçülemez
 - **Alacak değişimi üç durumludur:** artış, azalış ve **değişim yok**. Hareket olup net etkisi sıfır olan bir dönem (açılan borcun aynı dönemde iptal edilmesi) azalış gibi okunmamalıdır
+- **Yön tek kaynaktan gelir:** `FLOW_RECEIVABLE_SIGN` her `flow` değerinin alacak üzerindeki işaretini tutar (`advance` → `0`, çünkü avans brüt borcu değiştirmez, ayrı bir hesapta durur). `receivableChange` kova toplamlarından yeniden türetilmez, döngü içinde `sign × amount` ile birikir. Böylece haritayla formül ayrışamaz; `reporting.test.js` her `flow` için `receivableChange === sign × amount` olduğunu ayrıca sınar
 
 **Yazım yolu ↔ rapor dikişi.** `firestoreOperations` `flow` dizgilerini yazar, `reporting` okur; iki taraf da kendi test dosyasında kendi dizge kopyasıyla sınanır, dolayısıyla yarım kalmış bir yeniden adlandırma **iki paketi de geçerdi**. `utils/reporting.integration.test.js` gerçek yazım yolunu çalıştırıp ürettiği logları doğrudan `summarizePeriod`'a verir ve `unmeasured === 0` bekler — yeni bir hareket türü eklenip raporda karşılığı unutulursa orası kırılır. Yeni bir `flow` değeri eklerken bu dosyaya da bir senaryo eklenmeli.
+
+### Ekstre Dışa Aktarma (CSV)
+
+`CustomerDetail` sidebar'ındaki **Ekstreyi İndir** → `StatementExportModal` → `utils/statementExport.js`. Çıktı klasik Türk cari ekstresidir: `Tarih; Tür; Kaynak; Açıklama; Borç; Alacak; Bakiye; Durum`.
+
+- **Girdi ekrandakiyle aynıdır.** Modal, `CustomerDetail`'in Genel Ekstre için zaten hesapladığı `customerAggregateLogs` dizisini alır (`decorateLogs` uygulanmış, `sourceLabel` taşıyan). Dosya ile ekran satır satır ayrışamaz; ekranın bilinen sınırı (dokümanı kalmamış ve `customerId` taşımayan eski loglar) aynen devralınır
+- **Tutar yalnızca `flow` + `amount`'tan okunur**, `message` metninden asla. Metin `fmtTL` ile yazılıyor ve en fazla 1 ondalık gösteriyor: gerçek veride 1234,56 ₺'lik bir borcun açıklaması `1.234,6 ₺` der, Borç sütunu ise `1234,56` yazar. Metinden geri okumak kuruşu kaybederdi
+- **Sıralama kronolojiktir (eski → yeni)**, ekranın tersi. Yürüyen bakiye ancak bu sırada anlamlıdır
+- **Devir satırı:** dönem filtresi varsa `start`'tan önceki tüm hareketlerin alacak etkisi ilk satır olarak yazılır. Bu olmadan filtreli bir ekstrenin bakiyesi sıfırdan başlar ve gerçek borcu göstermez
+- **Bakiye brüt alacağı izler, avans ayrı hesaptır.** `flow: 'advance'` satırlarının işareti `0` olduğu için para sütunları boş kalır, `Durum` = `Avans hareketi` yazar ve tutar TOPLAMLAR bloğunda ayrı satırdadır. Başlık bloğu bu ayrımı okuyucuya söyler
+- **Sayılmayan satırlar gizlenmez, işaretlenir:** iptal edilmiş işlemin logları `İptal edildi`, geri alınmış grup `Geri alındı`, fiyat kilidi `Bilgi`, `flow` taşımayan eski kayıt `Ölçülemiyor`. Hepsinde Borç/Alacak boştur ve bakiye oynamaz — böylece her satırda "önceki bakiye + Borç − Alacak = Bakiye" aritmetiği tutar
+- **Dikiş:** son satırın bakiyesi her zaman `devir + summarizePeriod(...).receivableChange`'e eşittir. İki taraf `classifyLog` ve `FLOW_RECEIVABLE_SIGN`'ı paylaştığı için bu yapısal olarak garanti; `statementExport.test.js` yine de doğrudan sınar
+
+**Excel/tr-TR biçimi (`utils/csv.js`).** İkisi de görünmez, biri eksik olursa dosya kullanıcının elinde bozuk çıkar:
+
+- **Ayırıcı `;`** — tr-TR'de ondalık ayırıcı virgül olduğu için Excel'in liste ayırıcısı noktalı virgüldür. Virgülle yazılan dosya tüm satırı tek hücreye düşürür
+- **UTF-8 BOM** — BOM yoksa Excel dosyayı ANSI sanır, `ş ğ İ ı ö ü ç` bozulur. Sabit `String.fromCharCode(0xFEFF)` ile üretilir; kaynakta düz karakter olarak yazılsaydı kod incelemesinde görünmez olur ve bir formatlayıcı tarafından sessizce silinebilirdi
+- **Tutarlar `csvNumber` ile** — `1234,50`, binlik ayırıcısız, para simgesiz. `fmtTL` burada kullanılamaz: hem ` ₺` ekler hem 1 ondalığa yuvarlar, ikisi de hücreyi metne çevirir
+- İptal gerekçesi serbest metin olduğu için `=`, `+`, `@` ile başlayan hücrelerin başına apostrof konur (Excel formül enjeksiyonu)
+
+`utils/download.js` DOM'a ve `URL.createObjectURL`'e dokunan tek yerdir; ekstre üretimi saf metin döndürdüğü için asıl mantık jsdom stub'ı olmadan test edilir.
 
 ### Ekstre Sıralama Kuralı
 
@@ -331,7 +353,8 @@ vetcari-app/
 │   │   │   ├── HistoryModal.jsx     # Borç işlem geçmişi
 │   │   │   ├── BatchReturnModal.jsx # Kalem seçimli toplu iade
 │   │   │   ├── CancelBatchModal.jsx # İşlem / kalem iptali (gerekçe zorunlu)
-│   │   │   └── RevertPaymentModal.jsx # Son tahsilatı geri alma (gerekçe zorunlu)
+│   │   │   ├── RevertPaymentModal.jsx # Son tahsilatı geri alma (gerekçe zorunlu)
+│   │   │   └── StatementExportModal.jsx # CSV ekstre indirme (dönem seçimi + önizleme)
 │   │   └── ui/
 │   │       ├── ConfirmModal.jsx
 │   │       ├── Toast.jsx
@@ -370,9 +393,14 @@ vetcari-app/
 │   │   ├── paymentRevert.test.js
 │   │   ├── debtGrouping.js          # groupDebtsByBatch (işlem bazlı gruplama)
 │   │   ├── debtGrouping.test.js
-│   │   ├── reporting.js             # Dönemsel toplama (flow/amount tabanlı, fail-closed)
+│   │   ├── reporting.js             # Dönemsel toplama + classifyLog / FLOW_RECEIVABLE_SIGN
 │   │   ├── reporting.test.js
-│   │   └── reporting.integration.test.js  # Yazım yolu → rapor dikişi (unmeasured === 0)
+│   │   ├── reporting.integration.test.js  # Yazım yolu → rapor dikişi (unmeasured === 0)
+│   │   ├── csv.js                   # CSV kaçış + tr-TR sayı + BOM (Excel uyumu)
+│   │   ├── csv.test.js
+│   │   ├── statementExport.js       # Cari ekstre satırları, bakiye yürüyüşü, dosya adı
+│   │   ├── statementExport.test.js  # Bakiye ↔ summarizePeriod dikişi dahil
+│   │   └── download.js              # Blob + <a download> (DOM'a dokunan tek yer)
 │   │
 │   ├── App.jsx                      # activeTab ile sekme yönetimi
 │   ├── main.jsx

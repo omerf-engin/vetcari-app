@@ -56,6 +56,9 @@ Custom hooks:
 - Transaction logs carry `kind` (`entry` | `payment` | `return` | `price` | `lock` | `cancel`) and, on the entry path, the transaction's `batchId`. A whole mis-entered transaction is undone by `cancelDebtTransactionOperations` — debt docs are deleted, logs are **kept** and shown struck-through (cancelled state is derived client-side from the `kind: 'cancel'` log, never written back to old logs). The guard lives in `utils/batchCancel.js` and reads `kind`, never log titles; it is **fail-closed** (an unrecognized log blocks cancellation). Logs sharing the transaction's `batchId` are part of the entry — including the partial payment embedded in a past-dated debt — so they never block cancellation; a later payment/return/price change does
 - Debt documents carry `rev` — a **monotonic stamp** (`Date.now()`), not a counter, produced once per operation and written by every path that touches a debt doc. A counter would run backwards through `revertPaymentOperations`, which restores a debt with `set(ref, before)` and recreates a swept debt under the same id (ABA); `snapshotOf` strips `rev` so the restore gets a fresh stamp. Only the three undo/cancel operations (`cancelDebtTransactionOperations`, `revertDrugPriceOperations`, `revertPaymentOperations`) run in `runTransaction` and verify `rev` before writing — `runTransaction` does **not** work offline while `writeBatch` queues, so the daily flow (payment, debt entry, return, lock) stays on `writeBatch` and only stamps. Docs without `rev` compare equal to `undefined` and still pass; that is not a hole, since any concurrent write now stamps. `revertPaymentOperations` deliberately does **not** read `removed: true` debts — their document is already deleted, and reading a non-existent document returns `permission-denied` (not `exists() === false`) as long as the security rule touches `resource.data`; doing so broke reverting a full payment outright. Whether activity landed in between is already caught by `canRevertPayment`
 - Money-moving logs carry `flow` (`debt` | `collect` | `writeoff` | `inflation` | `priceUp` | `return` | `cancel` | `advance`) and `amount` — **always a positive magnitude**, direction comes from `flow`. `kind` alone is not enough: one `kind: 'entry'` covers five different events, and telling them apart by title is forbidden. Revert logs (`Tahsilat İptali`, `Fiyat Güncellemesi İptali`) and `kind: 'lock'` deliberately carry **no** `flow`. Period reporting (`utils/reporting.js`) reads `amount` only — `deduct` stays an internal payment-revert field, `balanceDelta` stays signed and is read only off the `flow: 'advance'` log. Anything without `flow` is counted as `unmeasured` and excluded from every total (fail-closed), so the report is correct only for records written after TASK-020
+- The elimination cascade and the receivable direction live in **one place**: `classifyLog` and `FLOW_RECEIVABLE_SIGN` (`utils/reporting.js`). `summarizePeriod` and the CSV statement export (`utils/statementExport.js`) both call them — same rule as `selectAffectedDebts` for the price preview. `receivableChange` accumulates `sign × amount` in the loop rather than being re-derived from the bucket totals, so the map can't drift from the formula. `advance` has sign `0`: an advance doesn't change gross debt, it sits in `customer.balance`
+- The CSV statement (`Tarih; Tür; Kaynak; Açıklama; Borç; Alacak; Bakiye; Durum`) is fed the **same** `customerAggregateLogs` the on-screen Genel Ekstre renders, so file and screen can't disagree. Rows are chronological (opposite of the screen) because a running balance needs it; a filtered export writes an opening-balance (`Devir`) row first. Rows that aren't `counted` still appear, marked in `Durum`, with empty money columns so per-row arithmetic holds. Amounts come only from `flow`/`amount` — `message` is written with `fmtTL` and rounds to 1 decimal, so reading money back from it loses kuruş
+- CSV must be `;`-separated with a UTF-8 BOM (`utils/csv.js`): tr-TR Excel uses `;` because `,` is the decimal separator, and without the BOM Excel assumes ANSI and mangles Turkish characters. `fmtTL` is unusable in a cell — use `csvNumber`
 - Period totals filter on `log.date` (the event's date), never `timestamp`; bounds inclusive. A cancelled **transaction** is erased from its period entirely (its cancel log too, sharing the same `batchId`); a cancelled **item** stays counted and its cancel is a decrease — item cancel is the "delete the remainder" successor and applies to real, partly-paid debts. Reverted groups (`revertOf` / `neutralizedBatchIds`) are dropped
 - PaymentModal grouping is render-only: the distribution waterfall pays all service debts first and carries rounding remainder in array order, so `distribution`, `extreDDebts` order and `manualOverrides` keys must never be reordered or re-keyed
 
@@ -71,7 +74,8 @@ src/
 │   ├── drugs/                   # DrugsView (inventory+price), PriceImpactModal (preview/revert)
 │   ├── reports/                 # ReportsView (period picker + financial totals)
 │   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal,
-│   │                            # BatchReturnModal, CancelBatchModal (batch+item), RevertPaymentModal
+│   │                            # BatchReturnModal, CancelBatchModal (batch+item), RevertPaymentModal,
+│   │                            # StatementExportModal (CSV ekstre)
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
 ├── contexts/
 │   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)
@@ -79,10 +83,12 @@ src/
 ├── hooks/                       # useAuth, useFirestore, useToast, useCustomer
 ├── services/                    # firebase.js (init), firestoreOperations.js (all DB ops)
 ├── test/                        # Vitest helpers: setup.js, firebaseMock.js, renderWithCustomer.jsx
-└── utils/                       # formatters.js (tr-TR number/currency), dates.js (todayLocal),
+└── utils/                       # formatters.js (tr-TR number/currency, fmtDateShort), dates.js (todayLocal),
                                  # debtGrouping.js (groupDebtsByBatch),
                                  # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards),
-                                 # reporting.js (period aggregation over flow/amount)
+                                 # reporting.js (period aggregation + classifyLog/FLOW_RECEIVABLE_SIGN),
+                                 # csv.js (Excel tr-TR escaping/BOM), statementExport.js (cari ekstre),
+                                 # download.js (Blob download — only DOM-touching util)
 ```
 
 ## Styling conventions
