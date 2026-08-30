@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Undo2, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban } from 'lucide-react';
+import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Undo2, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban, Download } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import { groupDebtsByBatch } from '../../utils/debtGrouping';
 import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds, cancelledDebtIds } from '../../utils/batchCancel';
@@ -10,6 +10,7 @@ import DebtModal from '../modals/DebtModal';
 import BatchReturnModal from '../modals/BatchReturnModal';
 import CancelBatchModal from '../modals/CancelBatchModal';
 import RevertPaymentModal from '../modals/RevertPaymentModal';
+import StatementExportModal from '../modals/StatementExportModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
@@ -26,6 +27,7 @@ export default function CustomerDetail({ onBack }) {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [isRevertPaymentOpen, setRevertPaymentOpen] = useState(false);
   const [cancelItem, setCancelItem] = useState(null);
+  const [isExportOpen, setExportOpen] = useState(false);
 
   const closeReturnModal = useCallback(() => setReturnModalDebt(null), []);
 
@@ -451,21 +453,36 @@ export default function CustomerDetail({ onBack }) {
 
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 self-start sticky top-6">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3"><Plus className="w-5 h-5 text-indigo-600" /> Yeni İşlem (Borç Yaz)</h3>
-          <div className="space-y-3">
+        <div className="space-y-6 self-start sticky top-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3"><Plus className="w-5 h-5 text-indigo-600" /> Yeni İşlem (Borç Yaz)</h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => setDebtModalMode('today')}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Borç Ekle
+              </button>
+              <button
+                onClick={() => setDebtModalMode('past')}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm border border-slate-200"
+              >
+                <Clock className="w-4 h-4" /> Geçmiş Borç Ekle
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3"><Download className="w-5 h-5 text-indigo-600" /> Ekstre</h3>
             <button
-              onClick={() => setDebtModalMode('today')}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Borç Ekle
-            </button>
-            <button
-              onClick={() => setDebtModalMode('past')}
+              onClick={() => setExportOpen(true)}
               className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm border border-slate-200"
             >
-              <Clock className="w-4 h-4" /> Geçmiş Borç Ekle
+              <Download className="w-4 h-4" /> Ekstreyi İndir
             </button>
+            <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+              Seçtiğin dönemin hareket dökümünü Excel'de açılabilen CSV olarak indirir.
+            </p>
           </div>
         </div>
       </div>
@@ -533,6 +550,15 @@ export default function CustomerDetail({ onBack }) {
           debtInfo={extreDDebts.find(d => d.id === historyDebtId)}
           logs={transactions.filter(t => t.debtId === historyDebtId)}
           onClose={() => setHistoryDebtId(null)}
+        />
+      )}
+
+      {isExportOpen && (
+        <StatementExportModal
+          customerName={customer.name}
+          logs={customerAggregateLogs}
+          advanceBalance={customer.balance}
+          onClose={() => setExportOpen(false)}
         />
       )}
 
