@@ -1299,7 +1299,8 @@ cikti:
   degisti.** Bu siniri "net-sifir gecmis yorumlamak fail-closed ilkesine aykiri olur" diye
   savunmustum; kullanici pratikte yanlis oldugunu bildirdi ve haklıydı. Tam geri alma borcu odeme
   oncesi haline dondurdugu icin iptal en az odeme oncesindeki kadar guvenli. Cozum `revertOf`
-- Yaris durumu penceresi TASK-033 kapsaminda
+- ~~Yaris durumu penceresi TASK-033 kapsaminda~~ — **TASK-033 ile kapandi:** borc dokumanlari
+  `rev` damgasi tasiyor, geri alma `runTransaction` icinde damgayi dogruluyor
 
 ---
 

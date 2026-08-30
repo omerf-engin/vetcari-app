@@ -1,6 +1,7 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 12 Nisan 2026 (Task #24 / Faz 10+ tamamlandi, TypeScript planlandi)
+> Son guncelleme: 30 Agustos 2026 (TASK-020 donemsel raporlama + TASK-033 surum kontrolu
+> tamamlandi; test 358). Kalan: TASK-021 (CSV/PDF export), TASK-022 (stok), TASK-023 (TypeScript).
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -205,7 +206,7 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 10+6: Yanlis Giris Duzeltme — TAMAMLANDI (TASK-033 disinda)
+## Faz 10+6: Yanlis Giris Duzeltme — TAMAMLANDI
 
 - [x] Islem bazli iptal: `cancelDebtTransactionOperations`, loglara `batchId` + `kind`, gerekceli
       `Islem Iptali` logu, "sonradan aktivite" guard'i (TASK-031, P1)
@@ -221,13 +222,19 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 - [x] Test 201 → 245
 - [x] Geri alma sonrasi iptal aciliyor (`revertOf`) + kalem bazli iptal (TASK-035, P1)
 - [x] Test 245 → 255
-- [ ] Esszamanlilik: borc dokumanlarinda `rev` + `runTransaction` (TASK-033, P3)
+- [x] Esszamanlilik: borc dokumanlarinda `rev` monoton damgasi; iptal ve geri alma islemleri
+      `runTransaction` ile surum kontrollu (TASK-033, P3)
+- [x] Test 336 → 358
 
 > Ilgili tasklar: TASK-031, TASK-032, TASK-033, TASK-034, TASK-035
 >
 > **Ortak desen:** yapisal veriyi loglara yaz (`kind`, `batchId`, `before`, `revertOf`), guard'i
 > `kind` uzerinden **fail-closed** kur, geri alma logu kendini yeni bir geri alinabilir islem
 > saydirmasin, borc dokumani silinse de **loglar kalsin**.
+>
+> **Surum kontrolunun kapsami bilincli olarak dar:** `runTransaction` cevrimdisi calismaz, bu
+> yuzden yalnizca nadir geri alma/iptal islemleri transaction'li; gunluk akis `writeBatch` kalip
+> yalnizca `rev` damgaliyor. Ayrinti `docs/ARCHITECTURE.md` → "Surum Kontrolu (`rev`)".
 
 ---
 
@@ -246,13 +253,20 @@ Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
 ---
 
-## Faz 11: Raporlama ve Disa Aktarma — PLANLANDI
+## Faz 11: Raporlama ve Disa Aktarma — KISMEN TAMAMLANDI
 
-- [ ] Donemsel finansal raporlama (Dashboard'a tarih filtresi + tahsilat/borc ozeti)
-- [ ] PDF ve CSV ekstre disa aktarma (musteriye yazili hesap ozeti)
+- [x] Donemsel finansal raporlama: ayri "Raporlar" sekmesi, tarih araligi secici, tahsilat /
+      acilan borc / alacak degisimi (TASK-020, P2)
+- [x] Loglara `flow` + `amount` yapisal para alanlari — oncesinde tutar yalnizca `message`
+      metnindeydi, dolayisiyla hicbir donemsel toplam hesaplanamazdi (TASK-020)
+- [x] Test 255 → 336
+- [ ] PDF ve CSV ekstre disa aktarma (musteriye yazili hesap ozeti) — CSV kutuphanesiz yapilabilir
 - [ ] Ilac stok takibi (otomatik stok dusumu, kritik esik uyarisi)
 
 > Ilgili tasklar: TASK-020, TASK-021, TASK-022
+>
+> **Rapor ileriye donuk dogrudur:** `flow`/`amount` TASK-020 ile eklendi; oncesinde yazilmis
+> kayitlar olculemez, arayuzde sayilarak bildirilir (fail-closed).
 
 ---
 
