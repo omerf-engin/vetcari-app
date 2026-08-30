@@ -4,7 +4,10 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /{collection}/{docId} {
-      // `resource == null` dali surum kontrolu icin sart (TASK-033): silinmis bir dokumani
+      // NOT (2026-08-30): bu dosya repoda guncel ama Firebase'e YAYINLANMADI.
+      // Yayinlamak icin: firebase deploy --only firestore:rules   (bkz. docs/ROADMAP.md)
+      //
+      // `resource == null` dali surum kontrolunu iyilestirir (TASK-033): silinmis bir dokumani
       // okumak `resource.data.userId` uzerinden degerlendirilirse kural permission-denied
       // verir ve `snap.exists() === false` yerine hata doner. O zaman "borc silinmis mi"
       // sorusu transaction icinde sorulamaz. Kimlik dogrulamasi hala zorunlu; var olan

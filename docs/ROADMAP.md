@@ -5,6 +5,18 @@
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
+## ⚠️ Bekleyen Deploy — Firestore Guvenlik Kurali
+
+**`firestore.rules` repoda degistirildi ama YAYINLANMADI** (2026-08-30, TASK-033). Repo ile
+canli kurallar su an ayrisik durumda.
+
+- **Degisiklik:** `allow read` kuraline `resource == null` dali — var olmayan bir dokumani
+  okurken `permission-denied` yerine `exists() === false` donsun diye
+- **Zorunlu degil:** kod bu dal olmadan da dogru calisir. Yalnizca baska bir cihazin sildigi bir
+  borcu okurken kullaniciya teknik hata yerine duzgun "kayit degisti" mesaji verilmesini saglar
+- **Yayinlamak icin:** Firebase Console → Firestore → Rules, veya `firebase deploy --only firestore:rules`
+- Yayinlandiginda bu bolum silinmeli
+
 ---
 
 ## Faz 1: Temel Altyapi — TAMAMLANDI
