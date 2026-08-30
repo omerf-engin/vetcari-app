@@ -285,41 +285,43 @@ describe('buildStatementCsv', () => {
   });
 
   it('baslik blogu musteri, donem ve olusturma tarihini tasir', () => {
-    const { csv } = base();
+    const csv = base().toCsv();
     expect(findRow(csv, 'Müşteri')).toEqual(['Müşteri', 'Ali Veli']);
     expect(findRow(csv, 'Dönem')).toEqual(['Dönem', '01.08.2026 - 31.08.2026']);
     expect(findRow(csv, 'Oluşturma')).toEqual(['Oluşturma', '30.08.2026']);
   });
 
   it('sutun basliklari beklenen sirada', () => {
-    expect(csvRows(base().csv)).toContainEqual(STATEMENT_COLUMNS);
+    expect(csvRows(base().toCsv())).toContainEqual(STATEMENT_COLUMNS);
   });
 
   it('filtreli ekstrede devir satiri yazilir', () => {
-    expect(findRow(base().csv, '01.08.2026')).toEqual(
+    expect(findRow(base().toCsv(), '01.08.2026')).toEqual(
       ['01.08.2026', 'Devir', '', 'Önceki dönemden devreden bakiye', '', '', '0,00', '']
     );
   });
 
   it('filtresiz ekstrede devir satiri yazilmaz', () => {
-    const { csv } = buildCustomerStatement({
+    const { toCsv } = buildCustomerStatement({
       customerName: 'Ali', logs: [debt(100)], today: '2026-08-30'
     });
+    const csv = toCsv();
     expect(csv).not.toContain('Devir');
     expect(findRow(csv, 'Dönem')).toEqual(['Dönem', 'Tüm işlemler']);
   });
 
   it('hareket satiri GG.AA.YYYY tarih ve dogru sutunlarla yazilir', () => {
-    expect(findRow(base().csv, '02.08.2026')).toEqual(
+    expect(findRow(base().toCsv(), '02.08.2026')).toEqual(
       ['02.08.2026', 'Borç Açıldı', 'İlaç: Amoksisilin', '2 adet × 450 ₺', '900,00', '', '900,00', '']
     );
-    expect(findRow(base().csv, '06.08.2026')).toEqual(
+    expect(findRow(base().toCsv(), '06.08.2026')).toEqual(
       ['06.08.2026', 'Tahsilat', 'İlaç: Amoksisilin', '500 ₺ tahsil edildi', '', '500,00', '400,00', '']
     );
   });
 
   it('TOPLAMLAR blogu summarizePeriod ile ayni sayilari verir', () => {
-    const { csv, summary, closing } = base();
+    const { summary, closing } = base();
+    const csv = base().toCsv();
     expect(findRow(csv, 'Dönem tahsilatı')[1]).toBe('500,00');
     expect(findRow(csv, 'Açılan borç')[1]).toBe('900,00');
     expect(findRow(csv, 'Alacak değişimi')[1]).toBe('400,00');
@@ -330,35 +332,38 @@ describe('buildStatementCsv', () => {
   });
 
   it('BOM ile baslar', () => {
-    expect(base().csv.charCodeAt(0)).toBe(0xFEFF);
+    expect(base().toCsv().charCodeAt(0)).toBe(0xFEFF);
   });
 
   it('olculemeyen kayit varsa baslikta uyari satiri olur', () => {
-    const { csv } = buildCustomerStatement({
+    const { toCsv } = buildCustomerStatement({
       customerName: 'Ali',
       logs: [debt(100), log({ title: 'Eski', message: 'flow yok', timestamp: 2e6 })],
       today: '2026-08-30'
     });
+    const csv = toCsv();
     expect(findRow(csv, 'Uyarı')[1]).toContain('1 kayıt');
   });
 
   it('olculemeyen kayit yoksa uyari satiri yazilmaz', () => {
-    expect(base().csv).not.toContain('Uyarı');
+    expect(base().toCsv()).not.toContain('Uyarı');
   });
 
   it('noktali virgul iceren aciklama tirnaklanir, sutunlar kaymaz', () => {
-    const { csv } = buildCustomerStatement({
+    const { toCsv } = buildCustomerStatement({
       customerName: 'Ali',
       logs: [debt(100, { date: '2026-08-02', message: 'Gerekçe: yanlış; tekrar girildi' })],
       today: '2026-08-30'
     });
+    const csv = toCsv();
     expect(csv).toContain('"Gerekçe: yanlış; tekrar girildi"');
   });
 
   it('bos ekstrede satir yok ama baslik ve toplamlar yazilir', () => {
-    const { csv, rowCount } = buildCustomerStatement({
+    const { toCsv, rowCount } = buildCustomerStatement({
       customerName: 'Ali', logs: [], today: '2026-08-30'
     });
+    const csv = toCsv();
     expect(rowCount).toBe(0);
     expect(csvRows(csv)).toContainEqual(STATEMENT_COLUMNS);
     expect(findRow(csv, 'Dönem sonu bakiye')[1]).toBe('0,00');

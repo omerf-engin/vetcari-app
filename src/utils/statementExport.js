@@ -145,12 +145,17 @@ const slugify = (name) => String(name || '')
   .replace(/[^a-z0-9]+/g, '-')
   .replace(/^-+|-+$/g, '') || 'musteri';
 
-/** `ali-veli-ekstre-2025-08-01_2025-08-30.csv` — filtresizse tarih yerine bugun. */
-export const statementFileName = (customerName, period, today = todayLocal()) => {
+/**
+ * `ali-veli-ekstre-2025-08-01_2025-08-30.csv` — filtresizse tarih yerine bugun.
+ *
+ * @param {string} [ext] — `csv` | `pdf`. Iki bicim ayni adlandirmayi paylasir ki kullanici
+ *        aynı ekstrenin iki dosyasini yan yana gordugunde eslesitirebilsin.
+ */
+export const statementFileName = (customerName, period, today = todayLocal(), ext = 'csv') => {
   const range = period?.start && period?.end
     ? `${period.start}_${period.end}`
     : today;
-  return `${slugify(customerName)}-ekstre-${range}.csv`;
+  return `${slugify(customerName)}-ekstre-${range}.${ext}`;
 };
 
 /**
@@ -238,9 +243,15 @@ export const buildCustomerStatement = ({
     // bu ise dosyaya yazilan satirlari — olculemeyen ve iptal edilmis satirlar da dahil.
     // Bos ekstre uyarisi buna bakar: kullanicinin sordugu "dosyada bir sey cikacak mi".
     rowCount: rows.length,
-    filename: statementFileName(customerName, period, today),
-    csv: buildStatementCsv({
+
+    // Modal donem her degistiginde bunu yeniden hesapliyor; CSV metni ve PDF modeli
+    // **istendiginde** kurulsun diye fonksiyon olarak veriliyor. Aksi halde kullanici PDF
+    // secmisken bosuna CSV dizgesi, CSV secmisken bosuna PDF modeli uretilirdi.
+    fileName: (ext = 'csv') => statementFileName(customerName, period, today, ext),
+    toCsv: () => buildStatementCsv({
       customerName, period, rows, opening, closing, summary, unmeasured, advanceBalance, today
-    })
+    }),
+    // PDF modeli icin gereken baglam; `buildStatementPdfModel`'e ikinci argüman olarak gider
+    meta: { customerName, period, advanceBalance, today }
   };
 };

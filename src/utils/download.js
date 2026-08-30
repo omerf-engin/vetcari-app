@@ -5,14 +5,13 @@
 // dosya testte tek satirla mock'lanir.
 
 /**
- * Metni dosya olarak indirir.
+ * Hazir bir `Blob`'u dosya olarak indirir. PDF yolu bunu dogrudan kullanir; CSV yolu metni
+ * `Blob`'a cevirip yine buraya duser — indirme mantigi tek yerde kalsin diye.
  *
  * @param {string} filename — uzantisi dahil dosya adi
- * @param {string} text — dosya icerigi (BOM eklenecekse cagiran ekler)
- * @param {string} [mime]
+ * @param {Blob} blob
  */
-export const downloadTextFile = (filename, text, mime = 'text/csv;charset=utf-8') => {
-  const blob = new Blob([text], { type: mime });
+export const downloadBlob = (filename, blob) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -23,3 +22,13 @@ export const downloadTextFile = (filename, text, mime = 'text/csv;charset=utf-8'
   // Blob referansi birakilmazsa sekme kapanana kadar bellekte kalir
   URL.revokeObjectURL(url);
 };
+
+/**
+ * Metni dosya olarak indirir.
+ *
+ * @param {string} filename — uzantisi dahil dosya adi
+ * @param {string} text — dosya icerigi (BOM eklenecekse cagiran ekler)
+ * @param {string} [mime]
+ */
+export const downloadTextFile = (filename, text, mime = 'text/csv;charset=utf-8') =>
+  downloadBlob(filename, new Blob([text], { type: mime }));
