@@ -59,12 +59,12 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
 
   const handleDownload = () => {
     if (!statement) return;
-    if (statement.movementCount === 0) {
-      toast.warning('Bu aralıkta dışa aktarılacak hareket yok.');
+    if (statement.rowCount === 0) {
+      toast.warning('Bu aralıkta dışa aktarılacak kayıt yok.');
       return;
     }
     downloadTextFile(statement.filename, statement.csv);
-    toast.success(`${statement.movementCount} hareket indirildi.`);
+    toast.success(`${statement.rowCount} satır indirildi.`);
     onClose();
   };
 
@@ -143,7 +143,7 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
             <>
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm space-y-1.5">
                 <p className="text-slate-700">
-                  <strong>{statement.movementCount}</strong> hareket dışa aktarılacak.
+                  <strong>{statement.rowCount}</strong> satır dışa aktarılacak.
                 </p>
                 <p className="text-slate-500 text-xs">
                   Dosya adı: <code className="text-slate-700">{statement.filename}</code>

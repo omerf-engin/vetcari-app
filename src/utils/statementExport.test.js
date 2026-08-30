@@ -356,10 +356,10 @@ describe('buildStatementCsv', () => {
   });
 
   it('bos ekstrede satir yok ama baslik ve toplamlar yazilir', () => {
-    const { csv, movementCount } = buildCustomerStatement({
+    const { csv, rowCount } = buildCustomerStatement({
       customerName: 'Ali', logs: [], today: '2026-08-30'
     });
-    expect(movementCount).toBe(0);
+    expect(rowCount).toBe(0);
     expect(csvRows(csv)).toContainEqual(STATEMENT_COLUMNS);
     expect(findRow(csv, 'Dönem sonu bakiye')[1]).toBe('0,00');
   });

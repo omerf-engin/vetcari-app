@@ -223,7 +223,10 @@ export const buildCustomerStatement = ({
     closing,
     unmeasured,
     summary,
-    movementCount: rows.length,
+    // `summary.movementCount` ile karistirilmamali: o **sayilan** para hareketlerini sayar,
+    // bu ise dosyaya yazilan satirlari — olculemeyen ve iptal edilmis satirlar da dahil.
+    // Bos ekstre uyarisi buna bakar: kullanicinin sordugu "dosyada bir sey cikacak mi".
+    rowCount: rows.length,
     filename: statementFileName(customerName, period, today),
     csv: buildStatementCsv({
       customerName, period, rows, opening, closing, summary, unmeasured, advanceBalance, today

@@ -49,7 +49,7 @@ describe('StatementExportModal', () => {
     expect(screen.getByRole('button', { name: 'Tüm İşlemler' })).toHaveClass('bg-indigo-600');
   });
 
-  it('disa aktarilacak hareket sayisini ve dosya adini onceden gosterir', () => {
+  it('disa aktarilacak satir sayisini ve dosya adini onceden gosterir', () => {
     openModal({ logs: [log(), log({ date: '2026-08-15' })] });
 
     expect(screen.getByText('2')).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('StatementExportModal', () => {
     fireEvent.click(downloadButton());
 
     expect(downloadTextFile).not.toHaveBeenCalled();
-    expect(screen.getByText('Bu aralıkta dışa aktarılacak hareket yok.')).toBeInTheDocument();
+    expect(screen.getByText('Bu aralıkta dışa aktarılacak kayıt yok.')).toBeInTheDocument();
     // Modal acik kalir ki kullanici baska bir donem secebilsin
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe('StatementExportModal', () => {
     fireEvent.click(downloadButton());
 
     expect(downloadTextFile).not.toHaveBeenCalled();
-    expect(screen.getByText('Bu aralıkta dışa aktarılacak hareket yok.')).toBeInTheDocument();
+    expect(screen.getByText('Bu aralıkta dışa aktarılacak kayıt yok.')).toBeInTheDocument();
   });
 
   it('ozel aralikta ters tarih indirmeyi engeller', () => {
