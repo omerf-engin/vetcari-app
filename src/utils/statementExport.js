@@ -12,6 +12,7 @@
 // sekmesindeki "Alacak Degisimi" ayrisamaz; `statementExport.test.js` bu dikisi test eder.
 
 import { classifyLog, buildExclusions, summarizePeriod } from './reporting';
+import { cancelledDebtIds } from './batchCancel';
 import { toCSV, csvNumber } from './csv';
 import { fmtDateShort } from './formatters';
 import { todayLocal } from './dates';
@@ -67,6 +68,10 @@ const effectivePeriod = (logs, period) => {
 export const buildStatementRows = (logs, period, allLogs) => {
   const list = logs || [];
   const exclusions = buildExclusions(allLogs || list);
+  // Kalem iptali (`batchId` tasimayan `kind: 'cancel'`) borcu **elemez** — giris sayilir, iptal
+  // ayrica azalis olarak toplanir. Ama ekranda o satir uzeri cizili gorunuyor; dosyada hic
+  // isaretlenmeseydi kullanici ekranla dosyayi yan yana koydugunda farki goremezdi.
+  const cancelledItems = cancelledDebtIds(allLogs || list);
   const start = period?.start || '';
   const end = period?.end || '';
 
@@ -114,7 +119,13 @@ export const buildStatementRows = (logs, period, allLogs) => {
       balance,
       // Avans brut borcu degistirmez (sign 0) — para sutunlari bos kalir, tutar
       // aciklamada ve TOPLAMLAR blogunda gorunur.
-      status: counted && flow === 'advance' ? 'Avans hareketi' : (STATUS_LABEL[status] ?? '')
+      // Kalem iptali edilmis borc sayilmaya devam eder (para sutunlari dolu), yalnizca
+      // durumu yazilir. Iptal logunun kendisi isaretlenmez — `Tur` sutunu zaten soyluyor.
+      status: !counted
+        ? (STATUS_LABEL[status] ?? '')
+        : flow === 'advance'
+          ? 'Avans hareketi'
+          : (flow !== 'cancel' && cancelledItems.has(log.debtId) ? 'Kalem iptal edildi' : '')
     };
   });
 

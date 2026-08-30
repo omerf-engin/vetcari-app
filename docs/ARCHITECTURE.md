@@ -233,6 +233,7 @@ Para hareketi yaratan her log iki alan taşır:
 - **Devir satırı:** dönem filtresi varsa `start`'tan önceki tüm hareketlerin alacak etkisi ilk satır olarak yazılır. Bu olmadan filtreli bir ekstrenin bakiyesi sıfırdan başlar ve gerçek borcu göstermez
 - **Bakiye brüt alacağı izler, avans ayrı hesaptır.** `flow: 'advance'` satırlarının işareti `0` olduğu için para sütunları boş kalır, `Durum` = `Avans hareketi` yazar ve tutar TOPLAMLAR bloğunda ayrı satırdadır. Başlık bloğu bu ayrımı okuyucuya söyler
 - **Sayılmayan satırlar gizlenmez, işaretlenir:** iptal edilmiş işlemin logları `İptal edildi`, geri alınmış grup `Geri alındı`, fiyat kilidi `Bilgi`, `flow` taşımayan eski kayıt `Ölçülemiyor`. Hepsinde Borç/Alacak boştur ve bakiye oynamaz — böylece her satırda "önceki bakiye + Borç − Alacak = Bakiye" aritmetiği tutar
+- **Kalem iptali istisnadır:** iptal edilmiş kalem sayılmaya devam eder (para sütunları dolu, bakiye yürür) çünkü gerçekten var olmuş bir borçtur; yalnızca `Durum` = `Kalem iptal edildi` yazar. Ekranda o satır üzeri çizili göründüğü için dosyada hiç işaretlenmeseydi iki taraf yan yana konduğunda ayrışırdı. İptal logunun kendisi işaretlenmez — `Tür` sütunu zaten söylüyor
 - **Dikiş:** son satırın bakiyesi her zaman `devir + summarizePeriod(...).receivableChange`'e eşittir. İki taraf `classifyLog` ve `FLOW_RECEIVABLE_SIGN`'ı paylaştığı için bu yapısal olarak garanti; `statementExport.test.js` yine de doğrudan sınar
 
 **Excel/tr-TR biçimi (`utils/csv.js`).** İkisi de görünmez, biri eksik olursa dosya kullanıcının elinde bozuk çıkar:

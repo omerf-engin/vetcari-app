@@ -364,3 +364,40 @@ describe('buildStatementCsv', () => {
     expect(findRow(csv, 'Dönem sonu bakiye')[1]).toBe('0,00');
   });
 });
+
+describe('kalem iptali — ekranla ayni isaret', () => {
+  it('kalem iptali edilmis borc sayilmaya devam eder ama durumu yazilir', () => {
+    // Ekranda `cancelledDebtIds` bu satiri uzeri cizili gosteriyor; dosyada hic
+    // isaretlenmeseydi kullanici ekranla dosyayi yan yana koydugunda farki goremezdi.
+    const { rows, closing } = buildStatementRows([
+      debt(900, { id: 'd1', debtId: 'debt-1' }),
+      log({
+        id: 'c1', debtId: 'debt-1', kind: 'cancel', flow: 'cancel', amount: 900,
+        title: 'Hizmet Borcu İptali', timestamp: 9e6
+      })
+    ]);
+
+    // Isaret yalnizca bilgi amacli: satir sayilmaya devam ediyor, bakiyeyi de yurutuyor
+    expect(rows[0]).toMatchObject({ debit: 900, balance: 900, status: 'Kalem iptal edildi' });
+    // Iptal logunun kendisi isaretlenmez — `Tur` sutunu zaten "Hizmet Borcu İptali" diyor
+    expect(rows[1]).toMatchObject({ credit: 900, balance: 0, status: '' });
+    expect(closing).toBe(0);
+  });
+
+  it('islem iptali (batchId var) kalem iptali gibi isaretlenmez', () => {
+    const { rows } = buildStatementRows([
+      debt(900, { debtId: 'debt-2', batchId: 'b9' }),
+      log({
+        debtId: 'debt-2', kind: 'cancel', flow: 'cancel', amount: 900,
+        batchId: 'b9', title: 'İşlem İptali', timestamp: 9e6
+      })
+    ]);
+
+    expect(rows.every((r) => r.status === 'İptal edildi')).toBe(true);
+  });
+
+  it('iptal edilmemis borcun durumu bos kalir', () => {
+    const { rows } = buildStatementRows([debt(900, { debtId: 'debt-3' })]);
+    expect(rows[0].status).toBe('');
+  });
+});
