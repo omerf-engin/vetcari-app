@@ -20,6 +20,7 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 - İlaç iade yönetimi (fazla iade → avansa çevirme)
 - Borç bazlı işlem geçmişi (ekstre/timeline)
 - Dönemsel finansal raporlama (tahsilat / açılan borç / alacak değişimi, tarih aralığı seçimli)
+- CSV cari ekstre dışa aktarma (Borç/Alacak/Bakiye düzeni, dönem seçimli, Excel tr-TR uyumlu)
 - Geçmiş tarihli borç girişi (özel fiyat, kısmi tahsilat, enflasyon seçeneği)
 - Toplu ilaç borcu ekleme (tek seferde N ilaç, orantılı tahsilat dağıtımı)
 - Çok kullanıcı desteği (her kullanıcı kendi izole veritabanında çalışır)
@@ -29,7 +30,7 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 **TypeScript Migrasyonu (TASK-023):** Incremental geçiş — `allowJs: true` ile başlanır, `strict: true` hedeflenir. Sıra: `src/types/index.ts` → servis → hook → context → component. Detaylar: [TASK.md](./TASK.md#task-023).
 
 **Faz 11:**
-- **PDF ve CSV ekstre dışa aktarma** (TASK-021): Müşteriye yazılı hesap özeti üretme (`@react-pdf/renderer` + `Blob`)
+- **PDF ekstre** (TASK-021 Faz 2): CSV ile aynı satır ve toplamların PDF sunumu (`@react-pdf/renderer`, lazy import). CSV faz 1'de tamamlandı
 - **İlaç stok takibi** (TASK-022): `drugs` koleksiyonuna `stock`/`minStock` alanı, otomatik düşüm, kritik eşik uyarısı
 
 ---
