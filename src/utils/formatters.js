@@ -2,6 +2,20 @@
 export const fmtTL = (val) => Number(val).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' ₺';
 export const fmtQty = (val) => Number(val).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+/**
+ * Kurusu koruyan para bicimi: `1234.56` -> `1.234,56 ₺`.
+ *
+ * `fmtTL` en fazla **1 ondalik** yazar; ekranda bu kabul edilebilir bir sadelestirme ama
+ * musterinin eline verilen basili ekstrede kurus kaybi olmamali. Binlik ayirici burada
+ * **isteniyor** (insan okuyacak) — makine tarafi icin `csvNumber` kullanilir, o hem
+ * gruplamayi hem simgeyi kasten atar.
+ */
+export const fmtTLExact = (val) => {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+};
+
 export const fmtDate = (isoString) => {
   if (!isoString) return '-';
   const d = new Date(isoString);
