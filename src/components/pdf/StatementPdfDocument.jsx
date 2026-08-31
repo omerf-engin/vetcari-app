@@ -88,18 +88,19 @@ const styles = StyleSheet.create({
   legendWrap: { marginTop: 10 },
   legend: { color: C.muted, fontSize: 7, marginTop: 2 },
 
-  footer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 32,
-    right: 32,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    color: C.muted,
-    fontSize: 7,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
-    paddingTop: 5
+  // Altbilgi iki ayri `fixed` Text olarak ciziliyor, `fixed` bir View'in **icinde** degil:
+  // @react-pdf'te `render` ve `fixed` ayni elemanda olmali, aksi halde altbilgi hic cizilmiyor.
+  footerLeft: {
+    position: 'absolute', bottom: 22, left: 32,
+    color: C.muted, fontSize: 7
+  },
+  footerRight: {
+    position: 'absolute', bottom: 22, right: 32,
+    color: C.muted, fontSize: 7, textAlign: 'right'
+  },
+  footerRule: {
+    position: 'absolute', bottom: 36, left: 32, right: 32,
+    borderTopWidth: 1, borderTopColor: C.line
   }
 });
 
@@ -174,10 +175,15 @@ export default function StatementPdfDocument({ model }) {
           </View>
         </View>
 
-        <View style={styles.footer} fixed>
-          <Text>{header.customerName} — {header.periodLabel}</Text>
-          <Text render={({ pageNumber, totalPages }) => `Sayfa ${pageNumber} / ${totalPages}`} />
-        </View>
+        <View style={styles.footerRule} fixed />
+        <Text style={styles.footerLeft} fixed>
+          {header.customerName} — {header.periodLabel}
+        </Text>
+        <Text
+          style={styles.footerRight}
+          fixed
+          render={({ pageNumber, totalPages }) => `Sayfa ${pageNumber} / ${totalPages}`}
+        />
 
       </Page>
     </Document>
