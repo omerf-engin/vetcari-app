@@ -1,7 +1,7 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 30 Agustos 2026 (TASK-021 Faz 1 — CSV ekstre disa aktarma tamamlandi;
-> test 457). Kalan: TASK-021 Faz 2 (PDF), TASK-022 (stok), TASK-023 (TypeScript).
+> Son guncelleme: 31 Agustos 2026 (TASK-021 tamamlandi — CSV + PDF ekstre; test 537).
+> Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu).
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
 
@@ -265,7 +265,7 @@ canli kurallar su an ayrisik durumda.
 
 ---
 
-## Faz 11: Raporlama ve Disa Aktarma — KISMEN TAMAMLANDI
+## Faz 11: Raporlama ve Disa Aktarma — TAMAMLANDI (stok haric)
 
 - [x] Donemsel finansal raporlama: ayri "Raporlar" sekmesi, tarih araligi secici, tahsilat /
       acilan borc / alacak degisimi (TASK-020, P2)
@@ -277,7 +277,11 @@ canli kurallar su an ayrisik durumda.
 - [x] Rapor ile ekstre ayni siniflandiriciyi paylasir (`classifyLog`, `FLOW_RECEIVABLE_SIGN`) —
       CSV'nin bakiye sutunu ile ekrandaki "Alacak Degisimi" ayrisamaz (TASK-021 Faz 1)
 - [x] Test 358 → 457
-- [ ] PDF ekstre (`@react-pdf/renderer`, lazy import) — TASK-021 Faz 2
+- [x] PDF ekstre: A4 dikey, cok sayfali, her sayfada sutun basligi ve sayfa numarasi.
+      Turkce + `₺` icin **gomulu Roboto**; standart PDF fontlari WinAnsi oldugu icin
+      `ş ğ ı İ` ve `₺` yazamiyor (TASK-021 Faz 2, P2)
+- [x] `@react-pdf/renderer` lazy chunk'ta: ana bundle 759.5 → 765.9 KB (+6.4 KB)
+- [x] Test 457 → 537
 - [ ] Ilac stok takibi (otomatik stok dusumu, kritik esik uyarisi)
 
 > Ilgili tasklar: TASK-020, TASK-021, TASK-022

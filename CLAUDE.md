@@ -58,6 +58,9 @@ Custom hooks:
 - Money-moving logs carry `flow` (`debt` | `collect` | `writeoff` | `inflation` | `priceUp` | `return` | `cancel` | `advance`) and `amount` — **always a positive magnitude**, direction comes from `flow`. `kind` alone is not enough: one `kind: 'entry'` covers five different events, and telling them apart by title is forbidden. Revert logs (`Tahsilat İptali`, `Fiyat Güncellemesi İptali`) and `kind: 'lock'` deliberately carry **no** `flow`. Period reporting (`utils/reporting.js`) reads `amount` only — `deduct` stays an internal payment-revert field, `balanceDelta` stays signed and is read only off the `flow: 'advance'` log. Anything without `flow` is counted as `unmeasured` and excluded from every total (fail-closed), so the report is correct only for records written after TASK-020
 - The elimination cascade and the receivable direction live in **one place**: `classifyLog` and `FLOW_RECEIVABLE_SIGN` (`utils/reporting.js`). `summarizePeriod` and the CSV statement export (`utils/statementExport.js`) both call them — same rule as `selectAffectedDebts` for the price preview. `receivableChange` accumulates `sign × amount` in the loop rather than being re-derived from the bucket totals, so the map can't drift from the formula. `advance` has sign `0`: an advance doesn't change gross debt, it sits in `customer.balance`
 - The CSV statement (`Tarih; Tür; Kaynak; Açıklama; Borç; Alacak; Bakiye; Durum`) is fed the **same** `customerAggregateLogs` the on-screen Genel Ekstre renders, so file and screen can't disagree. Rows are chronological (opposite of the screen) because a running balance needs it; a filtered export writes an opening-balance (`Devir`) row first. Rows that aren't `counted` still appear, marked in `Durum`, with empty money columns so per-row arithmetic holds. Amounts come only from `flow`/`amount` — `message` is written with `fmtTL` and rounds to 1 decimal, so reading money back from it loses kuruş
+- The PDF statement (`utils/statementPdfModel.js` + `components/pdf/StatementPdfDocument.jsx`) does **no arithmetic of its own** — same `buildStatementRows` rows and `summarizePeriod` totals as the CSV. It is A4 with 5 columns; `Durum` becomes row *styling* (struck-through for non-counted rows, a note for item-cancels which still count). Amounts use `fmtTLExact`, not `fmtTL` — `fmtTL` rounds to 1 decimal and a printed statement must not lose kuruş
+- **PDF needs an embedded font.** The standard PDF fonts use WinAnsi, which has `ç ö ü` but not `ş ğ ı İ Ş Ğ` or `₺` — nearly every Turkish string would render as empty boxes, silently. Roboto is embedded via `utils/fonts.js`; `utils/fonts.test.js` is a gate that opens the real TTF and asserts each required code point. A missing glyph is invisible to lint, build and component tests
+- `@react-pdf/renderer` and the fonts are imported **only** from `utils/statementPdfRenderer.js`, which the modal reaches via `await import(...)`. That chunk is 1.2 MB; importing it anywhere else collapses it back into the main bundle. In @react-pdf, `fixed` and `render` must sit on the **same** element — a `fixed` wrapper with a `render` child draws nothing and throws nothing
 - CSV must be `;`-separated with a UTF-8 BOM (`utils/csv.js`): tr-TR Excel uses `;` because `,` is the decimal separator, and without the BOM Excel assumes ANSI and mangles Turkish characters. `fmtTL` is unusable in a cell — use `csvNumber`
 - Period totals filter on `log.date` (the event's date), never `timestamp`; bounds inclusive. A cancelled **transaction** is erased from its period entirely (its cancel log too, sharing the same `batchId`); a cancelled **item** stays counted and its cancel is a decrease — item cancel is the "delete the remainder" successor and applies to real, partly-paid debts. Reverted groups (`revertOf` / `neutralizedBatchIds`) are dropped
 - PaymentModal grouping is render-only: the distribution waterfall pays all service debts first and carries rounding remainder in array order, so `distribution`, `extreDDebts` order and `manualOverrides` keys must never be reordered or re-keyed
@@ -75,7 +78,8 @@ src/
 │   ├── reports/                 # ReportsView (period picker + financial totals)
 │   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal,
 │   │                            # BatchReturnModal, CancelBatchModal (batch+item), RevertPaymentModal,
-│   │                            # StatementExportModal (CSV ekstre)
+│   │                            # StatementExportModal (CSV/PDF ekstre)
+│   ├── pdf/                     # StatementPdfDocument (A4 çizim katmanı)
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
 ├── contexts/
 │   ├── ToastContext.jsx         # Toast + async confirm (Promise-based)
@@ -88,6 +92,8 @@ src/
                                  # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards),
                                  # reporting.js (period aggregation + classifyLog/FLOW_RECEIVABLE_SIGN),
                                  # csv.js (Excel tr-TR escaping/BOM), statementExport.js (cari ekstre),
+                                 # statementPdfModel.js + statementPdfRenderer.js (lazy chunk boundary),
+                                 # fonts.js (embedded Roboto + glyph gate),
                                  # download.js (Blob download — only DOM-touching util)
 ```
 

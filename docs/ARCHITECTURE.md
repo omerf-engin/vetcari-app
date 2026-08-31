@@ -21,6 +21,7 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 - Borç bazlı işlem geçmişi (ekstre/timeline)
 - Dönemsel finansal raporlama (tahsilat / açılan borç / alacak değişimi, tarih aralığı seçimli)
 - CSV cari ekstre dışa aktarma (Borç/Alacak/Bakiye düzeni, dönem seçimli, Excel tr-TR uyumlu)
+- PDF cari ekstre (A4, gömülü Türkçe yazı tipi, çok sayfalı, müşteriye verilebilir)
 - Geçmiş tarihli borç girişi (özel fiyat, kısmi tahsilat, enflasyon seçeneği)
 - Toplu ilaç borcu ekleme (tek seferde N ilaç, orantılı tahsilat dağıtımı)
 - Çok kullanıcı desteği (her kullanıcı kendi izole veritabanında çalışır)
@@ -30,7 +31,7 @@ Temel amacı müşteri borç/alacak yönetimini dijitalleştirmek ve **enflasyon
 **TypeScript Migrasyonu (TASK-023):** Incremental geçiş — `allowJs: true` ile başlanır, `strict: true` hedeflenir. Sıra: `src/types/index.ts` → servis → hook → context → component. Detaylar: [TASK.md](./TASK.md#task-023).
 
 **Faz 11:**
-- **PDF ekstre** (TASK-021 Faz 2): CSV ile aynı satır ve toplamların PDF sunumu (`@react-pdf/renderer`, lazy import). CSV faz 1'de tamamlandı
+- **İlaç stok takibi** (TASK-022): `drugs` koleksiyonuna `stock`/`minStock` alanı, otomatik düşüm, kritik eşik uyarısı
 - **İlaç stok takibi** (TASK-022): `drugs` koleksiyonuna `stock`/`minStock` alanı, otomatik düşüm, kritik eşik uyarısı
 
 ---
@@ -246,6 +247,23 @@ Para hareketi yaratan her log iki alan taşır:
 
 `utils/download.js` DOM'a ve `URL.createObjectURL`'e dokunan tek yerdir; ekstre üretimi saf metin döndürdüğü için asıl mantık jsdom stub'ı olmadan test edilir.
 
+#### PDF (TASK-021 Faz 2)
+
+Aynı veriden basılı çıktı. **Yeni hesap yapmaz:** satırlar `buildStatementRows`'dan, toplamlar `summarizePeriod`'dan; `statementPdfModel.test.js` son satırın bakiyesinin CSV'nin kapanış bakiyesiyle aynı olduğunu doğrular.
+
+**Yazı tipi kritik yoldur.** PDF'in standart 14 fontu (Helvetica) WinAnsi (CP1252) kullanır: `ç ö ü` vardır ama **`ş ğ ı İ Ş Ğ` ve `₺` yoktur**. Uygulamanın bütün metni Türkçe olduğu için gömülü TTF olmadan çıktı boş kutularla dolardı — ve bozuk glif sessizce çizilir, ne lint ne build ne de bileşen testi yakalar.
+
+- **Roboto gömülüdür** (`@expo-google-fonts/roboto`, iki ağırlık ~312 KB). Ölçülerek seçildi: DejaVu Sans da tüm kod noktalarını taşıyor ama 1.4 MB
+- `utils/fonts.test.js` ileriye dönük bir kapıdır: gerçek TTF'i fontkit ile açıp 15 kod noktasını tek tek sorar, ayrıca CJK/emoji için `false` bekler (kontrolün gerçekten ayırt ettiğini kanıtlar). Font değiştirilir ya da kapsama daralırsa **burası kırılır**
+- Üretilen PDF `Type0` + `Identity-H` + `FontFile2` kullanır — yani gömülü TrueType alt kümesiyle CID kodlaması, WinAnsi değil. Türkçe/`₺` sorununun kapandığının teknik kanıtı budur
+- **Çevrimdışı sınır:** `Font.register` TTF'i URL'den indirir ve uygulamada service worker yoktur, dolayısıyla çevrimdışıyken PDF üretilemez. Hata yakalanıp kullanıcıya söylenir; sessizce boş kutulu PDF verilmez
+
+**Lazy chunk sınırı** `utils/statementPdfRenderer.js`'tir; `@react-pdf/renderer` ve fontlar **yalnızca** oradan import edilir. Ölçüldü: ana bundle 759.5 → 765.9 KB (+6.4 KB), PDF chunk'ı 1.2 MB (gzip 445 KB) ayrı dosyada. Başka bir yerden import edilirse chunk ana bundle'a geri düşer.
+
+**Sayfa düzeni** A4 dikey, 5 sütun (`Tarih | İşlem | Borç | Alacak | Bakiye`). `Durum` sütun değil **biçimdir**: sayılmayan satırlar üstü çizili + soluk, kalem iptali ise sayılmaya devam ettiği için çizilmez (yanındaki rakam geçerliyken satırı çizmek yanlış olurdu), yalnızca not düşülür. Tablo başlığı `fixed` ile her sayfada tekrar eder, sayfa numarası altbilgide.
+
+> `fixed` ve `render` **aynı elemanda** olmalı. Sarmalayıcı bir `View`'a `fixed`, iç `Text`'e `render` konulduğunda altbilgi PDF'te **hiç çizilmiyor** ve hata vermiyor. Bu gerçek bir kusur olarak yaşandı; `StatementPdfDocument.test.jsx` @react-pdf bileşenlerini mock'layıp eleman ağacını gezerek bu yapısal sözleşmeyi sınar.
+
 ### Ekstre Sıralama Kuralı
 
 Ekstre `date` (yeniden eskiye) → `timestamp` (yeniden eskiye) → `getLogSortPriority` sırasıyla dizilir. Öncelik yalnızca aynı milisaniyede yazılmış batch logları için devreye girer; küçük öncelik = üstte = olayın daha sonra gerçekleştiği anlamına gelir.
@@ -356,7 +374,10 @@ vetcari-app/
 │   │   │   ├── BatchReturnModal.jsx # Kalem seçimli toplu iade
 │   │   │   ├── CancelBatchModal.jsx # İşlem / kalem iptali (gerekçe zorunlu)
 │   │   │   ├── RevertPaymentModal.jsx # Son tahsilatı geri alma (gerekçe zorunlu)
-│   │   │   └── StatementExportModal.jsx # CSV ekstre indirme (dönem seçimi + önizleme)
+│   │   │   └── StatementExportModal.jsx # CSV/PDF ekstre indirme (bicim + donem secimi)
+│   │   ├── pdf/
+│   │   │   ├── StatementPdfDocument.jsx      # A4 cizim katmani (ince, modeli cizer)
+│   │   │   └── StatementPdfDocument.test.jsx # Yapisal sozlesme (fixed/render/wrap)
 │   │   └── ui/
 │   │       ├── ConfirmModal.jsx
 │   │       ├── Toast.jsx
@@ -402,6 +423,11 @@ vetcari-app/
 │   │   ├── csv.test.js
 │   │   ├── statementExport.js       # Cari ekstre satırları, bakiye yürüyüşü, dosya adı
 │   │   ├── statementExport.test.js  # Bakiye ↔ summarizePeriod dikişi dahil
+│   │   ├── statementPdfModel.js     # PDF modeli (satır biçimleri, toplamlar, lejant)
+│   │   ├── statementPdfModel.test.js
+│   │   ├── statementPdfRenderer.js  # @react-pdf + font import eden TEK yer (lazy chunk)
+│   │   ├── fonts.js                 # Gömülü Roboto TTF kaydı + gerekli kod noktaları
+│   │   ├── fonts.test.js            # Türkçe + ₺ glif kapsama kapısı (fontkit)
 │   │   └── download.js              # Blob + <a download> (DOM'a dokunan tek yer)
 │   │
 │   ├── App.jsx                      # activeTab ile sekme yönetimi

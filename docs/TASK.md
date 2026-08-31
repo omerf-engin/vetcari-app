@@ -1526,7 +1526,7 @@ yapilmadi. Ihtiyac olursa ayri bir task olarak ele alinabilir.
 
 | Alan | Deger |
 |------|-------|
-| **Status** | Faz 1 (CSV) DONE — Faz 2 (PDF) TODO |
+| **Status** | DONE (Faz 1 CSV + Faz 2 PDF) |
 | **Priority** | P2 |
 | **Depends on** | TASK-019, TASK-020 |
 
@@ -1599,12 +1599,69 @@ Ekstre bu yuzden **ileriye donuk** dogrudur; gecmis veri icin tutar bilgisi yaln
 metninde kalir. Toplu geri doldurma ayri bir task olarak ele alinabilir (TASK-020 notlarindaki
 gerekce ile: `fmtTL` 1 ondalik yazdigi icin metinden geri okuma kayipli).
 
-### Faz 2 — PDF (TODO)
+### Faz 2 — PDF (DONE, 2026-08-31)
 
-CSV altyapisi hazir: `buildStatementRows` satirlari ve `summarizePeriod` toplamlari PDF'te
-aynen kullanilabilir, yalnizca sunum katmani yazilacak. `@react-pdf/renderer` lazy import ile
-eklenmeli. `StatementExportModal`'a format secici (CSV/PDF) o zaman eklenir — su an devre disi
-bir kontrol gostermek yerine hic gosterilmiyor.
+**Ne yapildi:**
+- `utils/fonts.js` + `fonts.test.js` — gomulu Roboto TTF kaydi ve **glif kapsama kapisi**
+- `utils/statementPdfModel.js` — saf model kurucu (satir bicimleri, devir, toplamlar, lejant)
+- `components/pdf/StatementPdfDocument.jsx` — A4 dikey cizim katmani
+- `utils/statementPdfRenderer.js` — @react-pdf ve fontu import eden **tek** modul (lazy siniri)
+- `StatementExportModal`'a CSV/PDF bicim secici; `statementExport.js`'e `fileName(ext)` ve
+  `toCsv()` (metin artik istendiginde kuruluyor)
+- Test 460 → 537
+
+**KRITIK BULGU — yazi tipi:**
+PDF'in standart fontlari (Helvetica) WinAnsi kullaniyor: `ç ö ü` var ama **`ş ğ ı İ Ş Ğ` ve
+`₺` YOK**. Uygulamanin butun metni Turkce oldugu icin gomulu TTF olmadan cikti bos kutularla
+dolardi. Bozuk glif **sessizce** cizilir; ne lint, ne build, ne birim testi yakalar.
+
+Font olculerek secildi (fontkit ile gercek dosyaya sorularak):
+
+| Font | Boyut (regular+bold) | Kapsama |
+|------|---------------------|---------|
+| **Roboto** (secildi) | **312 KB** | tum kod noktalari VAR |
+| DejaVu Sans | 1428 KB | tum kod noktalari VAR ama 4.5x agir |
+| `@fontsource/roboto` | — | eleme disi: yalnizca woff2, fontkit guvenilir okumuyor |
+
+`@expo-google-fonts/roboto` ham TTF veriyor ve hicbir bagimliligi yok (Expo suruklemiyor).
+Uretilen PDF `Type0` + `Identity-H` + `FontFile2` kullaniyor — gomulu TrueType alt kumesiyle
+CID kodlamasi, WinAnsi degil. Sorunun kapandiginin teknik kaniti bu.
+
+**Kabul kriterlerinden KASITLI SAPMALAR:**
+
+1. **5 sutun**, CSV'nin 8 sutunu degil: `Tarih | İşlem | Borç | Alacak | Bakiye`. A4 dikeyde
+   (~515pt) 8 sutun sikisik kaliyordu. `Kaynak` ve `Açıklama` islem hucresinde alt satirlara,
+   `Durum` ise **satir bicimine** tasindi (ustu cizili / soluk / not). Kullanici karari.
+2. **Kalem iptali ustu cizili DEGIL.** Sayilmaya devam ettigi icin para sutunlari dolu;
+   yanindaki rakam gecerliyken satiri cizmek okuyucuya yanlis sey soylerdi. Yalnizca
+   "(kalem iptal edildi)" notu dusuluyor. Islem iptali ve geri alma ustu cizili.
+3. **Tutarlar `fmtTLExact` ile** (`1.234,56 ₺`), `fmtTL` ile degil. `fmtTL` en fazla 1 ondalik
+   yaziyor; musterinin eline verilen ekstrede kurus kaybi kabul edilemez. Ayni PDF'te bunun
+   kaniti gorunuyor: aciklama metni "2.345,7 ₺" derken Borc sutunu "2.345,67 ₺" yaziyor.
+4. **`@react-pdf/renderer` ~200 KB degil, 1.2 MB** (gzip 445 KB). TASK.md'deki tahmin 6 kat
+   sasmis. Lazy import zorunlu hale geldi; olculdu: ana bundle 759.5 → 765.9 KB (**+6.4 KB**),
+   PDF chunk'i ayri dosyada.
+
+**BULUNAN VE DUZELTILEN KUSUR:**
+Altbilgi (sayfa numarasi) **hic cizilmiyordu**. `fixed` sarmalayici `View`'a, `render` ise ic
+`Text`'e konmustu; @react-pdf'te ikisi **ayni elemanda** olmali, aksi halde sessizce hicbir sey
+cizilmiyor ve hata da vermiyor. Arayuz metninde "her sayfada sayfa numarasi ile" yaziyordu,
+yani soz verilen sey yoktu. Yalnizca gercek tarayicida uretilen PDF'e bakarken goruldu.
+`StatementPdfDocument.test.jsx` bu bosluğu kapatiyor: @react-pdf bilesenlerini mock'layip
+eleman agacini geziyor ve yapisal sozlesmeyi (`fixed` + `render` ayni elemanda, tablo basligi
+`fixed`, satirlar `wrap={false}`) siniyor. Orijinal kusur geri konuldugunda 2 test kiriliyor.
+
+**BILINEN SINIR — cevrimdisi:**
+`Font.register` TTF'i URL'den indiriyor ve uygulamada service worker yok. Cevrimdisiyken PDF
+**uretilemez**; hata yakalanip kullaniciya soyleniyor. Sessizce bos kutulu bir PDF vermek
+alternatifi kabul edilmedi. Firestore'un cevrimdisi calismasi bundan etkilenmiyor.
+
+**Dogrulama (gercek Firestore + tarayici):**
+`ZZTEST Şükrü Iğdır Çöğüş` musterisiyle — ad kasten WinAnsi'de olmayan tum harfleri iceriyor
+(`Ş ü I ğ ı Ç ö ş`). Uretilen PDF'te hepsi ve `₺`, `×`, `—` dogru cizildi. 55 hareketlik
+ikinci bir denemede 4 sayfa uretildi, her sayfada sutun basligi tekrar etti ve "Sayfa 2 / 4"
+yazdi; iptal edilmis satirlar ustu cizili ve soluk cikti, bakiyeyi oynatmadi; olculemeyen
+satir "(tutar kaydı yok)" notuyla gorundu. Sonunda ZZTEST silindi.
 
 ---
 
