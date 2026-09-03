@@ -1834,3 +1834,56 @@ export interface Transaction {
 ### Notes
 
 `allowJs: true` sayesinde adimlar istediginiz tempoda tamamlanabilir; her adim ayri commit. `@types/react` ve `@types/react-dom` zaten `devDependencies`'de mevcut (`^19.x`). Sadece `typescript` paketi eklenmesi gerekiyor (`npm i -D typescript`). `vite.config.js` zaten Vite 8 ile `.ts` extension'i native destekliyor; rename disinda degisiklik gerekmez.
+
+---
+
+## BAKIM-001: Firebase 12.11.0 -> 12.18.0 (guvenlik)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE (2026-09-02) |
+| **Priority** | P2 |
+| **Tur** | Bagimlilik bakimi (gorev tanimi onceden yazilmadi, tek paket guncellemesi) |
+
+**Sebep:** `npm audit` iki **kritik** zafiyet gosteriyordu ve ikisi de firebase'in transitive
+bagimliliklarindan geliyordu.
+
+**Kapanan zafiyetler:**
+
+| paket | once → sonra | siddet |
+|-------|--------------|--------|
+| protobufjs | 7.5.4 → 7.6.6 | CRITICAL (arbitrary code execution) |
+| websocket-driver | 0.7.4 → 0.7.5 | CRITICAL (resource limit bypass) |
+| @grpc/grpc-js | 1.9.15 → 1.9.16 | HIGH (malformed request crash) |
+| @protobufjs/utf8 | 1.1.0 → 1.1.2 | MODERATE (overlong UTF-8 decoding) |
+
+Zafiyet **14 → 10**, kritik **2 → 0**. Kalan 10'un 10'u da **yalnizca dev** (vite, postcss,
+babel, undici, nanoid, js-yaml, brace-expansion, browserslist, humanfs,
+postcss-selector-parser) — **uretim bagimlilik agacinda sifir zafiyet**.
+
+**KABUL EDILEN ODUNLESIM (kullanici karari):**
+Ana bundle **765.87 → 974.00 kB** (gzip 224.16 → 282.47, **+%26**). Artisin tamami firebase
+SDK'sinin kendi buyumesi; once/sonra build alinarak izole edildi. **Ara surum kacisi yok:**
+
+| firebase | ana bundle (gzip) | zafiyet |
+|----------|-------------------|---------|
+| 12.11.0 | 765.87 kB (224.16) | 14, 2 kritik |
+| 12.15.0 | 984.79 kB (286.25) | 10, 0 kritik |
+| 12.17.1 | 974.68 kB (282.60) | 10, 0 kritik |
+| **12.18.0** (secildi) | **974.00 kB (282.47)** | 10, 0 kritik |
+
+Sisme ile guvenlik duzeltmesi ayni aralikta gelmis; 12.18.0 hem en yeni hem en kucugu.
+
+**Not:** `@grpc/grpc-js` ve `protobufjs` `npm audit`'te "PROD" gorunur ama **pakete girmez** —
+firebase web SDK'si Firestore'a WebChannel/XHR ile baglanir, gRPC yalnizca Node tasima katmani
+icindir ve tree-shaking onu eler (`dist`'te 0 eslesme, guncelleme oncesi ve sonrasi).
+
+**DOGRULAMA — neden birim testleri yetmedi:**
+537 testin **hepsi firebase'i mock'luyor**, yani yeni SDK ile hic konusmuyorlar; yesil paket
+burada "calisiyor" demek degil. Tarayicida gercek Firestore'a karsi uc yazma yolu da denendi:
+`addDoc` (musteri ekleme), `writeBatch` (borc girisi, 1.500,50 TL) ve `runTransaction`
+(islem iptali — TASK-033'un surum kontrollu yolu). Ucu de calisti, konsol temiz, ZZTEST silindi.
+
+**Yapilmadi (bilincli):** `npm audit fix` / `npm update` calistirilmadi. Ikisi de build
+zincirini kaydiriyor (`@rolldown/binding` rc → stable + 10'dan fazla `lightningcss` platform
+binary'si) ve kalan zafiyetlerin hepsi dev-only oldugu icin karsiligi yok.

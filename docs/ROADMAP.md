@@ -1,6 +1,7 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 31 Agustos 2026 (TASK-021 tamamlandi — CSV + PDF ekstre; test 537).
+> Son guncelleme: 2 Eylul 2026 (TASK-021 tamamlandi — CSV + PDF ekstre; BAKIM-001 firebase
+> 12.18.0). Test 537, lint 0/0, build basarili. Tum commitler push edildi.
 > Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu).
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
@@ -280,16 +281,33 @@ canli kurallar su an ayrisik durumda.
 - [x] PDF ekstre: A4 dikey, cok sayfali, her sayfada sutun basligi ve sayfa numarasi.
       Turkce + `₺` icin **gomulu Roboto**; standart PDF fontlari WinAnsi oldugu icin
       `ş ğ ı İ` ve `₺` yazamiyor (TASK-021 Faz 2, P2)
-- [x] `@react-pdf/renderer` lazy chunk'ta: ana bundle 759.5 → 765.9 KB (+6.4 KB)
+- [x] `@react-pdf/renderer` lazy chunk'ta: ana bundle'a etkisi +6.4 KB (1.2 MB'lik chunk
+      ayri dosyada kaliyor)
 - [x] Test 457 → 537
 - [ ] Ilac stok takibi (otomatik stok dusumu, kritik esik uyarisi)
 
-> Ilgili tasklar: TASK-020, TASK-021, TASK-022
+> Ilgili tasklar: TASK-020, TASK-021, TASK-022, BAKIM-001
 >
 > **Rapor ve ekstre ileriye donuk dogrudur:** `flow`/`amount` TASK-020 ile eklendi; oncesinde
 > yazilmis kayitlar olculemez, arayuzde ve CSV'de sayilarak bildirilir (fail-closed). Mevcut
 > veride bu kayitlarin orani yuksek: tarayicida bakilan bir musteride 30 kaydin 30'u da
 > olculemezdi — CSV'de `Olculemiyor` cikar ve bakiyeye girmez.
+
+---
+
+## Bakim — Bagimlilik Guvenligi
+
+- [x] **BAKIM-001** (2026-09-02): firebase 12.11.0 → 12.18.0. Iki kritik zafiyet kapandi
+      (protobufjs, websocket-driver). Zafiyet 14 → 10, kritik 2 → 0; kalan 10'un hepsi
+      **yalnizca dev**, uretim bagimlilik agacinda sifir. Bedeli kullanici onayiyla kabul
+      edildi: ana bundle 765.87 → 974.00 kB (gzip +58 KB, %26). Olcum tablosu: TASK.md
+- [ ] Vite/rolldown guncellemesi — kalan 10 dev-only zafiyet icin. `npm audit fix` build
+      zincirini kaydiriyor (`@rolldown/binding` rc → stable + 10'dan fazla lightningcss
+      platform binary'si), o yuzden ayri bir is olarak ele alinmali
+
+> **Kural:** SDK yukseltmesi sonrasi birim testleri yeterli DEGIL — 537 testin hepsi
+> firebase'i mock'luyor, yani yeni SDK ile hic konusmuyorlar. Tarayicida `addDoc`,
+> `writeBatch` ve `runTransaction` yollari gercek Firestore'a karsi denenmeli.
 
 ---
 

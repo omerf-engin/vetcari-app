@@ -1,8 +1,9 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.6  
-> **Son güncelleme:** 12 Nisan 2026  
-> **Durum:** Geliştirme aşamasında (Faz 10+ tamamlandı, TypeScript migrasyonu ve Faz 11 planlama)
+> **Sürüm:** 1.7  
+> **Son güncelleme:** 2 Eylül 2026  
+> **Durum:** Üretimde. Faz 11 (dönemsel raporlama + CSV/PDF ekstre) tamamlandı; 537 test.
+> Kalan: TASK-022 (ilaç stok takibi), TASK-023 (TypeScript migrasyonu)
 
 ---
 
@@ -258,7 +259,9 @@ Aynı veriden basılı çıktı. **Yeni hesap yapmaz:** satırlar `buildStatemen
 - Üretilen PDF `Type0` + `Identity-H` + `FontFile2` kullanır — yani gömülü TrueType alt kümesiyle CID kodlaması, WinAnsi değil. Türkçe/`₺` sorununun kapandığının teknik kanıtı budur
 - **Çevrimdışı sınır:** `Font.register` TTF'i URL'den indirir ve uygulamada service worker yoktur, dolayısıyla çevrimdışıyken PDF üretilemez. Hata yakalanıp kullanıcıya söylenir; sessizce boş kutulu PDF verilmez
 
-**Lazy chunk sınırı** `utils/statementPdfRenderer.js`'tir; `@react-pdf/renderer` ve fontlar **yalnızca** oradan import edilir. Ölçüldü: ana bundle 759.5 → 765.9 KB (+6.4 KB), PDF chunk'ı 1.2 MB (gzip 445 KB) ayrı dosyada. Başka bir yerden import edilirse chunk ana bundle'a geri düşer.
+**Lazy chunk sınırı** `utils/statementPdfRenderer.js`'tir; `@react-pdf/renderer` ve fontlar **yalnızca** oradan import edilir. PDF kütüphanesinin ana bundle'a etkisi ölçüldü: **+6.4 KB** (759.5 → 765.9 KB, firebase 12.11 dönemindeki ölçüm); chunk'ın kendisi 1.2 MB (gzip 445 KB) ayrı dosyada kalıyor. Başka bir yerden import edilirse chunk ana bundle'a geri düşer.
+
+> Güncel mutlak boyutlar (firebase 12.18.0 sonrası): ana bundle **974.00 kB** (gzip 282.47), PDF chunk'ı 1.204,74 kB (gzip 445.19). Ana bundle'daki artış PDF'ten değil, firebase SDK'sının 12.11 → 12.18 arası büyümesinden gelir (bkz. TASK.md).
 
 **Sayfa düzeni** A4 dikey, 5 sütun (`Tarih | İşlem | Borç | Alacak | Bakiye`). `Durum` sütun değil **biçimdir**: sayılmayan satırlar üstü çizili + soluk, kalem iptali ise sayılmaya devam ettiği için çizilmez (yanındaki rakam geçerliyken satırı çizmek yanlış olurdu), yalnızca not düşülür. Tablo başlığı `fixed` ile her sayfada tekrar eder, sayfa numarası altbilgide.
 
