@@ -27,7 +27,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col items-center p-8 border-t-8 border-t-indigo-600">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col items-center p-8">
         <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mb-4 shadow-sm">
           <Stethoscope className="w-8 h-8" />
         </div>
@@ -35,7 +35,7 @@ export default function Login() {
         <p className="text-sm text-slate-500 mb-8 text-center mt-2">Finansal dökümlerinizi güvenle saklayın.</p>
         
         {error && (
-          <div className="w-full bg-red-50 text-red-600 border border-red-200 text-sm p-4 rounded-xl mb-6 font-medium text-center">
+          <div className="w-full bg-rose-50 text-rose-600 border border-rose-200 text-sm p-4 rounded-xl mb-6 font-medium text-center">
             {error}
           </div>
         )}
@@ -49,10 +49,10 @@ export default function Login() {
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 required 
-                className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 pl-11 focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 font-medium text-slate-800" 
+                className="w-full border border-slate-300 rounded-lg px-4 py-3 pl-11 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-500 font-medium text-slate-800" 
                 placeholder="ornek@vetcari.com" 
               />
-              <Mail className="w-5 h-5 text-slate-400 absolute left-4 top-3.5" />
+              <Mail className="w-5 h-5 text-slate-500 absolute left-4 top-3.5" />
             </div>
           </div>
           <div>
@@ -63,10 +63,10 @@ export default function Login() {
                 value={password} 
                 onChange={(e) => setPassword(e.target.value)} 
                 required 
-                className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 pl-11 focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 font-medium text-slate-800" 
+                className="w-full border border-slate-300 rounded-lg px-4 py-3 pl-11 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-500 font-medium text-slate-800" 
                 placeholder="••••••••" 
               />
-              <KeyRound className="w-5 h-5 text-slate-400 absolute left-4 top-3.5" />
+              <KeyRound className="w-5 h-5 text-slate-500 absolute left-4 top-3.5" />
             </div>
           </div>
           <button 
@@ -80,7 +80,7 @@ export default function Login() {
           </button>
         </form>
       </div>
-      <div className="fixed bottom-6 text-xs text-slate-400 font-medium">{`VetCari Akıllı Defter v${version}`}</div>
+      <div className="fixed bottom-6 text-xs text-slate-500 font-medium">{`VetCari Akıllı Defter v${version}`}</div>
     </div>
   );
 }

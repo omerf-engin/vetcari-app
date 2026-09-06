@@ -45,7 +45,7 @@ export default function PriceImpactModal({ mode, drugName, oldPrice, newPrice, i
               {' · '}{fmtTL(oldPrice)} → {fmtTL(newPrice)}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors flex-shrink-0">&#x2715;</button>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target flex-shrink-0">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
@@ -105,8 +105,8 @@ export default function PriceImpactModal({ mode, drugName, oldPrice, newPrice, i
                       <td className="px-4 py-2.5 text-right">
                         {isIncrease || isRevert ? (
                           <span className="whitespace-nowrap">
-                            <span className="text-slate-400">{fmtTL(isRevert ? row.newTl : row.oldTl)}</span>
-                            <span className="text-slate-300"> → </span>
+                            <span className="text-slate-500">{fmtTL(isRevert ? row.newTl : row.oldTl)}</span>
+                            <span className="text-slate-400"> → </span>
                             <strong className={isRevert ? 'text-emerald-700' : 'text-rose-600'}>
                               {fmtTL(isRevert ? row.oldTl : row.newTl)}
                             </strong>

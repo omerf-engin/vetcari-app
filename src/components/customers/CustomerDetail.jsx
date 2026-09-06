@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Undo2, Plus, Trash2, Clock, ChevronDown, ChevronRight, Ban, Download } from 'lucide-react';
+import { ArrowLeft, CreditCard, Lock, Unlock, History, Undo, Undo2, Plus, Clock, ChevronDown, ChevronRight, Ban, Download } from 'lucide-react';
 import { fmtTL, fmtQty, fmtDate } from '../../utils/formatters';
 import { groupDebtsByBatch } from '../../utils/debtGrouping';
 import { canCancelBatch, canCancelOrphanBatch, cancelBlockedMessage, cancelledBatchIds, cancelledDebtIds } from '../../utils/batchCancel';
@@ -223,14 +223,14 @@ export default function CustomerDetail({ onBack }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <button onClick={onBack} className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-medium transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-fit"><ArrowLeft className="w-4 h-4" /> Listeye Dön</button>
+        <button onClick={onBack} className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-medium transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-fit touch-target"><ArrowLeft className="w-4 h-4" /> Listeye Dön</button>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <button
             type="button"
             onClick={() => setShowCustomerHistory(true)}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 transition-transform transform active:scale-95"
           >
-            <History className="w-5 h-5" /> Genel ekstre
+            <History className="w-5 h-5" /> Genel Ekstre
           </button>
           {showRevertPayment && (
             <button
@@ -261,7 +261,7 @@ export default function CustomerDetail({ onBack }) {
           </div>
           <div className="pl-6 border-l border-slate-200">
             <p className="text-sm font-semibold text-slate-500 mb-1">Toplam Güncel Borç</p>
-            <p className="text-2xl font-bold text-red-600">{fmtTL(netDebt)}</p>
+            <p className="text-2xl font-bold text-rose-600">{fmtTL(netDebt)}</p>
           </div>
         </div>
       </div>
@@ -272,10 +272,10 @@ export default function CustomerDetail({ onBack }) {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 font-semibold text-slate-700 flex justify-between items-center">
               <span>İşlemler</span>
-              <span className="text-xs font-medium text-slate-400 normal-case">İlaç borçları enflasyon korumalıdır</span>
+              <span className="text-xs font-medium text-slate-500 normal-case">İlaç borçları enflasyon korumalıdır</span>
             </div>
             {debtGroups.length === 0 ? (
-              <p className="p-5 text-slate-400 text-sm italic text-center">Aktif borç bulunmuyor.</p>
+              <p className="p-5 text-slate-500 text-sm italic text-center">Aktif borç bulunmuyor.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {debtGroups.map(group => {
@@ -290,8 +290,8 @@ export default function CustomerDetail({ onBack }) {
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           {isOpen
-                            ? <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                            : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+                            ? <ChevronDown className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />}
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-slate-800">{fmtDate(group.date)}</span>
@@ -304,7 +304,7 @@ export default function CustomerDetail({ onBack }) {
                             </div>
                           </div>
                         </div>
-                        <span className="font-bold text-red-600 text-lg flex-shrink-0">{fmtTL(group.total)}</span>
+                        <span className="font-bold text-rose-600 text-lg flex-shrink-0">{fmtTL(group.total)}</span>
                       </button>
 
                       {isOpen && (
@@ -315,7 +315,7 @@ export default function CustomerDetail({ onBack }) {
                               <>
                                 <button
                                   onClick={() => onToggleBatchLock(group.items.filter(i => i.type === 'drug'))}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target text-xs font-semibold transition-colors ${
                                     group.allFixed
                                       ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -326,7 +326,7 @@ export default function CustomerDetail({ onBack }) {
                                 </button>
                                 <button
                                   onClick={() => setBatchReturnId(group.batchId)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
                                 >
                                   <Undo className="w-3.5 h-3.5" /> Toplu İade
                                 </button>
@@ -334,7 +334,7 @@ export default function CustomerDetail({ onBack }) {
                             )}
                             <button
                               onClick={() => setHistoryBatchId(group.batchId)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
                             >
                               <History className="w-3.5 h-3.5" /> Grup Ekstresi
                             </button>
@@ -345,7 +345,7 @@ export default function CustomerDetail({ onBack }) {
                                   onClick={() => setCancelTarget({ batchId: group.batchId, date: group.date })}
                                   disabled={!cancelState.ok}
                                   title={cancelState.ok ? 'Hatalı girişi iptal et' : cancelBlockedMessage(cancelState.reason)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors disabled:opacity-40 disabled:hover:bg-slate-100 disabled:hover:text-slate-600 disabled:cursor-not-allowed"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors disabled:opacity-40 disabled:hover:bg-slate-100 disabled:hover:text-slate-600 disabled:cursor-not-allowed"
                                 >
                                   <Ban className="w-3.5 h-3.5" /> İşlemi İptal Et
                                 </button>
@@ -353,7 +353,7 @@ export default function CustomerDetail({ onBack }) {
                             })()}
                           </div>
                           {!(cancelStateByBatch.get(group.batchId)?.ok) && (
-                            <p className="px-5 pb-3 -mt-1 text-[11px] text-slate-400 italic">
+                            <p className="px-5 pb-3 -mt-1 text-xs text-slate-500 italic">
                               {cancelBlockedMessage(cancelStateByBatch.get(group.batchId)?.reason)}
                             </p>
                           )}
@@ -369,15 +369,17 @@ export default function CustomerDetail({ onBack }) {
                                 </div>
                                 <div className="flex items-center gap-4 flex-shrink-0">
                                   <div className="text-right">
-                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Tutar</p>
-                                    <p className="font-bold text-red-600 text-xl">{fmtTL(d.amount)}</p>
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Tutar</p>
+                                    <p className="font-bold text-rose-600 text-xl">{fmtTL(d.amount)}</p>
                                   </div>
+                                  {/* Ilac satirindakiyle ayni cip: ayni is ayni gorunmeli,
+                                      etiketsiz ikon yikici bir eylemde ne yaptigini soylemiyor */}
                                   <button
                                     onClick={() => setCancelItem(d)}
                                     title="Kalemi İptal Et"
-                                    className="text-slate-300 hover:text-rose-500 transition-colors bg-white hover:bg-rose-50 p-2 rounded-md border border-transparent hover:border-rose-100 border-l border-l-slate-200 ml-2"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Ban className="w-3.5 h-3.5" /> İptal
                                   </button>
                                 </div>
                               </li>
@@ -390,29 +392,29 @@ export default function CustomerDetail({ onBack }) {
                                   </div>
                                   <div className="text-sm text-slate-600 mt-1 flex items-center gap-2">
                                     <span>Kalan: <strong className="text-slate-800">{fmtQty(d.qty)} Adet</strong></span>
-                                    <span className="text-slate-300">|</span>
+                                    <span className="text-slate-400">|</span>
                                     <span>Baz Fiyat: {fmtTL(d.maxPrice)}</span>
                                   </div>
                                 </div>
 
                                 <div className="flex items-center gap-5 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0 mt-2 sm:mt-0">
                                   <div className="text-right">
-                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Güncel Tutar</p>
-                                    <p className="font-bold text-red-600 text-xl">{fmtTL(d.tlValue)}</p>
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Güncel Tutar</p>
+                                    <p className="font-bold text-rose-600 text-xl">{fmtTL(d.tlValue)}</p>
                                   </div>
 
                                   <div className="flex gap-2 border-l border-slate-200 pl-4 ml-2 flex-shrink-0">
                                     <button
                                       title="Borç Geçmişini Gör"
                                       onClick={() => setHistoryDebtId(d.id)}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
                                     >
                                       <History className="w-3.5 h-3.5" /> Geçmiş
                                     </button>
                                     <button
                                       onClick={() => onToggleLock(d.id)}
                                       title={d.isFixed ? "Kilidi Aç" : "Fiyatı Sabitle"}
-                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target text-xs font-semibold transition-colors ${
                                         d.isFixed
                                           ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -424,7 +426,7 @@ export default function CustomerDetail({ onBack }) {
                                     <button
                                       onClick={() => { setReturnModalDebt(d); setReturnInputQty('1'); }}
                                       title="İade Al / Adet Düş"
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
                                     >
                                       <Undo className="w-3.5 h-3.5" /> İade
                                     </button>
@@ -433,7 +435,7 @@ export default function CustomerDetail({ onBack }) {
                                     <button
                                       onClick={() => setCancelItem(d)}
                                       title="Kalemi İptal Et"
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md touch-target bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-600 text-xs font-semibold transition-colors"
                                     >
                                       <Ban className="w-3.5 h-3.5" /> İptal
                                     </button>
@@ -480,7 +482,7 @@ export default function CustomerDetail({ onBack }) {
             >
               <Download className="w-4 h-4" /> Ekstreyi İndir
             </button>
-            <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+            <p className="text-xs text-slate-500 mt-3 leading-relaxed">
               Seçtiğin dönemin hareket dökümünü Excel'de açılabilen CSV olarak indirir.
             </p>
           </div>

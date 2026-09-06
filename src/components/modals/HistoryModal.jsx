@@ -78,7 +78,7 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
       case 'info': return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'success': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       case 'warning': return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'danger': return 'bg-red-100 text-red-700 border-red-200';
+      case 'danger': return 'bg-rose-100 text-rose-700 border-rose-200';
       default: return 'bg-slate-100 text-slate-600 border-slate-200';
     }
   };
@@ -99,18 +99,18 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
             <h2 className="text-xl font-bold text-indigo-900 flex items-center gap-2"><History className="w-5 h-5" /> {title}</h2>
             <p className="text-sm text-indigo-700/80 mt-1 font-medium">{subtitle}</p>
           </div>
-          <button type="button" onClick={onClose} className="text-indigo-400 hover:text-indigo-900 bg-indigo-200/50 hover:bg-indigo-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button type="button" onClick={onClose} className="text-indigo-400 hover:text-indigo-900 bg-indigo-200/50 hover:bg-indigo-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
           {logs.length === 0 ? (
-            <p className="text-center text-slate-400 py-8">Bu kayıt için henüz bir geçmiş bulunmuyor.</p>
+            <p className="text-center text-slate-500 py-8">Bu kayıt için henüz bir geçmiş bulunmuyor.</p>
           ) : isGrouped && logGroups ? (
             <div className="space-y-6">
               {logGroups.map((group) => (
                 <div key={group.groupKey}>
                   <div className="flex items-center gap-2 mb-3 px-1">
-                    <span className={`text-xs font-bold uppercase tracking-wider ${group.cancelled ? 'text-slate-400 line-through' : 'text-indigo-600'}`}>{group.label}</span>
+                    <span className={`text-xs font-bold uppercase tracking-wider ${group.cancelled ? 'text-slate-500 line-through' : 'text-indigo-600'}`}>{group.label}</span>
                     {group.cancelled && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border bg-rose-100 text-rose-700 border-rose-200">
                         İptal Edildi
@@ -141,10 +141,10 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
                               </span>
                             )}
                           </span>
-                          <time className="text-xs text-slate-400 font-medium flex-shrink-0">{fmtDate(log.date)}</time>
+                          <time className="text-xs text-slate-500 font-medium flex-shrink-0">{fmtDate(log.date)}</time>
                         </div>
                         {group.showSourceLabels && log.sourceLabel && (
-                          <p className="text-[11px] font-semibold text-slate-400 mb-1">{log.sourceLabel}</p>
+                          <p className="text-xs font-semibold text-slate-500 mb-1">{log.sourceLabel}</p>
                         )}
                         <div className={`text-sm leading-relaxed font-medium ${log.cancelled ? 'text-slate-500' : 'text-slate-700'}`}>
                           {log.message}
@@ -169,7 +169,7 @@ export default function HistoryModal({ variant = 'debt', debtInfo, customerName,
                       <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${getBadgeColor(log.type)}`}>
                         {log.title}
                       </span>
-                      <time className="text-xs text-slate-400 font-medium">{fmtDate(log.date)}</time>
+                      <time className="text-xs text-slate-500 font-medium">{fmtDate(log.date)}</time>
                     </div>
                     <div className="text-sm text-slate-700 leading-relaxed font-medium">
                       {log.message}

@@ -39,7 +39,7 @@ export default function CancelBatchModal({ group, variant = 'batch', hasMoneyHis
               {fmtDate(group.date)}{isItem ? ' · tek kalem' : ` · ${group.itemCount} kalemlik işlem`}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
@@ -87,7 +87,7 @@ export default function CancelBatchModal({ group, variant = 'batch', hasMoneyHis
                     ) : (
                       <>
                         <span className="font-semibold text-slate-700 truncate">{item.drugName}</span>
-                        <span className="text-xs text-slate-400 flex-shrink-0">{fmtQty(item.qty)} adet</span>
+                        <span className="text-xs text-slate-500 flex-shrink-0">{fmtQty(item.qty)} adet</span>
                       </>
                     )}
                   </span>
@@ -120,7 +120,7 @@ export default function CancelBatchModal({ group, variant = 'batch', hasMoneyHis
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
               {group.items.length === 0 ? 'Borç Kaydı' : 'Silinecek Borç'}
             </p>
-            <p className={`font-bold text-2xl ${group.items.length === 0 ? 'text-slate-400' : 'text-rose-600'}`}>
+            <p className={`font-bold text-2xl ${group.items.length === 0 ? 'text-slate-500' : 'text-rose-600'}`}>
               {group.items.length === 0 ? 'Yok' : fmtTL(group.total)}
             </p>
           </div>

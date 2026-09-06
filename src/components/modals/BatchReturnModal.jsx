@@ -64,7 +64,7 @@ export default function BatchReturnModal({ group, onConfirm, onClose }) {
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Undo className="w-5 h-5 text-rose-600" /> Toplu İade</h2>
             <p className="text-sm text-slate-500 mt-1">{fmtDate(group.date)} · {group.itemCount} kalemlik işlem</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -72,7 +72,7 @@ export default function BatchReturnModal({ group, onConfirm, onClose }) {
             <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 accent-rose-600 cursor-pointer" />
             Tümünü seç
           </label>
-          <span className="text-xs text-slate-400 font-medium">{selection.length} kalem seçili</span>
+          <span className="text-xs text-slate-500 font-medium">{selection.length} kalem seçili</span>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-3">
@@ -106,7 +106,7 @@ export default function BatchReturnModal({ group, onConfirm, onClose }) {
                         invalid ? 'border-rose-400 text-rose-700 bg-white' : 'border-slate-200 text-slate-700 focus:border-rose-400'
                       }`}
                     />
-                    <p className="text-[10px] text-slate-400 text-right mt-1 uppercase tracking-wide">İade adedi</p>
+                    <p className="text-[10px] text-slate-500 text-right mt-1 uppercase tracking-wide">İade adedi</p>
                   </div>
                 </div>
                 {qty > debt.qty && row.selected && (

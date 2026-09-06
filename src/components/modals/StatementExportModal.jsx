@@ -109,7 +109,7 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
             </h2>
             <p className="text-sm text-slate-500 mt-1">{customerName}</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
@@ -138,7 +138,7 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
                     }`}>
                       <Icon className="w-4 h-4" /> {f.label}
                     </span>
-                    <span className="block text-[11px] text-slate-400 mt-1 leading-snug">{f.hint}</span>
+                    <span className="block text-xs text-slate-500 mt-1 leading-snug">{f.hint}</span>
                   </button>
                 );
               })}
@@ -224,7 +224,7 @@ export default function StatementExportModal({ customerName, logs, advanceBalanc
                 </div>
               )}
 
-              <p className="text-xs text-slate-400 leading-relaxed">
+              <p className="text-xs text-slate-500 leading-relaxed">
                 {format === 'csv'
                   ? 'Dosya noktalı virgülle ayrılmış, Excel\'in Türkçe ayarıyla doğrudan açılır. '
                   : 'A4 dikey, her sayfada sütun başlığı ve sayfa numarası ile. '}

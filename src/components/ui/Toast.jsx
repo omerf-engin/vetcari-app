@@ -16,7 +16,7 @@ export default function Toast({ id, type, message, onRemove }) {
     <div className={`animate-toast-in flex items-start gap-3 px-4 py-3 rounded-xl border ${style.bg} ${style.border} border-l-4 ${style.accent} shadow-lg`}>
       <Icon className={`w-5 h-5 mt-0.5 shrink-0 ${style.iconColor}`} />
       <p className={`flex-1 text-sm font-medium ${style.text}`}>{message}</p>
-      <button onClick={() => onRemove(id)} className={`shrink-0 p-0.5 rounded hover:bg-white/60 transition-colors ${style.iconColor}`}>
+      <button onClick={() => onRemove(id)} className={`shrink-0 p-0.5 rounded hover:bg-white/60 transition-colors touch-target ${style.iconColor}`}>
         <X className="w-4 h-4" />
       </button>
     </div>

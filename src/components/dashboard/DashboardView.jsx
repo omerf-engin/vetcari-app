@@ -55,7 +55,7 @@ export default function DashboardView({ customers, serviceDebts, drugDebts, onNa
             </div>
             <div className="p-3 bg-rose-50 rounded-lg text-rose-600"><Wallet className="w-6 h-6" /></div>
           </div>
-          <p className="text-xs text-slate-400 mt-4 font-medium">İlaç ve Hizmet borçlarının toplamı</p>
+          <p className="text-xs text-slate-500 mt-4 font-medium">İlaç ve Hizmet borçlarının toplamı</p>
         </div>
 
         <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 hover:shadow-md transition-shadow">
@@ -66,7 +66,7 @@ export default function DashboardView({ customers, serviceDebts, drugDebts, onNa
             </div>
             <div className="p-3 bg-emerald-50 rounded-lg text-emerald-600"><CreditCard className="w-6 h-6" /></div>
           </div>
-          <p className="text-xs text-slate-400 mt-4 font-medium">Müşterilerin fazladan bıraktığı bakiyeler</p>
+          <p className="text-xs text-slate-500 mt-4 font-medium">Müşterilerin fazladan bıraktığı bakiyeler</p>
         </div>
 
         <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 border-l-4 border-l-indigo-500 hover:shadow-md transition-shadow">
@@ -91,7 +91,7 @@ export default function DashboardView({ customers, serviceDebts, drugDebts, onNa
           </div>
           <div className="p-0">
             {customerDebts.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
+              <div className="p-8 text-center text-slate-500">
                 <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-emerald-300" />
                 <p className="font-medium">Tüm müşteriler borçsuz</p>
               </div>
@@ -125,7 +125,7 @@ export default function DashboardView({ customers, serviceDebts, drugDebts, onNa
               <div key={label} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                 <span className="text-sm text-slate-600">{label}</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-800">{value} <span className="text-xs text-slate-400 font-normal">{unit}</span></span>
+                  <span className="font-bold text-slate-800">{value} <span className="text-xs text-slate-500 font-normal">{unit}</span></span>
                   {link && <button onClick={() => onNavigate(link)} className="text-xs text-indigo-600 hover:underline">Görüntüle</button>}
                 </div>
               </div>

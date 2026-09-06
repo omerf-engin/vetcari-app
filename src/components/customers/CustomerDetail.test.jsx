@@ -50,7 +50,7 @@ describe('CustomerDetail — son tahsilati geri al', () => {
       transactions: [payLog({ debtId: 'kapanmisBorc' })]
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Genel ekstre/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Genel Ekstre/ }));
 
     expect(screen.getByText(/tahsilat kaydı/)).toBeInTheDocument();
     expect(screen.queryByText(/kapanmış işlem/)).not.toBeInTheDocument();
@@ -282,7 +282,7 @@ describe('CustomerDetail — islem karti', () => {
       ]
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Genel ekstre/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Genel Ekstre/ }));
 
     expect(screen.getByText(/1 kalemlik işlem/)).toBeInTheDocument();
     // Ayri bir "kapanmis islem" basligi olusmamali

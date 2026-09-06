@@ -34,7 +34,7 @@ export default function RevertPaymentModal({ batch, onConfirm, onClose }) {
             </h2>
             <p className="text-sm text-slate-500 mt-1">Toplam {fmtTL(received)} tahsilat</p>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-4">

@@ -128,8 +128,8 @@ export default function ReportsView({ transactions }) {
           )}
 
           {isEmpty ? (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-10 text-center text-slate-400">
-              <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-10 text-center text-slate-500">
+              <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-slate-400" />
               <p className="font-medium">Bu dönemde para hareketi yok</p>
             </div>
           ) : (
@@ -143,7 +143,7 @@ export default function ReportsView({ transactions }) {
                     </div>
                     <div className="p-3 bg-emerald-50 rounded-lg text-emerald-600"><Wallet className="w-6 h-6" /></div>
                   </div>
-                  <p className="text-xs text-slate-400 mt-4 font-medium">Müşterilerden alınan nakit</p>
+                  <p className="text-xs text-slate-500 mt-4 font-medium">Müşterilerden alınan nakit</p>
                 </div>
 
                 <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 border-l-4 border-l-rose-500 hover:shadow-md transition-shadow">
@@ -154,7 +154,7 @@ export default function ReportsView({ transactions }) {
                     </div>
                     <div className="p-3 bg-rose-50 rounded-lg text-rose-600"><TrendingUp className="w-6 h-6" /></div>
                   </div>
-                  <p className="text-xs text-slate-400 mt-4 font-medium">Dönemde girilen hizmet ve ilaç borcu</p>
+                  <p className="text-xs text-slate-500 mt-4 font-medium">Dönemde girilen hizmet ve ilaç borcu</p>
                 </div>
 
                 <div className={`bg-white rounded-xl p-6 shadow-sm border border-slate-200 border-l-4 hover:shadow-md transition-shadow ${RECEIVABLE_TONE.border}`}>
@@ -167,7 +167,7 @@ export default function ReportsView({ transactions }) {
                     </div>
                     <div className={`p-3 rounded-lg ${RECEIVABLE_TONE.badge}`}>{receivable.icon}</div>
                   </div>
-                  <p className="text-xs text-slate-400 mt-4 font-medium">{receivable.note}</p>
+                  <p className="text-xs text-slate-500 mt-4 font-medium">{receivable.note}</p>
                 </div>
               </div>
 
@@ -187,7 +187,7 @@ export default function ReportsView({ transactions }) {
                   ].map(({ label, value, tone }) => (
                     <div key={label} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                       <span className="text-sm text-slate-600">{label}</span>
-                      <span className={`font-bold ${value === 0 ? 'text-slate-300' : tone}`}>
+                      <span className={`font-bold ${value === 0 ? 'text-slate-500' : tone}`}>
                         {fmtTL(value)}
                       </span>
                     </div>

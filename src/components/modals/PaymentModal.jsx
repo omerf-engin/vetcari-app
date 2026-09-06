@@ -137,7 +137,7 @@ export default function PaymentModal({ onClose }) {
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><CreditCard className="text-emerald-600" /> Tahsilat & Dağıtım</h2>
             <p className="text-sm text-slate-500 mt-1">Müşteri: <strong className="text-slate-700">{customer.name}</strong></p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 bg-white">
@@ -205,14 +205,14 @@ export default function PaymentModal({ onClose }) {
             </div>
           </div>
 
-          <div className={`p-5 rounded-xl flex justify-between items-center border-2 transition-colors mt-6 ${isValid ? 'bg-slate-50 border-slate-200' : 'bg-red-50 border-red-300'}`}>
+          <div className={`p-5 rounded-xl flex justify-between items-center border-2 transition-colors mt-6 ${isValid ? 'bg-slate-50 border-slate-200' : 'bg-rose-50 border-rose-300'}`}>
             <div>
               <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">Dağıtılan Toplam</p>
               <p className="font-bold text-slate-800 text-2xl mt-1">{fmtTL(totalDistributed)}</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-bold text-slate-500 uppercase tracking-wide">İşlem Sonrası Yeni Avans</p>
-              <p className={`font-bold text-2xl mt-1 ${newBalance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+              <p className={`font-bold text-2xl mt-1 ${newBalance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {fmtTL(newBalance)}
               </p>
             </div>

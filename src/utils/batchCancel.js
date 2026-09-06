@@ -107,7 +107,7 @@ export const cancelBlockedMessage = (reason) => {
     case 'activity':
       return 'Bu işleme sonradan tahsilat, iade veya zam işlenmiş. Önce o işlemi geri alın.';
     case 'legacy':
-      return 'Eski kayıt — iptal edilemiyor. Hizmet borcunu Sil, ilaç borcunu İade ile kapatın.';
+      return 'Eski kayıt — işlem topluca iptal edilemiyor. Kalemleri tek tek kapatın: hizmet için İptal, ilaç için İade.';
     case 'stale':
       // Surum kontrolu (TASK-033): yazim anindan once baska bir cihaz borca dokunmus
       return 'Kayıt siz bakarken değişti. Ekranı kontrol edip tekrar deneyin.';

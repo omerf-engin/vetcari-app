@@ -1,3 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Dokunma hedefi.
+   Ölçüt ekran genişliği değil, işaretleme cihazıdır: parmakla kullanılan her cihazda
+   (sahadaki telefon, dokunmatik dizüstü) ikon butonları ve küçük eylem çipleri 44px'e
+   çıkar. Fare/trackpad ile hiçbir şey değişmez — masaüstü görünümü aynen korunur.
+   Butonlar içeriğini varsayılan olarak ortaladığı için ek hizalama gerekmiyor. */
+@media (pointer: coarse) {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
