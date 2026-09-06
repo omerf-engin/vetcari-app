@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-06T05:45:13Z",
+  "title": "Design System: VetCari Akıllı Defter",
+  "extensions": {
+    "colorMeta": {
+      "ink-indigo": {
+        "role": "primary",
+        "displayName": "Mürekkep İndigo",
+        "canonical": "#4f46e5",
+        "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#a5b4fc", "#eef2ff"]
+      },
+      "ink-indigo-deep": { "role": "primary", "displayName": "Derin İndigo", "canonical": "#4338ca" },
+      "ink-indigo-wash": { "role": "primary", "displayName": "İndigo Yıkama", "canonical": "#eef2ff" },
+      "debt-rose": {
+        "role": "secondary",
+        "displayName": "Borç Rose",
+        "canonical": "#e11d48",
+        "tonalRamp": ["#4c0519", "#881337", "#9f1239", "#be123c", "#e11d48", "#fb7185", "#fda4af", "#fff1f2"]
+      },
+      "debt-rose-wash": { "role": "secondary", "displayName": "Rose Yıkama", "canonical": "#fff1f2" },
+      "credit-emerald": {
+        "role": "secondary",
+        "displayName": "Alacak Emerald",
+        "canonical": "#059669",
+        "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#6ee7b7", "#ecfdf5"]
+      },
+      "credit-emerald-wash": { "role": "secondary", "displayName": "Emerald Yıkama", "canonical": "#ecfdf5" },
+      "caution-amber": {
+        "role": "tertiary",
+        "displayName": "Dikkat Amber",
+        "canonical": "#d97706",
+        "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fcd34d", "#fffbeb"]
+      },
+      "caution-amber-ink": { "role": "tertiary", "displayName": "Amber Mürekkep", "canonical": "#92400e" },
+      "paper-white": { "role": "neutral", "displayName": "Kâğıt Beyaz", "canonical": "#ffffff" },
+      "paper-slate": {
+        "role": "neutral",
+        "displayName": "Kâğıt Slate",
+        "canonical": "#f8fafc",
+        "tonalRamp": ["#020617", "#0f172a", "#1e293b", "#334155", "#64748b", "#94a3b8", "#e2e8f0", "#f8fafc"]
+      },
+      "rule-slate": { "role": "neutral", "displayName": "Cetvel", "canonical": "#e2e8f0" },
+      "rule-slate-faint": { "role": "neutral", "displayName": "İnce Cetvel", "canonical": "#f1f5f9" },
+      "text-strong": { "role": "neutral", "displayName": "Güçlü Mürekkep", "canonical": "#1e293b" },
+      "text-body": { "role": "neutral", "displayName": "Gövde Mürekkebi", "canonical": "#475569" },
+      "text-label": { "role": "neutral", "displayName": "Etiket Grisi", "canonical": "#64748b" },
+      "text-muted": { "role": "neutral", "displayName": "Soluk Gri", "canonical": "#94a3b8" },
+      "scrim": { "role": "neutral", "displayName": "Perde", "canonical": "rgba(15, 23, 42, 0.6)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Yalnızca özet kartlarındaki büyük tutar ve müşteri adı." },
+      "headline": { "displayName": "Headline", "purpose": "Sayfa başlığı, ikonuyla birlikte." },
+      "title": { "displayName": "Title", "purpose": "Kart başlığı, müşteri adı, işlem kalemi, modal başlığı." },
+      "body": { "displayName": "Body", "purpose": "Sistemin iş atı: form etiketi, liste satırı, buton metni." },
+      "label": { "displayName": "Label", "purpose": "Üstveri, yardım metni, tarih, birim, ikincil buton." },
+      "micro": { "displayName": "Micro", "purpose": "Yalnızca tek kelimelik rozet: HİZMET, İLAÇ, SABİT." },
+      "document": { "displayName": "Document", "purpose": "Basılı/PDF ekstre. Gömülü Roboto; Türkçe glifler için zorunlu." }
+    },
+    "shadows": [
+      { "name": "dinlenme", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "Tüm kart ve panellerin varsayılan hâli." },
+      { "name": "tepki", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Yalnızca hover/odak anında; kalıcı değil." },
+      { "name": "eylem", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Birincil ve tahsilat butonlarının dinlenme durumu." },
+      { "name": "kopma", "value": "0 25px 50px -12px rgb(0 0 0 / 0.25)", "purpose": "Yalnızca modal yüzeyi; perde ve bulanıklıkla birlikte." }
+    ],
+    "motion": [
+      { "name": "renk-gecisi", "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Sistemin baskın geçişi: zemin ve metin rengi." },
+      { "name": "basma", "value": "transform: scale(0.95)", "purpose": "Para kabul eden butonların aktif hâli; fiziksel geri bildirim." },
+      { "name": "toast-giris", "value": "translateX(100%) → translateX(0), 300ms ease-out", "purpose": "Bildirimin sağdan kayarak girişi." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Birincil Buton",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ana eylem: müşteri ekle, ekstre aç, kaydet.",
+      "html": "<button class='ds-btn-primary'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M9 18l6-6-6-6'/></svg>Genel ekstre</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; background: #4f46e5; color: #ffffff; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; padding: 0.5rem 1rem; border: none; border-radius: 0.5rem; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary svg { width: 1rem; height: 1rem; } .ds-btn-primary:hover { background: #4338ca; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #6366f1; }"
+    },
+    {
+      "name": "Tahsilat Butonu",
+      "kind": "button",
+      "refersTo": "button-commit",
+      "description": "Para kabul eden eylem. Emerald, kart yarıçapı, basıldığında küçülür.",
+      "html": "<button class='ds-btn-commit'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect width='20' height='14' x='2' y='5' rx='2'/><line x1='2' x2='22' y1='10' y2='10'/></svg>Tahsilat Yap</button>",
+      "css": ".ds-btn-commit { display: inline-flex; align-items: center; gap: 0.5rem; background: #059669; color: #ffffff; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 700; padding: 0.625rem 1.5rem; border: none; border-radius: 0.75rem; cursor: pointer; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); transition: background-color 150ms cubic-bezier(0.4,0,0.2,1), transform 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-commit svg { width: 1.25rem; height: 1.25rem; } .ds-btn-commit:hover { background: #047857; } .ds-btn-commit:active { transform: scale(0.95); } .ds-btn-commit:focus-visible { outline: none; box-shadow: 0 0 0 2px #10b981; }"
+    },
+    {
+      "name": "Geri Al Butonu (devre dışı hâliyle)",
+      "kind": "button",
+      "refersTo": "button-undo",
+      "description": "Olağandışı ama yıkıcı olmayan eylem. Engellendiğinde nedenini yazıyla söyler.",
+      "html": "<div class='ds-undo-wrap'><button class='ds-btn-undo' disabled><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M9 14 4 9l5-5'/><path d='M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11'/></svg>Son Tahsilatı Geri Al</button><p class='ds-undo-reason'>Bu tahsilattan sonra yeni hareket girilmiş.</p></div>",
+      "css": ".ds-undo-wrap { display: inline-flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; } .ds-btn-undo { display: inline-flex; align-items: center; gap: 0.5rem; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; padding: 0.625rem 1rem; border-radius: 0.75rem; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-undo svg { width: 1rem; height: 1rem; } .ds-btn-undo:hover:not(:disabled) { background: #fef3c7; } .ds-btn-undo:disabled { opacity: 0.4; background: #f1f5f9; color: #64748b; border-color: #e2e8f0; cursor: not-allowed; } .ds-undo-reason { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.6875rem; font-style: italic; color: #94a3b8; }"
+    },
+    {
+      "name": "Metin Alanı",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Normatif input lehçesi: 1px kenarlık, kontrol yarıçapı, odakta indigo halka.",
+      "html": "<input class='ds-input' type='text' placeholder='Müşteri Ara...' />",
+      "css": ".ds-input { width: 100%; background: #ffffff; color: #1e293b; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; padding: 0.5rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); outline: none; transition: box-shadow 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-input::placeholder { color: #94a3b8; } .ds-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px #6366f1; }"
+    },
+    {
+      "name": "Özet Kartı",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Gösterge paneli istatistiği. Sol şerit kartın para yönünü söyler — anlamlı şerit kuralının örneği.",
+      "html": "<div class='ds-stat'><div class='ds-stat-head'><div><p class='ds-stat-label'>Toplam Net Alacak</p><h3 class='ds-stat-value'>48.250,0 TL</h3></div><span class='ds-stat-icon'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect width='20' height='14' x='2' y='5' rx='2'/><line x1='2' x2='22' y1='10' y2='10'/></svg></span></div><p class='ds-stat-note'>İlaç ve Hizmet borçlarının toplamı</p></div>",
+      "css": ".ds-stat { background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #f43f5e; border-radius: 0.75rem; padding: 1.5rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: ui-sans-serif, system-ui, sans-serif; transition: box-shadow 150ms cubic-bezier(0.4,0,0.2,1); } .ds-stat:hover { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } .ds-stat-head { display: flex; justify-content: space-between; align-items: flex-start; } .ds-stat-label { margin: 0; font-size: 0.875rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.025em; } .ds-stat-value { margin: 0.5rem 0 0; font-size: 1.875rem; font-weight: 700; color: #e11d48; } .ds-stat-icon { display: inline-flex; padding: 0.75rem; background: #fff1f2; color: #e11d48; border-radius: 0.5rem; } .ds-stat-icon svg { width: 1.5rem; height: 1.5rem; } .ds-stat-note { margin: 1rem 0 0; font-size: 0.75rem; font-weight: 500; color: #94a3b8; }"
+    },
+    {
+      "name": "Müşteri Kartı",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Liste öğesi. Hover'da sol indigo şerit belirir ve kenarlık indigoya döner: seçilebilirliğin işareti.",
+      "html": "<div class='ds-customer' tabindex='0'><span class='ds-customer-bar'></span><h3 class='ds-customer-name'>ZZTEST Müşteri</h3><div class='ds-customer-rows'><div class='ds-row'><span class='ds-row-key'>Güncel Borç:</span><span class='ds-row-debt'>1.240,0 TL</span></div><div class='ds-row'><span class='ds-row-key'>Avans/Bakiye:</span><span class='ds-row-credit'>0,0 TL</span></div><div class='ds-row ds-row-total'><span>Net Durum:</span><span class='ds-row-debt'>1.240,0 TL Borçlu</span></div></div></div>",
+      "css": ".ds-customer { position: relative; overflow: hidden; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1.25rem; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: box-shadow 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-customer:hover, .ds-customer:focus-visible { outline: none; border-color: #818cf8; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); } .ds-customer-bar { position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #6366f1; opacity: 0; transition: opacity 150ms cubic-bezier(0.4,0,0.2,1); } .ds-customer:hover .ds-customer-bar, .ds-customer:focus-visible .ds-customer-bar { opacity: 1; } .ds-customer-name { margin: 0 0 1rem; font-size: 1.125rem; font-weight: 600; color: #1e293b; transition: color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-customer:hover .ds-customer-name { color: #4f46e5; } .ds-customer-rows { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.875rem; } .ds-row { display: flex; justify-content: space-between; } .ds-row-key { color: #64748b; } .ds-row-debt { font-weight: 500; color: #e11d48; } .ds-row-credit { font-weight: 500; color: #059669; } .ds-row-total { padding-top: 0.5rem; border-top: 1px solid #e2e8f0; font-weight: 700; color: #1e293b; }"
+    },
+    {
+      "name": "İşlem Kartı (imza bileşen)",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "Bir ziyarette açılan tüm borçlar tek katlanabilir satır. Tek bakışta: ne zaman, kaç kalem, ne kadar.",
+      "html": "<div class='ds-txn'><button class='ds-txn-head' aria-expanded='false'><span class='ds-txn-left'><svg class='ds-txn-chev' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='m9 18 6-6-6-6'/></svg><span class='ds-txn-date'>14.03.2026</span><span class='ds-pill ds-pill-count'>3 kalem</span><span class='ds-pill ds-pill-fixed'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><rect width='18' height='11' x='3' y='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>SABİT</span></span><span class='ds-txn-total'>2.180,0 TL</span></button></div>",
+      "css": ".ds-txn { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; overflow: hidden; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); font-family: ui-sans-serif, system-ui, sans-serif; } .ds-txn-head { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.25rem; background: transparent; border: none; text-align: left; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-txn-head:hover { background: #f8fafc; } .ds-txn-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #6366f1; } .ds-txn-left { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 0; } .ds-txn-chev { width: 1rem; height: 1rem; color: #94a3b8; flex-shrink: 0; } .ds-txn-date { font-size: 0.875rem; font-weight: 700; color: #1e293b; } .ds-txn-total { font-size: 1.125rem; font-weight: 700; color: #e11d48; flex-shrink: 0; } .ds-pill { display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 9999px; padding: 0.125rem 0.5rem; font-size: 0.625rem; font-weight: 700; letter-spacing: 0.025em; } .ds-pill svg { width: 0.75rem; height: 0.75rem; } .ds-pill-count { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.75rem; font-weight: 600; } .ds-pill-fixed { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }"
+    },
+    {
+      "name": "Rozetler",
+      "kind": "chip",
+      "refersTo": "badge-pill",
+      "description": "Tek kelimelik sınıflandırma etiketi. Nötr tip rozeti ve amber durum rozeti.",
+      "html": "<span class='ds-badge ds-badge-type'>HİZMET</span> <span class='ds-badge ds-badge-type'>İLAÇ</span> <span class='ds-badge ds-badge-state'>SABİT</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.625rem; font-weight: 700; letter-spacing: 0.025em; padding: 0.125rem 0.5rem; border-radius: 9999px; } .ds-badge-type { background: #e2e8f0; color: #475569; } .ds-badge-state { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }"
+    },
+    {
+      "name": "Arama Seçici (imza bileşen)",
+      "kind": "custom",
+      "refersTo": "input-field",
+      "description": "Uzun listeden hızlı kalem ekleme: yazınca açılan, akış içinde çizilen sonuç listesi. Seçimden sonra alan temizlenir, odak kalır.",
+      "html": "<div class='ds-picker'><label class='ds-picker-label'>İLAÇ EKLE</label><div class='ds-picker-field'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.3-4.3'/></svg><input class='ds-picker-input' type='text' value='armapen' /></div><div class='ds-picker-list' role='listbox'><button class='ds-picker-option ds-picker-option-active' role='option' aria-selected='true'><span>ARMAPEN LA ENJ. SÜSP. - 250 ML</span><span class='ds-picker-price'>20.000 ₺</span></button><button class='ds-picker-option' role='option' aria-selected='false'><span>ARMAFLOR ENJEKSİYONLUK ÇÖZELTİ 250 ML</span><span class='ds-picker-price'>1.812 ₺</span></button></div></div>",
+      "css": ".ds-picker { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 26rem; } .ds-picker-label { display: block; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.025em; margin-bottom: 0.375rem; } .ds-picker-field { position: relative; } .ds-picker-field svg { width: 1rem; height: 1rem; color: #64748b; position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); pointer-events: none; } .ds-picker-input { width: 100%; background: #ffffff; color: #1e293b; font-size: 0.875rem; padding: 0.625rem 0.75rem 0.625rem 2.25rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; outline: none; } .ds-picker-input:focus { box-shadow: 0 0 0 2px #6366f1; } .ds-picker-list { margin-top: 0.5rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; background: #ffffff; max-height: 16rem; overflow-y: auto; } .ds-picker-option { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.75rem; text-align: left; padding: 0.625rem 0.75rem; background: transparent; border: none; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; font-weight: 500; color: #1e293b; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-picker-option:last-child { border-bottom: 0; } .ds-picker-option:hover { background: #f8fafc; } .ds-picker-option-active { background: #eef2ff; } .ds-picker-price { font-size: 0.75rem; font-weight: 600; color: #64748b; flex-shrink: 0; }"
+    },
+    {
+      "name": "Bildirim (Toast)",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "Sağdan kayarak giren bildirim. Dört tip aynı iskeleti paylaşır, yalnızca aile rengiyle ayrışır.",
+      "html": "<div class='ds-toast ds-toast-success'><svg class='ds-toast-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='10'/><path d='m9 12 2 2 4-4'/></svg><p class='ds-toast-msg'>Tahsilat kaydedildi.</p><button class='ds-toast-close' aria-label='Kapat'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M18 6 6 18'/><path d='m6 6 12 12'/></svg></button></div>",
+      "css": ".ds-toast { display: flex; align-items: flex-start; gap: 0.75rem; max-width: 24rem; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 1px solid; border-left-width: 4px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); font-family: ui-sans-serif, system-ui, sans-serif; } .ds-toast-success { background: #ecfdf5; border-color: #6ee7b7; border-left-color: #10b981; } .ds-toast-icon { width: 1.25rem; height: 1.25rem; margin-top: 0.125rem; flex-shrink: 0; color: #059669; } .ds-toast-msg { flex: 1; margin: 0; font-size: 0.875rem; font-weight: 500; color: #065f46; } .ds-toast-close { flex-shrink: 0; padding: 0.125rem; background: transparent; border: none; border-radius: 0.25rem; color: #059669; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-toast-close svg { width: 1rem; height: 1rem; display: block; } .ds-toast-close:hover { background: rgba(255,255,255,0.6); } .ds-toast-close:focus-visible { outline: none; box-shadow: 0 0 0 2px #10b981; }"
+    },
+    {
+      "name": "Sekme (Header)",
+      "kind": "nav",
+      "refersTo": "nav-tab-active",
+      "description": "Başlık çubuğundaki gezinme grubu. Aktif sekme indigo zemin ve gölgeyle öne çıkar.",
+      "html": "<nav class='ds-nav'><button class='ds-tab ds-tab-active'>Ana Sayfa</button><button class='ds-tab'>Müşteriler</button><button class='ds-tab'>Raporlar</button></nav>",
+      "css": ".ds-nav { display: inline-flex; gap: 0.25rem; padding: 0.25rem; background: rgba(67, 56, 202, 0.5); border-radius: 0.5rem; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-tab { padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; background: transparent; color: #e0e7ff; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1), color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-tab:hover { background: rgba(79, 70, 229, 0.5); color: #ffffff; } .ds-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff; } .ds-tab-active { background: #4f46e5; color: #ffffff; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Cari Defteri",
+    "overview": "Bu arayüzün atası bir ekran değil, bir kâğıt: kliniklerin yıllardır tuttuğu çizgili hesap defteri. Oradan üç şey devralınıyor — satır disiplini, hizalanmış rakam sütunu ve tek bir koyu mürekkep rengi. Beyaz yüzey varsayılan, ince gri ayraç satırları böler, tutar her zaman satırın sağ ucundadır. Arayüz bir şey anlatmaz; rakamın okunmasına yer açar.\n\nTon sakin, kesin ve güvenilir. Süsleme yok, ama seyreklik de yok: bu bir gösterge paneli değil, çalışan bir defter, ve yoğunluk onun doğasında var. Renk bir vurgu aracı değil, bir sınıflandırma aracıdır — bir rakamın rengi onun ne olduğunu söyler, ne kadar önemli olduğunu değil. Mürekkep indigo tek başına sistemin sesidir: nereye dokunacağını söyler, paranın yönü hakkında hiçbir şey söylemez.\n\nSistem iki ayrı sahnede yaşıyor ve bunu saklamıyor. Sahada telefonla borç girilir, akşam masada tahsilat dağıtılır ve ekstre çıkarılır; her yüzey kendi sahnesine göre yoğunlaşır ya da açılır. Üçüncü bir hedef daha var ve o bir ekran değil: müşterinin eline geçen basılı ekstre. Ekranda serbest olan her şey orada serbest değildir — belge kendi tipografisini (gömülü Roboto) ve kendi disiplinini taşır.",
+    "keyCharacteristics": [
+      "Beyaz kâğıt yüzey, ince gri ayraç, sağa hizalı kalın rakam",
+      "Hiyerarşi boyutla değil ağırlıkla kurulur (bold / semibold / medium)",
+      "Renk sınıflandırır: rose borç, emerald alacak, amber dikkat, indigo eylem",
+      "Yüzeyler dinlenirken düz; yükseklik bir tepkidir, bir rütbe değil",
+      "Yarıçap rütbe belirtir: kontrol 8px → kart 12px → modal 16px → rozet tam yuvarlak",
+      "Her yıkıcı eylem, neden yapılamadığını yazıyla söyler"
+    ],
+    "rules": [
+      { "name": "Tek Kırmızı Kuralı", "body": "Sistemde tek bir kırmızı ailesi vardır: rose. red-* ailesi kullanılmaz. İki kırmızıyı yan yana gören kullanıcı aradaki farkı okuyamaz; okunamayan ayrım ayrım değildir.", "section": "colors" },
+      { "name": "Para Renkle Konuşur Kuralı", "body": "Bir tutarın işaretini yalnızca rose ve emerald taşır. İndigo bir rakamın rengi olamaz, amber ise yalnızca o rakamın durumunu (kilitli) işaretler, yönünü değil.", "section": "colors" },
+      { "name": "Renkli Zemin Kendi Mürekkebini Getirir Kuralı", "body": "Renkli bir yıkama üzerine gri metin yazılmaz; amber zeminde amber koyu, rose zeminde rose koyu. Gri, yalnızca beyaz ve slate yüzeylerin mürekkebidir.", "section": "colors" },
+      { "name": "Ağırlık Hiyerarşisi Kuralı", "body": "Önem sırası önce ağırlıkla, sonra boyutla kurulur. Aynı boyutta regular / semibold / bold üç ayrı önem seviyesidir; yeni bir punto icat etmeden önce ağırlık kullanılır.", "section": "typography" },
+      { "name": "Rakam Sağda Kuralı", "body": "Her para değeri satırın sağ ucunda, kalın ve kendi anlam renginde durur. Bir sütun boyunca rakamlar hizalanır — göz aşağı kayarken karşılaştırma yapabilmelidir.", "section": "typography" },
+      { "name": "Sahne Önce Kuralı", "body": "Bir düzen kararından önce bu ekran ahırda tek elle mi, masada iki elle mi kullanılıyor sorusu cevaplanır. Borç girişi ve müşteri arama telefonun kuralına uyar; tahsilat dağıtımı, raporlar ve ekstre masanın kuralına uyar.", "section": "layout" },
+      { "name": "Düz Dinlenme Kuralı", "body": "Bir yüzey hiçbir şey olmuyorken düzdür. Gölge eklemek istiyorsan önce hangi duruma yanıt veriyor sorusunu cevapla; cevap yoksa gölge de yoktur.", "section": "elevation" },
+      { "name": "Modal Koparır Kuralı", "body": "Modal açıldığında arkası hem karartılır hem bulanıklaştırılır. Yarım perde yoktur: ya bağlam okunur kalır ve modal gereksizdir, ya da modal gerçekten koparır.", "section": "elevation" },
+      { "name": "Dokunma Hedefi Kuralı", "body": "Ölçüt ekran genişliği değil, işaretleme cihazıdır. Yalnızca ikonla anlatılan her kontrol .touch-target taşır; sm: kırılımıyla taklit edilmez, çünkü dokunmatik bir dizüstü geniş ekranda da parmakla kullanılır.", "section": "components" },
+      { "name": "Yarıçap Rütbesi Kuralı", "body": "Yeni bir yarıçap icat edilmez. Bir yüzeyin yarıçapı, katman hiyerarşisindeki yerini bildirir — kontrol < kart < modal.", "section": "shapes" },
+      { "name": "Anlamlı Şerit Kuralı", "body": "4px renkli şerit yalnızca rengi bir bilgi taşıdığında kullanılır. Dekoratif şerit (yalnızca güzel dursun diye eklenen üst/yan çubuk) bu sistemde yoktur.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do parayı yalnızca rose (borç/negatif) ve emerald (alacak/avans/tahsilat) ile işaretle; tutarı satırın sağ ucunda, kalın yaz.",
+      "Do mürekkep indigoyu yalnızca eylem, gezinme ve odak için kullan — dokunulabilirliğin işareti odur.",
+      "Do kilitli/sabit durumu ve geri alma eylemlerini amber ailesiyle işaretle; amber dikkat demektir, hata demez.",
+      "Do her kart yüzeyini beyaz zemin + 1px cetvel kenarlık + 0.75rem yarıçap + Dinlenme gölgesiyle kur; farklılığı bu iskeletin içinde yarat.",
+      "Do hiyerarşiyi önce ağırlıkla kur: yeni bir punto eklemeden önce 600 → 700 dene.",
+      "Do engellenmiş her eylemin nedenini ekranda yaz (title tek başına yeterli değildir — dokunmatik cihazda title görünmez).",
+      "Do yalnızca ikonla anlatılan her kontrole .touch-target sınıfını ver.",
+      "Do her metin aramasını searchMatch (utils/search.js) üzerinden geçir. Çıplak toLowerCase() Türkçe'nin I/ı/İ/i ailesini bilmez ve hızlı yazan kullanıcı ş ğ ü ö ç tuşlamaz; katlama olmadan arama çalışıyor gibi görünür ama bazı kayıtlar hiç bulunamaz.",
+      "Do yeni bir modalı mevcut kabuğu kopyalayarak kur: perde + 4px bulanıklık + 1rem yarıçap + max-h-[85vh].",
+      "Do rozetleri tek kelimeyle sınırla ve micro kademede büyük harf yaz."
+    ],
+    "donts": [
+      "Don't red-* ailesini kullan. Sistemin tek kırmızısı rose'dur (#e11d48).",
+      "Don't renkli bir yıkama üzerine gri metin koy; amber zeminin mürekkebi amber koyu, rose zeminin mürekkebi rose koyudur.",
+      "Don't metni text-muted (#94a3b8) veya daha soluk bir tona indir — 2,56:1 okunmuyor, hele sahada güneş altında. Metnin tabanı text-label (#64748b)'dır.",
+      "Don't dekoratif renkli şerit ekle. 4px şerit ancak rengi bir değer taşıdığında meşrudur (para yönü, mesaj tipi, seçilebilirlik).",
+      "Don't dört yarıçap kademesinin dışına çık (0.375rem ikon butonu · 0.5rem kontrol · 0.75rem kart · 1rem modal · tam yuvarlak rozet).",
+      "Don't dinlenen bir yüzeye kalıcı yüksek gölge ver; gölge bir duruma yanıttır.",
+      "Don't bir tutarı indigo ile yaz — indigo paranın yönü hakkında konuşamaz.",
+      "Don't yeni bir yazı tipi ekle: arayüz sistem yığınını, basılı ekstre gömülü Roboto'yu kullanır. Basılı belgede standart PDF yazı tipleri Türkçe karakterleri sessizce boş kutuya çevirir.",
+      "Don't anlamı yalnızca renge yasla — belge basılabiliyor ve satırın ne olduğu metinle de okunabilmeli."
+    ]
+  }
+}
