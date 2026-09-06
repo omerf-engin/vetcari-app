@@ -23,6 +23,13 @@ kişi ile veriden sorumlu kişi her zaman aynı değil; yanlış giriş olağan 
 PDF ekstre eline geçiyor. Yani ürünün bir çıktısının, ürünü hiç kullanmayan ve eğitilmemiş bir
 okuyucusu var.
 
+**Hedef kitle (ürün yönü, 2026-09-07):** Uygulama ilerde **veteriner kliniklerine satılacak** —
+hedef yüzlerce klinik. Bugün tek klinik kullanıyor, ama tasarım kararları artık "bir kişinin
+defteri" değil "satılan bir ürün" varsayımıyla verilmeli. Bunun iki doğrudan sonucu:
+tek-kişilik-defter varsayımı ürünün önündeki en büyük mimari engeldir (bkz. aşağıdaki açık
+ihtiyaç, TASK-038), ve paylaşılan veri varlıkları (ilaç kataloğu) kod dağıtımından bağımsız
+güncellenebilmelidir (TASK-037).
+
 ## Product Purpose
 
 Veteriner kliniğinde kağıt defterle ve hafızayla tutulan **cari hesabı** (müşteri borcu, tahsilat,
@@ -81,10 +88,11 @@ ekstre, çok kullanıcı veri izolasyonu.
 - PDF çıktısı gömülü yazı tipi gerektiriyor — standart PDF yazı tipleri `ş ğ ı İ Ş Ğ ₺`
   karakterlerini çizemiyor.
 
-**Açık ürün ihtiyacı — bugün karşılanmıyor:** Yardımcı/sekreter **kendi hesabıyla girip aynı
-defteri görmeli** ve kimin girdiği izlenebilmeli (kullanıcı kararı). Bugünkü mimaride bu mümkün
-değil: ayrı hesap ayrı veri demek, dolayısıyla tek çare hesabın paylaşılması — ki bu da "bu kaydı
-kim girdi" sorusunu cevapsız bırakıyor. Uydurulmuş bir çözüm yazılmadı; ihtiyaç olarak kaydedildi.
+**Açık ürün ihtiyacı — bugün karşılanmıyor (TASK-038, P1):** Yardımcı/sekreter **kendi hesabıyla
+girip aynı defteri görmeli** ve kimin girdiği izlenebilmeli. Bugünkü mimaride bu mümkün değil:
+ayrı hesap ayrı veri demek, dolayısıyla tek çare hesabın paylaşılması — ki bu da "bu kaydı kim
+girdi" sorusunu cevapsız bırakıyor. Klinik satışı hedefiyle birlikte bu, ürünün önündeki en
+büyük mimari engel; görev tanımı yazıldı, uygulanmadı.
 
 **Açık karar:** Ekstre PDF'inin başlığındaki ve dosya üstverisindeki "VetCari" ibaresi kalacak mı.
 Kullanıcı belgede **klinik** kimliği istemiyor; belge şu an bunun yerine **yazılımın** adını

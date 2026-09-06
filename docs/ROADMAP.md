@@ -1,24 +1,22 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 6 Eylul 2026 (TASK-036 tamamlandi — coklu ilac girisi arama tabanli hale
-> getirildi; oncesinde CSV/PDF ekstre ve BAKIM-001). Test 565, lint 0/0, build basarili.
-> Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu).
+> Son guncelleme: 7 Eylul 2026 (TASK-036 tamamlandi — coklu ilac girisi arama tabanli hale
+> getirildi). Test 568, lint 0/0, build basarili.
+> Siradaki: TASK-037 (ortak ilac katalogu — veri dosyasi bekleniyor).
+> Kalan: TASK-038 (tek defter cok kullanici), TASK-022 (ilac stok takibi),
+> TASK-023 (TypeScript migrasyonu).
+
+## Urun Yonu
+
+Uygulama ilerde **veteriner kliniklerine satilacak**. Bu iki seyi degistiriyor:
+
+- **TASK-038 (tek defter, cok kullanici) P1'e cikti.** "Tek kisilik defter" varsayimi klinik
+  satisinin onundeki en buyuk mimari engel
+- **Ortak katalog Firestore'da tutulacak** (gomulu degil): katalog bir urun varligi, veri
+  duzeltmesi kod dagitimina baglanmamali; ayrica klinikler kendi ekledikleri ilaclarla katalogda
+  ne eksik oldugunu soylemis olurlar
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)
-
-## ⚠️ Bekleyen Deploy — Firestore Guvenlik Kurali
-
-**`firestore.rules` repoda degistirildi ama YAYINLANMADI** (2026-08-30, TASK-033). Repo ile
-canli kurallar su an ayrisik durumda.
-
-- **Degisiklik:** `allow read` kuraline `resource == null` dali — var olmayan bir dokumani
-  okurken `permission-denied` yerine `exists() === false` donsun diye
-- **Zorunlu degil:** kod bu dal olmadan da dogru calisir. Yalnizca baska bir cihazin sildigi bir
-  borcu okurken kullaniciya teknik hata yerine duzgun "kayit degisti" mesaji verilmesini saglar
-- **Yayinlamak icin:** Firebase Console → Firestore → Rules, veya `firebase deploy --only firestore:rules`
-- Yayinlandiginda bu bolum silinmeli
-
----
 
 ## Faz 1: Temel Altyapi — TAMAMLANDI
 

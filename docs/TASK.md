@@ -1970,6 +1970,168 @@ degismedigi icin gerek yoktu):
 
 ---
 
+## TASK-037: Ortak Ilac Katalogu (Firestore)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO — veri dosyasi bekleniyor |
+| **Priority** | P2 |
+| **Depends on** | TASK-036 |
+
+**Amac:** Klinik, ilac listesini sifirdan elle kurmak zorunda kalmasin. Ortak bir katalogdan
+arayip secsin; katalogda olmayan ilaci kendi listesine elle eklemeye devam edebilsin.
+
+**Kullanici ile netlestirilen kararlar:**
+
+1. **Veri kaynagi kullanicidan gelir.** Ilac adi/dozu UYDURULMAZ — klinik bir uruncde hayali
+   ilac adi gercek bir hayvana yazilmis borc olur. Liste `kimlik · ad · ambalaj/birim`
+   sutunlariyla kullanici tarafindan saglanir
+2. **Katalog fiyat TASIMAZ.** Fiyat klinigin kendi karari; tum enflasyon mimarisi (`maxPrice`,
+   zam yayilimi, kilit, geri alma) buna dayaniyor. Katalog yalnizca ad + ambalaj/birim tasir
+3. **Katalogdan secim kendi `drugs` kaydini olusturur.** Katalog yalnizca bir SECIM kaynagidir;
+   borc/zam/kilit/iade/rapor yollarinin hicbiri degismez. Katalog yarin guncellense bile gecmis
+   borclar kaymaz
+4. **Firestore'da tutulur, gomulu degil.** Gerekce: (a) katalog bir urun varligi, veri
+   duzeltmesi kod dagitimi riskine baglanmamali; (b) klinikler kendi ozel ilaclarini ekledikce
+   katalogda ne eksik oldugunu soylemis olurlar — bu geri besleme ancak sunucu tarafinda
+   toplanabilir; (c) ana bundle zaten 979 kB, katalog ona sifir ekler
+5. **Yalnizca "Ilaclar & Fiyatlar" ekraninda** gorunur. Borc girisi (TASK-036 secicisi) hic
+   degismez
+
+### Deliverables
+
+- **`drugCatalog` koleksiyonu:** `{ catalogId, name, unit }` — `userId` YOK, global
+- **Guvenlik kurali:** katalog icin herkese okuma, **hic kimseye yazma** (`allow write: if false`).
+  Katalogu yalnizca urun sahibi gunceller (Console / Admin SDK)
+- ~~**Blanket kuraldan cikis (mimari hazirlik)**~~ — **2026-09-07'de yapildi**, bkz. asagidaki
+  "Kural bolunmesi" notu
+- **DrugsView "Yeni Ilac Ekle" akisi:** katalogdan arama (TASK-036'daki `searchMatch` ile),
+  sec -> fiyatini gir -> `addDrug` ile kendi kaydin olusur. Olusan dokuman `catalogId` tasir
+- **Mukerrer kurali iki katmanli:**
+  - *Kesin:* `catalogId` eslesirse katalog sonucu **secilemez**, "Listende zaten var — <fiyat>"
+    rozetiyle gorunur. Gizlenmez: gorunmezlik kullaniciyi "katalogda yok" diye elle eklemeye
+    iter ve tam da onlemek istedigimiz mukerreri yaratir
+  - *Olasi:* elle girilmis eski kayitlar icin ad benzerligi yalnizca UYARIDIR, engel degil —
+    "250 ML" ile "500 ML" gercekten farkli urunlerdir, tahmine dayanarak mesru bir eklemeyi
+    engellemek mukerrerden daha kotudur
+- **Ilk senkron durumu gorunur olmali:** yeni cihazda katalog inene kadar arama bos gelir;
+  "katalog yukleniyor" / "cevrimdisisin" durumu gosterilir, sessizce bos liste GOSTERILMEZ
+- **Katalog yukleme scripti** (`scripts/`): kullanicinin verdigi dosyayi `drugCatalog`'a yazar,
+  tekrar calistirildiginda mukerrer olusturmaz (`catalogId` uzerinden upsert)
+
+### Acceptance Criteria
+
+- Katalog dokumani `userId` tasimaz ve yine de her kimlik dogrulanmis kullanici tarafindan
+  OKUNABILIR; hicbir istemci YAZAMAZ (kural testi ile dogrulanir)
+- Diger koleksiyonlarin izolasyonu bozulmaz: A kullanicisi B'nin `drugs`/`customers`/borc
+  kayitlarini goremez (blanket kural bolundukten sonra da)
+- Katalogdan eklenen ilac normal bir `drugs` dokumanidir; borc yazma, zam, kilit, iade, ekstre
+  ve rapor yollari degismeden calisir (mevcut 568 test gecer)
+- Ayni katalog kaydi ikinci kez eklenemez; sebep ekranda yazar
+- Katalogda olmayan ilac elle eklenebilir (bugunku akis korunur)
+- Cevrimdisi ilk acilista kullanici katalogun neden bos oldugunu ekranda gorur
+- Test: mukerrer engeli, ad benzerligi uyarisi, katalogdan olusturulan dokumanin `catalogId`
+  tasidigi ve yukleme scriptinin idempotent oldugu icin en az 6 unit test
+
+### Notes
+
+**Maliyet modeli:** birkac bin dokuman ilk senkronda cihaz basina bir kez inilir; sonrasinda
+`persistentLocalCache` (zaten acik) yerelden servis eder, yalnizca degisiklikler cekilir. Yani
+maliyet "klinik x oturum" degil "cihaz x bir kez". Guncel Firebase fiyatlari dogrulanmali.
+
+**Bekleyen deploy ile birlikte gider:** `firestore.rules` zaten yayinlanmamis bir degisiklik
+tasiyor (bkz. ROADMAP "Bekleyen Deploy"); bu isin kural degisikligi onunla tek deploy'da cikar.
+
+### Kural bolunmesi (2026-09-07'de yapildi, bu gorevden once)
+
+Blanket `match /{collection}/{docId}` kalibi kaldirildi; 5 koleksiyon (`customers`, `drugs`,
+`serviceDebts`, `drugDebts`, `transactions`) acikca yazildi.
+
+**Onemli duzeltme — ilk gerekcem yanlisti.** "Blanket kural katalogu reddeder" demistim; dogru
+degil. Firestore kurallari **BIRLESIM (OR)** mantigiyla degerlendirilir: `drugCatalog` icin ayri
+bir `allow read` blogu eklenirse, blanket kuralin o dokumanda `false` donmesi erisimi engellemez.
+Katalog blanket kural dururken de calisirdi.
+
+Bolunmenin gercek gerekceleri:
+
+1. **Genis kural, dar kuralla daraltilamaz.** TASK-038'de `drugs` uyelik tabanli kurala
+   tasindiginda blanket kural eski `userId` yolunu acik birakmaya devam ederdi; gocme guvenlik
+   acisindan hicbir sey degistirmezdi. Bu, TASK-038'in gercek on kosulu
+2. **En az yetki.** Blanket kalip HERHANGI bir koleksiyon adini kapsiyordu: kimlik dogrulanmis
+   bir kullanici `userId`'yi kendi uid'iyle doldurdugu surece istedigi adda koleksiyon acip veri
+   yazabiliyordu
+
+**Kapi:** `src/services/firestoreRules.test.js` — koddaki koleksiyonlarla kural bloklarini
+karsilastirir, blanket kalibin geri gelmesini, `resource == null` dalinin silinmesini ve bir
+blokta `allow` eksigini yakalar. Mutasyon denetimi: 5 kasitli kusurun 5'i de yakalandi.
+
+Denetim sirasinda testin kendisinde bir kusur bulundu: `resource == null` kontrolu **aciklama
+yorumundaki** ayni metni esliyordu, yani gercek kural dali silinse bile test geciyordu. Yorumlar
+ayiklandiktan (`body`) sonra kapi gercekten isiriyor.
+
+---
+
+## TASK-038: Tek Defter, Cok Kullanici (Yetkilendirme)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P1 (urun yol haritasi: kliniklere satis) |
+| **Depends on** | TASK-014, TASK-037 (kural bolunmesi) |
+
+**Ihtiyac (PRODUCT.md'de kayitli):** Klinik yardimcisi/sekreter **kendi hesabiyla** girip **AYNI
+defteri** gormeli ve kimin girdigi izlenebilmeli. Bugun mimaride bu mumkun degil: her kullanici
+`userId` ile izole, ayri hesap = ayri defter. Fiili tek care hesabin paylasilmasi, o da
+"bu kaydi kim girdi" sorusunu cevapsiz birakiyor.
+
+**Bugunku model:** her dokuman `userId` (auth uid) tasir; sorgular `where('userId','==',uid)`;
+kural `resource.data.userId == request.auth.uid`.
+
+**Hedef model:** defterin sahibi kullanici degil **klinik**tir.
+
+### Deliverables
+
+- **`clinics`** koleksiyonu: `{ name, ownerId, createdAt }`
+- **`memberships`** koleksiyonu: `{ clinicId, userId, role: 'owner' | 'staff', createdAt }`.
+  Dokuman id'si `${userId}_${clinicId}` olmali ki kural tek `exists()` ile karar verebilsin
+  (sorgu calistiramaz)
+- **Tum veri koleksiyonlarina `clinicId`**; sorgular `where('clinicId','==',aktifKlinik)`
+- **Kural degisikligi:** sahiplik kontrolu `resource.data.userId == request.auth.uid` yerine
+  ilgili `memberships` dokumaninin varligina bakar. TASK-037'de kurallar koleksiyon adlariyla
+  boluneceginden koleksiyonlar **teker teker** tasinabilir
+- **`actorId` (kim girdi):** bugun `createLog` `userId` aliyor; cok kullanicida `userId` klinigi
+  temsil edecegi icin islemi FIILEN yapan kullanici ayri bir alanda tutulmali. Eski loglarda bu
+  alan yok — ekranda "bilinmiyor" gosterilir, uydurulmaz (fail-closed, projenin genel doktrini)
+- **Davet akisi:** sahibi personelin e-postasini girer -> `invites` dokumani olusur -> personel
+  giris yapinca daveti alir. Istemciden e-posta ile auth kullanicisi sorgulanamaz, bu yuzden
+  davet dokumanina dayali bir akis sart
+- **Gocme scripti:** her mevcut kullanici icin bir `clinics` + bir `owner` uyeligi olusturur ve
+  tum dokumanlara `clinicId` damgalar. Precedent: TASK-014'un `scripts/migrateUserId.js`'i
+
+### Acceptance Criteria
+
+- Iki farkli hesap ayni defteri gorur ve ikisi de islem yapabilir
+- Her islem kaydinda kimin yaptigi gorunur; eski kayitlarda "bilinmiyor" yazar
+- Uye olmayan bir kullanici o klinigin hicbir dokumanini okuyamaz/yazamaz (kural testi)
+- Rol farki en az bir yerde anlamli olur (ornegin yalnizca sahip ilac silebilir / uye davet
+  edebilir) — kapsam ayrica netlestirilecek
+- Gocmeden sonra mevcut tek kullanicili defterler aynen calisir; veri kaybi olmaz
+- Mevcut test paketi gecer + cok kullanicili izolasyon icin yeni testler
+
+### Notes
+
+**Siralama onemli:** TASK-037'deki kural bolunmesi bu isin on kosulu. Blanket kural yerinde
+kaldigi surece koleksiyonlar teker teker tasinamaz, hepsi ayni anda degismek zorunda kalir.
+
+**Bu bir P1 cunku urun karari:** uygulama kliniklere satilacaksa "tek kisilik defter" varsayimi
+urunun onundeki en buyuk engel. Katalogdan daha buyuk bir is.
+
+**Acik sorular (implementasyondan once netlesmeli):** bir kullanici birden fazla klinige uye
+olabilir mi (klinik secici gerekir mi) · roller kac kademe · personel kendi girdigi kaydi silebilir
+mi · faturalama/abonelik bu modele nasil oturur.
+
+---
+
 ## BAKIM-001: Firebase 12.11.0 -> 12.18.0 (guvenlik)
 
 | Alan | Deger |

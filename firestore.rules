@@ -3,21 +3,72 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /{collection}/{docId} {
-      // NOT (2026-08-30): bu dosya repoda guncel ama Firebase'e YAYINLANMADI.
-      // Yayinlamak icin: firebase deploy --only firestore:rules   (bkz. docs/ROADMAP.md)
-      //
-      // `resource == null` dali surum kontrolunu iyilestirir (TASK-033): silinmis bir dokumani
-      // okumak `resource.data.userId` uzerinden degerlendirilirse kural permission-denied
-      // verir ve `snap.exists() === false` yerine hata doner. O zaman "borc silinmis mi"
-      // sorusu transaction icinde sorulamaz. Kimlik dogrulamasi hala zorunlu; var olan
-      // dokumanlarda sahiplik kontrolu degismedi.
-      allow read: if request.auth != null
-        && (resource == null || request.auth.uid == resource.data.userId);
-      allow update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
+    // --------------------------------------------------------------------------------
+    // Kullanici verisi tasiyan koleksiyonlar ACIKCA yazilir.
+    //
+    // Eskiden tek bir `match /{collection}/{docId}` kalibi vardi. Kaldirildi, cunku:
+    //
+    // 1. Kurallar BIRLESIM (OR) mantigiyla degerlendirilir: bir istek, eslesein
+    //    kurallardan HERHANGI biri izin veriyorsa gecer. Yani genis bir kural, daha dar
+    //    bir kural eklenerek daraltilamaz. TASK-038'de bir koleksiyon uyelik tabanli
+    //    kurala tasindiginda blanket kural eski `userId` yolunu acik birakmaya devam
+    //    ederdi ve gocme guvenlik acisindan hicbir sey degistirmezdi.
+    // 2. Blanket kalip HERHANGI bir koleksiyon adini kapsiyordu: kimlik dogrulanmis bir
+    //    kullanici `userId` alanini kendi uid'iyle doldurdugu surece istedigi adda
+    //    koleksiyon olusturup veri yazabiliyordu (en az yetki ilkesine aykiri).
+    //
+    // Yeni bir koleksiyon eklenirken buraya da bir `match` blogu eklenmelidir; aksi halde
+    // erisim reddedilir. `src/services/firestoreRules.test.js` bunu kapiya baglar:
+    // koddaki koleksiyonlarla bu dosyadaki bloklar ayrisirsa test kirilir.
+    // --------------------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // `resource == null` dali TASK-033'ten geliyor: silinmis bir dokumani okurken kural
+    // `resource.data.userId`'ye dokunursa `permission-denied` doner ve cagiran taraf
+    // "silinmis mi" sorusunu soramaz. Surum kontrolu (rev) bu davranisa dayaniyor.
+    function canReadOwned() {
+      return signedIn() && (resource == null || request.auth.uid == resource.data.userId);
+    }
+
+    function canWriteOwned() {
+      return signedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    function canCreateOwned() {
+      return signedIn() && request.auth.uid == request.resource.data.userId;
+    }
+
+    match /customers/{docId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update, delete: if canWriteOwned();
+    }
+
+    match /drugs/{docId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update, delete: if canWriteOwned();
+    }
+
+    match /serviceDebts/{docId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update, delete: if canWriteOwned();
+    }
+
+    match /drugDebts/{docId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update, delete: if canWriteOwned();
+    }
+
+    match /transactions/{docId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update, delete: if canWriteOwned();
     }
   }
 }
