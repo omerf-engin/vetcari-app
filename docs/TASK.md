@@ -1837,6 +1837,139 @@ export interface Transaction {
 
 ---
 
+## TASK-036: Coklu Ilac Girisi — Arama ile Kalem Ekleme
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE (2026-09-06) |
+| **Priority** | P2 |
+| **Depends on** | TASK-017, TASK-027 |
+
+**Sonuc:** Test 537 → 565 · Lint 0 error 0 warning · Build basarili · Ana bundle 974,29 → 978,43 kB
+
+**Problem (kullanici bildirimi):** "Coklu ilac eklemek uzun suruyor."
+
+Olculen neden (koddan turetildi, kronometreyle degil): bugun modunda 4 kalemlik bir giris
+**~11 isaretleme eylemi** ve 60-200 secenekli listeyi **4 kez gozle tarama** gerektiriyor.
+Dongu su: `Ilac Satiri Ekle` → `<select>` ac → tara → sec → `Ilac Satiri Ekle` → ...
+
+Onemli olan sunu ayirt etmek: **maliyet girdi yazmakta degil, secime ulasmakta.** `emptyRow()`
+zaten `qty: '1'` veriyor ve `updateRow` ilac secilince birim fiyati otomatik dolduruyor
+(`DebtModal.jsx:7`, `:52`). Yani satir basina tek zorunlu girdi ilac seciminin kendisi, ve o
+secim arama destegi olmayan yerel bir `<select>` uzerinden yapiliyor.
+
+**Kullanici ile netlestirilen kisitlar:**
+- Ilac listesi **60-200 kalem** → izgara/hepsini-goster deseni islemez, arama zorunlu
+- Ziyaret basina tipik **3-5 kalem**
+- **Tekrar yok:** her ziyaret farkli ilaclar → "sik kullanilanlar" kisayolu bosuna yer kaplar
+- **Iki mod da onemli** (bugun + gecmis) → fiyat sutunu gecmis modda beliren kosullu bir sutun,
+  bugun modunda hic render edilmez
+
+### Deliverables
+
+- Ilac sekmesinin tepesinde **kalici arama alani**: yaz → liste suzulur → Enter/dokunma ile kalem
+  asagidaki listeye eklenir, alan temizlenir, odak arama alaninda kalir. `Ilac Satiri Ekle`
+  butonu ve onunla gelen dongu kalkar
+- Eklenen kalemler **tek satirlik seritler** (ad · adet · [gecmis modda: birim/toplam secici +
+  fiyat] · tutar · kaldir) — bugunku `p-3` kartlarin yerine
+- **Zaten ekli bir ilacin secilmesi adedi artirir**, ikinci satir acmaz. Bugunku
+  "Bu ilac zaten listede mevcut" uyarisi ve `drugCalc.duplicates` gereksizlesir
+- **Adet hizlandirici:** aramada `armapen 3` yazmak 3 adet ekler. Gorunur +/- adimlayicilar da
+  kalir; kisayol yer tutucuda yazili olur, gizli ozellik olmaz
+- **Turkce-guvenli arama katlamasi** (`utils/` altinda saf fonksiyon): ASCII yazim Turkce ada
+  eslesir (`sari ≡ sarı`, `ilac ≡ ilaç`, `IGNE ≡ iğne`)
+
+### Acceptance Criteria
+
+- 4 kalemlik giris **≤ 4 tus dizisi, 0 isaretleme eylemi, 0 liste taramasi** ile tamamlanir;
+  once/sonra tablosu ile olculur
+- Arama `i/ı/İ/I`, `s/ş`, `g/ğ`, `u/ü`, `o/ö`, `c/ç` ciftlerini ayni kovaya koyar. **En az 6 unit
+  test**: `"ILAC"` → `ilaç` eslesir, `"sari"` → `sarı` eslesir, `"IGNE"` → `iğne` eslesir
+- Arama listesi acikken **Escape listeyi kapatir, modali kapatmaz**; liste kapaliyken Escape
+  eskisi gibi modali kapatir. Bunun icin bir test
+- Klavye: ok tuslariyla sonuclarda gezinme, Enter ile secim; secilebilir sonuclar `role`/
+  `aria-*` ile isaretli
+- Yazim yolu (`addDebtTransactionOperations`) **degismez**; mevcut DebtModal testleri gecer
+- **Satir sirasi ve kimligi korunur** — kismi tahsilat orantili dagitiliyor ve yuvarlama artigini
+  **son gecerli satir** aliyor. Ekleme daima diziye append eder; kaldirma kalan satirlari yeniden
+  anahtarlamaz
+- Gecmis modda birim/toplam secici ve fiyat girdisi satir icinde calisir; bugun modunda bu sutun
+  hic render edilmez
+- Durumlar: hic kalem yok · arama sonuc vermiyor · sistemde hic ilac kayitli degil (Ilaclar
+  sekmesine yonlendirme) · gecersiz adet · cok uzun ilac adi · 10+ kalem (liste kendi icinde
+  kaydirir, toplam ozeti gorunur kalir)
+- Lint 0/0, mevcut 537 test gecer, build basarili
+
+### Notes
+
+**Anti-hedefler:** sik/son kullanilanlar kisayolu (tekrar yok) · barkod · Hizmet sekmesinde
+degisiklik · yazma yolu degisikligi · **yeni bagimlilik** (ana bundle zaten 974 kB; combobox
+elle yazilacak).
+
+**Sessizce yanlis gidebilecek iki nokta:**
+1. `"ILAC".toLowerCase()` JS'te Turkce `I/ı` cifti icin yanlis sonuc verir ve hizli yazan
+   kullanici `s ğ ü ö ç` tuslamaz. Katlama olmadan arama "calisiyor gibi gorunur" ama bazi
+   ilaclar hic bulunamaz — ne lint ne build yakalar
+2. DebtModal'in global Escape isleyicisi var (`:36`). Arama listesi acikken Escape modali
+   kapatirsa kullanici yanlis yazimi duzeltmeye calisirken **tum formu kaybeder**
+
+Yazma yolu degismedigi icin ZZTEST ile uctan uca deneme zorunlu degil; yine de tarayicida
+4 kalemlik gercek bir giris yapilip kaydedilmeli.
+
+### Yapilanlar
+
+- **`utils/search.js`** — `fold` (Turkce katlama), `searchMatch` (kelime bazli, sirasiz),
+  `parseQtyToken` (adet hizlandiricisi). `utils/search.test.js` bir KAPI: 13 test, mutasyon
+  denetiminden gecti (4 kasitli kusurun 4'u de yakalandi)
+- **`components/modals/DrugPicker.jsx`** — arama + sonuc listesi. Liste AKIS ICINDE cizilir
+  (mutlak degil): modal govdesi `overflow-y-auto`, mutlak liste kirpilirdi. Klavye: ok tuslari,
+  Enter, Escape. `role="combobox"` + `listbox`/`option` + `aria-activedescendant`
+- **`DebtModal`** — `rows` bos baslar; `addOrIncrementRow` ayni ilaci ikinci satir acmak yerine
+  **adedi artirir**; satirlar tek satirlik seride indi; `İlac Satiri Ekle` butonu ve `<select>`
+  kalkti; adet adimlayicilari (+/−) eklendi
+- **Ayni hata iki yerde daha vardi:** `DrugsView` ve `CustomersView` arama kutulari ciplak
+  `toLowerCase()` kullaniyordu; ikisi de `searchMatch`'e gecti. Uc arama kutusu tek kurala bagli
+
+**Kasitli tasarim kararlari:**
+
+1. **Adet hizlandiricisi carpan isareti ister** (`armapen x3`), ciplak sondaki sayi kabul etmez.
+   Gercek ilac adlari sayi iceriyor (`ARMAPEN LA ENJ. SÜSP. - 250 ML`); `armapen 250` bir arama
+   terimidir. `max 3` de adet degildir (x'in onunde bosluk yok)
+2. **Escape `stopPropagation` ile tuketiliyor, ref ile degil.** Ilk tasarim modalda bir
+   `pickerOpenRef` tutuyordu; ref senkron temizlendigi icin `document` dinleyicisi calistiginda
+   zaten `false` oluyordu ve tek Escape hem listeyi hem formu kapatiyordu. Tek mekanizma birakildi
+3. **Liste odakla degil yazinca acilir**, ama gezinme yolu ayrica birakildi. Odakla acsaydik
+   secim sonrasi `focus()` cagrisi listeyi hemen yeniden acardi. `autoFocus` ile alan hazir gelir,
+   liste sessiz durur; kullanici yazarak, `↓` ile ya da **alanin sagindaki listeyi acma dugmesiyle**
+   acar. Dugme sonradan eklendi (kullanici sordu): ilk surumde liste yalnizca yazarak veya ok
+   tusuyla aciliyordu — **dokunmatik cihazda ok tusu olmadigi icin telefonda hic gezinilemiyordu**
+   ve `RENDER_LIMIT = 50` gezineni yari yolda birakip "aramayi daraltin" diyordu. Sinir 200'e
+   cikarildi, bos sorguda mesaj "N ilacin ilk M tanesi gosteriliyor" oldu
+4. **Ilac adi kirpilmaz, sarilir.** Kirpma ile `AMOKSİSİLİN ENJ. 250 ML` ve `… 500 ML` satirda
+   ayirt edilemez hale geliyordu (tarayicida gorulerek bulundu)
+5. `drugCalc.duplicates` ve `isDrugValid`'deki duplikat kontrolu **korundu** — arayuzden artik
+   ulasilamaz ama degismez olarak ucuz ve fail-closed
+
+**Mutasyon denetimi (yeni davranislar):** 5 kasitli kusurun 5'i de yakalandi — adet artisi
+kaldirildi, siralama tersine cevrildi, `stopPropagation` silindi, Turkce katlama ciplak
+`toLowerCase()` ile degistirildi, adet hizlandiricisi sabitlendi.
+
+**Tarayicida dogrulanan** (mevcut bir musteri kaydi uzerinde, KAYDEDILMEDI — yazma yolu
+degismedigi icin gerek yoktu):
+- ASCII `armaflor` yazimi `ARMAFLOR ENJEKSİYONLUK ÇÖZELTİ 250 ML` kaydini buldu
+- `armapen x3` → 3 adet, 60.000 TL; `armaflor` ikinci kez → **adet 2 oldu, ikinci satir acilmadi**
+- Toplam 63.624 TL, alt bilgi "2 ilac kalemi" ile tutarli
+
+**Olcum — bugun modu, 3 kalem:**
+
+| | Once | Sonra |
+|---|---|---|
+| Isaretleme eylemi | 8 | **0** |
+| Tam liste gorsel taramasi | 3 | **0** |
+| Tus dizisi | — | 3 |
+
+---
+
 ## BAKIM-001: Firebase 12.11.0 -> 12.18.0 (guvenlik)
 
 | Alan | Deger |

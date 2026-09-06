@@ -1,8 +1,9 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.7  
-> **Son güncelleme:** 2 Eylül 2026  
-> **Durum:** Üretimde. Faz 11 (dönemsel raporlama + CSV/PDF ekstre) tamamlandı; 537 test.
+> **Sürüm:** 1.8  
+> **Son güncelleme:** 6 Eylül 2026  
+> **Durum:** Üretimde. Faz 11 (dönemsel raporlama + CSV/PDF ekstre) tamamlandı; TASK-036 ile
+> çoklu ilaç girişi arama tabanlı hale getirildi; 565 test.
 > Kalan: TASK-022 (ilaç stok takibi), TASK-023 (TypeScript migrasyonu)
 
 ---
@@ -99,6 +100,17 @@ Bir işlemde birden fazla ilaç kalemi girilebilir. Bunlar `addDebtTransactionOp
 - **Süpürücü ve enflasyon satır bazındadır:** tahsilat sonrası kalanı ≤ 10 TL olan satır için borç dokümanı yazılmaz (yalnızca logları kalır) ve o satıra enflasyon uygulanmaz
 - **Bugün / geçmiş ayrımı** `isToday` ile yapılır: log başlığı `Borç Açıldı` ↔ `Geçmiş İlaç Borcu` değişir ve geçmiş modda logların `date`'i işlem tarihine override edilir. `isToday` hesabı yerel gün üzerindendir (bkz. "Tarih Üretimi (Yerel Gün)")
 - **Log seti (satır başına):** borç açılış logu + [tahsilat varsa] `Geçmiş Tahsilat` + [süpürüldüyse] `Süpürücü (Silindi)` + [enflasyon uygulandıysa] `Enflasyon Güncellemesi`
+
+**Giriş arayüzü (TASK-036):** Kalemler `DrugPicker` (arama seçici) üzerinden eklenir; satır ekleme
+adımı ve ilaç `<select>`'i kaldırıldı. Zaten ekli bir ilacın seçilmesi ikinci satır açmaz, **adedi
+artırır** — bu yüzden `drugCalc.duplicates` arayüzden artık tetiklenemez (kontrol fail-closed
+olarak korundu). Yeni kalem **daima dizinin sonuna** eklenir: kısmi tahsilat orantılı dağıtılırken
+yuvarlama artığını son geçerli satır aldığı için satır sırası anlam taşır.
+
+Arama, `utils/search.js`'teki `searchMatch` üzerinden yapılır. Türkçe katlama zorunludur: çıplak
+`toLowerCase()` `I/ı/İ/i` ailesini yanlış eşler ve hızlı yazan kullanıcı `ş ğ ü ö ç` tuşlamaz.
+Aynı seçici `DrugsView` ve `CustomersView` arama kutularında da kullanılır — üç arama tek kurala
+bağlıdır (`selectAffectedDebts` / `classifyLog` ile aynı tek-kaynak deseni).
 
 ### İşlem Bazlı Gruplama (batchId)
 

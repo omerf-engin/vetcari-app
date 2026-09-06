@@ -1,7 +1,7 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 2 Eylul 2026 (TASK-021 tamamlandi — CSV + PDF ekstre; BAKIM-001 firebase
-> 12.18.0). Test 537, lint 0/0, build basarili. Tum commitler push edildi.
+> Son guncelleme: 6 Eylul 2026 (TASK-036 tamamlandi — coklu ilac girisi arama tabanli hale
+> getirildi; oncesinde CSV/PDF ekstre ve BAKIM-001). Test 565, lint 0/0, build basarili.
 > Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu).
 
 Gorevlerin detayli aciklamalari icin: [TASK.md](./TASK.md)

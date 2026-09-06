@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Clock, Check, Trash2, ChevronDown } from 'lucide-react';
 import { useCustomer } from '../../hooks/useCustomer';
+import DrugPicker from './DrugPicker';
 import { fmtTL, fmtQty } from '../../utils/formatters';
 import { todayLocal } from '../../utils/dates';
 
@@ -22,16 +23,20 @@ export default function DebtModal({ mode, onClose }) {
   const [sPaid, setSPaid] = useState('');
   const [sPaidDate, setSPaidDate] = useState(today);
 
-  // İlaç state — ilk satır bilinçli olarak boş; ön seçim, yalnızca hizmet
-  // girmek isteyen kullanıcıya istemeden ilaç borcu yazardı
-  const [rows, setRows] = useState([emptyRow()]);
+  // İlaç state — liste boş başlar. Doldurulacak boş satır diye bir şey yok; kalem
+  // yalnızca arama seçicisinden eklenir. Ön seçim olsaydı yalnızca hizmet girmek
+  // isteyen kullanıcıya istemeden ilaç borcu yazılırdı.
+  const [rows, setRows] = useState([]);
   const [dPaid, setDPaid] = useState('');
   const [dPaidDate, setDPaidDate] = useState(today);
   const [applyInflation, setApplyInflation] = useState(true);
   const [showServicePayment, setShowServicePayment] = useState(false);
   const [showDrugPayment, setShowDrugPayment] = useState(false);
 
-  // Escape key
+  // Escape key.
+  // Dinleyici `document` üzerinde duruyor ki modal açılır açılmaz, hiçbir şeye
+  // odaklanılmamışken de çalışsın. İlaç seçicisinin listesi açıkken Escape'i seçici
+  // kendi içinde tüketir (`stopPropagation`), olay buraya hiç ulaşmaz.
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKey);
@@ -42,7 +47,31 @@ export default function DebtModal({ mode, onClose }) {
   useEffect(() => { setSPaidDate(date); setDPaidDate(date); }, [date]);
 
   // Row management
-  const addRow = () => setRows(prev => [...prev, emptyRow()]);
+  //
+  // Sıra anlam taşır: kısmi tahsilat orantılı dağıtılırken yuvarlama artığını SON geçerli
+  // satır alıyor (bkz. `drugCalc.distributions`). Bu yüzden yeni kalem daima sona eklenir,
+  // mevcut satırlar yeniden sıralanmaz ve yeniden anahtarlanmaz.
+  const addOrIncrementRow = (drugId, qty) => {
+    setRows(prev => {
+      const idx = prev.findIndex(r => r.drugId === drugId);
+      if (idx !== -1) {
+        // Zaten ekli ilaç ikinci satır açmaz, adedi artırır
+        const next = [...prev];
+        const current = parseFloat(next[idx].qty) || 0;
+        next[idx] = { ...next[idx], qty: String(Math.round((current + qty) * 100) / 100) };
+        return next;
+      }
+      const drug = drugs.find(d => d.id === drugId);
+      return [...prev, {
+        ...emptyRow(),
+        drugId,
+        qty: String(qty),
+        unitPrice: drug ? String(drug.price) : '',
+        priceMode: 'unit',
+      }];
+    });
+  };
+
   const removeRow = (rowId) => setRows(prev => prev.filter(r => r.id !== rowId));
   const updateRow = (rowId, field, value) => {
     setRows(prev => prev.map(r => {
@@ -55,6 +84,12 @@ export default function DebtModal({ mode, onClose }) {
       }
       return updated;
     }));
+  };
+
+  const stepQty = (row, delta) => {
+    const current = parseFloat(row.qty) || 0;
+    const next = Math.max(0.1, Math.round((current + delta) * 100) / 100);
+    updateRow(row.id, 'qty', String(next));
   };
 
   // Hizmet hesaplaması
@@ -191,7 +226,7 @@ export default function DebtModal({ mode, onClose }) {
               {!isPast ? 'Bugünkü borç girişi' : 'Geçmiş tarihli borç girişi'}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors">&#x2715;</button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 bg-slate-200/50 hover:bg-slate-200 p-2 rounded-full transition-colors touch-target">&#x2715;</button>
         </div>
 
         {/* Content */}
@@ -275,57 +310,75 @@ export default function DebtModal({ mode, onClose }) {
           {/* ========== İlaç sekmesi ========== */}
           {tab === 'drug' && (
             <div className="space-y-4">
-              {/* İlaç satırları */}
-              <div className="space-y-3">
-                {rows.map((row, idx) => {
-                  const isDuplicate = drugCalc.duplicates.has(row.drugId);
-                  const parsedRow = drugCalc.parsed[idx];
-                  return (
-                    <div key={row.id} className="bg-slate-50 rounded-lg p-3 border border-slate-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
-                        {rows.length > 1 && (
-                          <button onClick={() => removeRow(row.id)} className="text-slate-300 hover:text-rose-500 transition-colors p-1 rounded" title="Satırı Sil">
+              <DrugPicker drugs={drugs} onPick={addOrIncrementRow} />
+
+              {/* Eklenen kalemler — tek satırlık şeritler */}
+              {rows.length === 0 ? (
+                <p className="text-sm text-slate-500 italic text-center py-6 border border-dashed border-slate-200 rounded-lg">
+                  Henüz kalem eklenmedi. Yukarıdan arayıp Enter&rsquo;a basın.
+                </p>
+              ) : (
+                <ul className="border border-slate-200 rounded-lg divide-y divide-slate-100">
+                  {rows.map((row, idx) => {
+                    const parsedRow = drugCalc.parsed[idx];
+                    return (
+                      <li key={row.id} className="p-3 space-y-2">
+                        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                          <div className="w-full sm:flex-1 min-w-0">
+                            {/* Kırpma DEĞİL sarma: aynı önekle başlayan iki ilaç
+                                (… 250 ML / … 500 ML) kırpılınca ayırt edilemez hale gelir */}
+                            <p className="font-semibold text-slate-800 text-sm break-words">
+                              {parsedRow?.drug?.name || 'Bilinmeyen ilaç'}
+                            </p>
+                            <p className="text-xs text-slate-500">{fmtTL(parsedRow?.unitPrice || 0)} / adet</p>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => stepQty(row, -1)}
+                              title="Adet azalt"
+                              className="w-8 h-8 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold transition-colors touch-target"
+                            >&minus;</button>
+                            <input
+                              type="number" step="0.1" min="0.1"
+                              value={row.qty}
+                              onChange={e => updateRow(row.id, 'qty', e.target.value)}
+                              aria-label="Adet"
+                              className="w-16 border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-center font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => stepQty(row, 1)}
+                              title="Adet artır"
+                              className="w-8 h-8 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold transition-colors touch-target"
+                            >+</button>
+                          </div>
+
+                          <p className="font-bold text-slate-800 text-sm text-right flex-1 sm:flex-none sm:w-24 flex-shrink-0">
+                            {fmtTL(parsedRow?.total || 0)}
+                          </p>
+
+                          <button
+                            onClick={() => removeRow(row.id)}
+                            title="Kalemi Çıkar"
+                            className="text-slate-500 hover:text-rose-500 hover:bg-rose-50 transition-colors p-1.5 rounded-md flex-shrink-0 touch-target"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
-                        )}
-                      </div>
-                      <div>
-                        <label className={labelCls}>İlaç Seçimi</label>
-                        <select
-                          value={row.drugId}
-                          onChange={e => updateRow(row.id, 'drugId', e.target.value)}
-                          className={`${inputCls} bg-white ${isDuplicate ? 'border-red-400 ring-1 ring-red-300' : ''}`}
-                        >
-                          <option value="">-- İlaç seçin --</option>
-                          {drugs.map(d => <option key={d.id} value={d.id}>{d.name} ({fmtTL(d.price)})</option>)}
-                        </select>
-                        {isDuplicate && (
-                          <p className="text-xs text-red-500 mt-1">Bu ilaç zaten listede mevcut.</p>
-                        )}
-                      </div>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <label className={labelCls}>Adet</label>
-                          <input
-                            type="number" step="0.1" min="0.1"
-                            value={row.qty}
-                            onChange={e => updateRow(row.id, 'qty', e.target.value)}
-                            className={`${inputCls} font-semibold`}
-                          />
                         </div>
+
                         {isPast && (
-                          <div className="flex-1">
-                            <label className={labelCls}>Fiyat Bilgisi</label>
-                            <div className="flex bg-slate-100 p-1 rounded-lg mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex bg-slate-100 p-1 rounded-lg flex-shrink-0">
                               <button
                                 type="button"
-                                className={`flex-1 text-xs py-1.5 rounded-md font-semibold transition-all ${row.priceMode === 'unit' ? 'bg-white shadow text-indigo-700' : 'text-slate-500'}`}
+                                className={`text-xs px-2.5 py-1.5 rounded-md font-semibold transition-all ${row.priceMode === 'unit' ? 'bg-white shadow text-indigo-700' : 'text-slate-500'}`}
                                 onClick={() => updateRow(row.id, 'priceMode', 'unit')}
                               >Birim Fiyat</button>
                               <button
                                 type="button"
-                                className={`flex-1 text-xs py-1.5 rounded-md font-semibold transition-all ${row.priceMode === 'total' ? 'bg-white shadow text-indigo-700' : 'text-slate-500'}`}
+                                className={`text-xs px-2.5 py-1.5 rounded-md font-semibold transition-all ${row.priceMode === 'total' ? 'bg-white shadow text-indigo-700' : 'text-slate-500'}`}
                                 onClick={() => updateRow(row.id, 'priceMode', 'total')}
                               >Toplam Tutar</button>
                             </div>
@@ -333,33 +386,23 @@ export default function DebtModal({ mode, onClose }) {
                               type="number" step="0.1" min="0"
                               value={row.unitPrice}
                               onChange={e => updateRow(row.id, 'unitPrice', e.target.value)}
-                              placeholder={row.priceMode === 'unit' ? 'Birim fiyat (\u20BA)' : 'Toplam tutar (\u20BA)'}
-                              className={`${inputCls} font-semibold`}
+                              placeholder={row.priceMode === 'unit' ? 'Birim fiyat (₺)' : 'Toplam tutar (₺)'}
+                              aria-label={row.priceMode === 'unit' ? 'Birim fiyat' : 'Toplam tutar'}
+                              className="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                             />
                           </div>
                         )}
-                      </div>
-                      {parsedRow && parsedRow.valid && (
-                        <div className="text-xs text-slate-500 text-right">
-                          {isPast && row.priceMode === 'total'
-                            ? <>{fmtTL(parsedRow.total)} / {fmtQty(parsedRow.qty)} adet = <strong className="text-slate-700">{fmtTL(parsedRow.unitPrice)}/adet</strong></>
-                            : <>{fmtQty(parsedRow.qty)} adet &times; {fmtTL(parsedRow.unitPrice)} = <strong className="text-slate-700">{fmtTL(parsedRow.total)}</strong></>
-                          }
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
 
-              {/* Satır ekle butonu */}
-              <button
-                type="button"
-                onClick={addRow}
-                className="w-full py-2.5 rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors text-sm font-semibold flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" /> İlaç Satırı Ekle
-              </button>
+                        {isPast && parsedRow?.valid && row.priceMode === 'total' && (
+                          <p className="text-xs text-slate-500 text-right">
+                            {fmtTL(parsedRow.total)} / {fmtQty(parsedRow.qty)} adet = <strong className="text-slate-700">{fmtTL(parsedRow.unitPrice)}/adet</strong>
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
               {/* Toplu özet */}
               {drugCalc.grandTotal > 0 && (
@@ -387,7 +430,7 @@ export default function DebtModal({ mode, onClose }) {
                   {showDrugPayment && (
                     <div className="space-y-3 pl-1">
                       <div>
-                        <label className={labelCls}>Yapılmış Tahsilat (₺) <span className="text-slate-400 normal-case font-normal">— tüm satırlara orantılı dağıtılır</span></label>
+                        <label className={labelCls}>Yapılmış Tahsilat (₺) <span className="text-slate-500 normal-case font-normal">— tüm satırlara orantılı dağıtılır</span></label>
                         <input type="number" step="0.1" min="0" value={dPaid} onChange={e => setDPaid(e.target.value)} placeholder="0" className={inputCls} />
                       </div>
 
@@ -404,7 +447,7 @@ export default function DebtModal({ mode, onClose }) {
                             {drugCalc.distributions.filter(d => d.valid).map(d => (
                               <div key={d.id} className="flex justify-between text-emerald-700">
                                 <span>{d.drug?.name || '?'}: -{fmtTL(d.paidShare)}</span>
-                                <span className={d.swept ? 'line-through text-slate-400' : 'font-bold'}>
+                                <span className={d.swept ? 'line-through text-slate-500' : 'font-bold'}>
                                   {d.swept ? 'Süpürüldü' : `Kalan: ${fmtQty(d.remainQty)} adet (${fmtTL(d.remainTl)})`}
                                 </span>
                               </div>
@@ -444,12 +487,12 @@ export default function DebtModal({ mode, onClose }) {
                     serviceFilled && isServiceValid ? '1 hizmet' : null,
                     drugFilled && isDrugValid ? `${drugCalc.filled.filter(r => r.valid).length} ilaç kalemi` : null
                   ].filter(Boolean).join(' + ')}
-                  <span className="text-slate-400"> · </span>
+                  <span className="text-slate-500"> · </span>
                   <span className="font-bold text-indigo-700">{fmtTL(summaryTotal)}</span>
                 </p>
               </>
             ) : (
-              <p className="text-sm text-slate-400 italic">Hizmet veya ilaç bilgisi girin</p>
+              <p className="text-sm text-slate-500 italic">Hizmet veya ilaç bilgisi girin</p>
             )}
           </div>
           <div className="flex gap-3 w-full sm:w-auto">

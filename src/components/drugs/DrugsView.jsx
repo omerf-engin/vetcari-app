@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Pill, Plus, Save, Edit2, Trash2, Undo } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
+import { searchMatch } from '../../utils/search';
 import {
   computePriceImpact, computeRevertImpact, needsPriceConfirm, canRevertPriceUpdate,
   revertBlockedMessage
@@ -20,7 +21,8 @@ export default function DrugsView({
   // { mode, drug, newPrice, impact, batch? } — onay bekleyen fiyat işlemi
   const [pending, setPending] = useState(null);
 
-  const filteredDrugs = drugs.filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Turkce katlama: "sari" yazan kullanici "SARI"yi bulmali (bkz. utils/search.js)
+  const filteredDrugs = drugs.filter(d => searchMatch(d.name, searchTerm));
 
   // Hangi ilaçların son zammı geri alınabilir? Guard loglara baktığı için ilaç bazında hesaplanır.
   //
@@ -135,7 +137,7 @@ export default function DrugsView({
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {editingId === drug.id ? (
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-600 px-2 flex items-center transition-colors">İptal</button>
+                        <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-600 px-2 flex items-center transition-colors">İptal</button>
                         <button onClick={() => handleSavePrice(drug.id)} className="text-emerald-600 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-md transition-colors"><Save className="w-4 h-4" /> Kaydet</button>
                       </div>
                     ) : (
@@ -154,10 +156,10 @@ export default function DrugsView({
                             </button>
                           )}
                           <button onClick={() => { setEditingId(drug.id); setTempPrice(drug.price); }} className="text-indigo-600 hover:text-indigo-800 flex items-center justify-end gap-1.5 font-semibold transition-colors"><Edit2 className="w-4 h-4" /> Fiyatı Güncelle</button>
-                          <button onClick={() => onDeleteDrug(drug.id)} title="İlacı Sistemden Sil" className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => onDeleteDrug(drug.id)} title="İlacı Sistemden Sil" className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-md transition-colors touch-target"><Trash2 className="w-4 h-4" /></button>
                         </div>
                         {revertStateByDrug.has(drug.id) && !revertStateByDrug.get(drug.id).ok && (
-                          <p className="text-[11px] text-slate-400 italic font-normal max-w-xs text-right">
+                          <p className="text-xs text-slate-500 italic font-normal max-w-xs text-right">
                             {revertBlockedMessage(revertStateByDrug.get(drug.id).reason)}
                           </p>
                         )}

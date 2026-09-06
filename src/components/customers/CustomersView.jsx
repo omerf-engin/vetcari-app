@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Users, UserPlus, Edit2, Trash2, Check, X, SearchX } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
+import { searchMatch } from '../../utils/search';
 
 export default function CustomersView({ customers, serviceDebts, drugDebts, onSelect, onAddCustomer, onDeleteCustomer, onUpdateCustomerName }) {
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -9,7 +10,8 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
   const [tempName, setTempName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Turkce katlama: "ismail" yazan kullanici "İSMAİL"i bulmali (bkz. utils/search.js)
+  const filteredCustomers = customers.filter(c => searchMatch(c.name, searchTerm));
 
   const calculateTotalDebt = (customerId) => {
     const sDebt = serviceDebts
@@ -48,7 +50,7 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {customers.length === 0 ? (
           <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 text-slate-500">
-            <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <Users className="w-12 h-12 mx-auto mb-3 text-slate-400" />
             <p className="font-semibold text-slate-600">Henüz müşteri eklenmemiş</p>
             <p className="text-sm mt-1 mb-4">İlk müşterinizi eklemek için aşağıdaki butonu kullanın.</p>
             <button
@@ -59,8 +61,8 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
             </button>
           </div>
         ) : filteredCustomers.length === 0 ? (
-          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 text-slate-400">
-            <SearchX className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-16 text-slate-500">
+            <SearchX className="w-10 h-10 mx-auto mb-2 text-slate-400" />
             <p>&ldquo;<strong className="text-slate-600">{searchTerm}</strong>&rdquo; ile eşleşen müşteri bulunamadı.</p>
           </div>
         ) : null}
@@ -75,23 +77,23 @@ export default function CustomersView({ customers, serviceDebts, drugDebts, onSe
                 {editingId === c.id ? (
                   <div className="flex gap-2 w-full z-10" onClick={e => e.stopPropagation()}>
                     <input type="text" value={tempName} onChange={e => setTempName(e.target.value)} className="w-full border border-slate-300 px-2 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" autoFocus />
-                    <button onClick={() => { onUpdateCustomerName(c.id, tempName); setEditingId(null); }} className="text-emerald-600 hover:text-emerald-800 p-1 bg-emerald-50 rounded"><Check className="w-4 h-4" /></button>
-                    <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded"><X className="w-4 h-4" /></button>
+                    <button onClick={() => { onUpdateCustomerName(c.id, tempName); setEditingId(null); }} className="text-emerald-600 hover:text-emerald-800 p-1 bg-emerald-50 rounded touch-target"><Check className="w-4 h-4" /></button>
+                    <button onClick={() => setEditingId(null)} className="text-slate-500 hover:text-slate-600 p-1 bg-slate-50 rounded touch-target"><X className="w-4 h-4" /></button>
                   </div>
                 ) : (
                   <>
                     <h3 className="text-lg font-semibold text-slate-800 group-hover:text-indigo-600 pr-4">{c.name}</h3>
                     <div className="flex gap-1.5 z-10" onClick={e => e.stopPropagation()}>
-                       <button onClick={() => { setEditingId(c.id); setTempName(c.name); }} title="İsmi Düzenle" className="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
-                       <button onClick={() => onDeleteCustomer(c.id, totalDebt, c.balance)} title="Müşteriyi Sil" className="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                       <button onClick={() => { setEditingId(c.id); setTempName(c.name); }} title="İsmi Düzenle" className="text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-md transition-colors touch-target"><Edit2 className="w-4 h-4" /></button>
+                       <button onClick={() => onDeleteCustomer(c.id, totalDebt, c.balance)} title="Müşteriyi Sil" className="text-slate-500 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-1.5 rounded-md transition-colors touch-target"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </>
                 )}
               </div>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-500">Güncel Borç:</span><span className="font-medium text-red-600">{fmtTL(totalDebt)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Güncel Borç:</span><span className="font-medium text-rose-600">{fmtTL(totalDebt)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Avans/Bakiye:</span><span className="font-medium text-emerald-600">{fmtTL(c.balance)}</span></div>
-                <div className="pt-2 border-t flex justify-between font-bold"><span>Net Durum:</span><span className={netBalance < 0 ? 'text-red-600' : 'text-emerald-600'}>{fmtTL(Math.abs(netBalance))} {netBalance < 0 ? 'Borçlu' : 'Alacaklı'}</span></div>
+                <div className="pt-2 border-t flex justify-between font-bold"><span>Net Durum:</span><span className={netBalance < 0 ? 'text-rose-600' : 'text-emerald-600'}>{fmtTL(Math.abs(netBalance))} {netBalance < 0 ? 'Borçlu' : 'Alacaklı'}</span></div>
               </div>
             </div>
           );

@@ -76,8 +76,9 @@ src/
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
 │   ├── drugs/                   # DrugsView (inventory+price), PriceImpactModal (preview/revert)
 │   ├── reports/                 # ReportsView (period picker + financial totals)
-│   ├── modals/                  # DebtModal (today+past unified), PaymentModal, HistoryModal,
-│   │                            # BatchReturnModal, CancelBatchModal (batch+item), RevertPaymentModal,
+│   ├── modals/                  # DebtModal (today+past unified), DrugPicker (arama seçici),
+│   │                            # PaymentModal, HistoryModal, BatchReturnModal,
+│   │                            # CancelBatchModal (batch+item), RevertPaymentModal,
 │   │                            # StatementExportModal (CSV/PDF ekstre)
 │   ├── pdf/                     # StatementPdfDocument (A4 çizim katmanı)
 │   └── ui/                      # Toast, ToastContainer, ConfirmModal
@@ -91,6 +92,7 @@ src/
                                  # debtGrouping.js (groupDebtsByBatch),
                                  # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards),
                                  # reporting.js (period aggregation + classifyLog/FLOW_RECEIVABLE_SIGN),
+                                 # search.js (Türkçe katlamalı arama — 3 arama kutusu da bunu kullanır),
                                  # csv.js (Excel tr-TR escaping/BOM), statementExport.js (cari ekstre),
                                  # statementPdfModel.js + statementPdfRenderer.js (lazy chunk boundary),
                                  # fonts.js (embedded Roboto + glyph gate),
