@@ -23,6 +23,9 @@ const FOLD = {
   'â': 'a', 'Â': 'a',
   'î': 'i', 'Î': 'i',
   'û': 'u', 'Û': 'u',
+  // Çarpım işareti: katalogda "ADVANTİX 4×4 ML" yazıyor ama kullanıcı klavyeden 'x' yazar.
+  // Katlanmasaydı gerçek bir katalog kaydı aramada hiç bulunamazdı.
+  '×': 'x',
 };
 
 /** Aramada karşılaştırılabilir biçime indirger: Türkçe harfler ASCII karşılığına katlanır. */

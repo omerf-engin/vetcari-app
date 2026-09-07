@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+// DrugsView -> CatalogPicker -> useDrugCatalog -> services/firebase zinciri, mock'lanmazsa
+// birim testinden GERCEK Firestore'a baglanti acar. Katalog bu dosyanin konusu degil;
+// kendi testi `CatalogPicker.test.jsx`'te.
+vi.mock('../../hooks/useDrugCatalog', () => ({
+  useDrugCatalog: () => ({ catalog: [], loading: false, error: null }),
+}));
+
 import DrugsView from './DrugsView';
 
 const drug = { id: 'drug1', name: 'Amoksisilin', price: 100 };

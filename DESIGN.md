@@ -464,6 +464,11 @@ Uzun bir listeden hızlı kalem eklemenin deseni. Kalıcı bir arama alanı, alt
 - Eklenen kalemler tek satırlık şeritte durur: ad (kırpılmaz, **sarılır** — aynı önekli iki kayıt
   kırpılınca ayırt edilemez), adet adımlayıcı, tutar, kaldır.
 - Türkçe arama katlaması zorunlu (bkz. Do's and Don'ts).
+- **Seçilemeyen satır gizlenmez, gerekçesiyle gösterilir.** Ortak katalogda zaten listende olan
+  bir kalem pasif durur ve "Listende zaten var — <fiyat>" der. Gizlemek kullanıcıyı "katalogda
+  yok" diye elle eklemeye iter ve tam da önlenmek istenen mükerreri yaratır. Tahmine dayalı
+  benzerlik ise **engellemez, yalnızca uyarır** — yanlış bir tahmin meşru bir eklemeyi
+  engellerse mükerrerden daha çok zarar verir.
 
 ### Toast
 

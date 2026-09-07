@@ -1,10 +1,29 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.8  
-> **Son güncelleme:** 6 Eylül 2026  
-> **Durum:** Üretimde. Faz 11 (dönemsel raporlama + CSV/PDF ekstre) tamamlandı; TASK-036 ile
-> çoklu ilaç girişi arama tabanlı hale getirildi; 565 test.
-> Kalan: TASK-022 (ilaç stok takibi), TASK-023 (TypeScript migrasyonu)
+> **Sürüm:** 1.9  
+> **Son güncelleme:** 7 Eylül 2026  
+> **Durum:** Üretimde. TASK-036 (arama tabanlı çoklu ilaç girişi) ve TASK-037 (ortak ilaç
+> kataloğu) tamamlandı; güvenlik kuralları blanket kalıptan çıkarıldı ve yayınlandı. 615 test.
+> Kalan: TASK-038 (tek defter çok kullanıcı, P1), TASK-022 (ilaç stok takibi),
+> TASK-023 (TypeScript migrasyonu)
+
+### Ortak İlaç Kataloğu (TASK-037)
+
+`drugCatalog` koleksiyonu **global ve salt okunurdur**: `userId` taşımaz, her kimlik doğrulanmış
+kullanıcı okur, hiçbir istemci yazamaz (`allow write: if false`). Yalnızca ürün sahibi Admin SDK
+ile günceller — `scripts/loadDrugCatalog.js`.
+
+- **Kimlik bileşiktir:** `catalogId = ambalaj ? urun_id#NORMALIZE(ambalaj) : urun_id`.
+  `urun_id` bir *ürün kartı* kimliğidir; aynı ürünün 50/100/250 ml varyantları onu paylaşır.
+  Kimlik `urun_id` olsaydı mükerrer engeli farklı ambalajların eklenmesini yanlışlıkla bloke
+  ederdi. `NORMALIZE` ayrıca `/` karakterini temizler — Firestore doküman kimliğinde yasaktır
+- **Katalogdan seçim kendi `drugs` kaydını oluşturur** ve `catalogId` taşır. Borç yazma, zam,
+  kilit, iade, ekstre ve rapor yollarının hiçbiri değişmez; katalog güncellense bile geçmiş
+  borçlar kaymaz
+- **Fiyat katalogda yoktur.** Fiyat kliniğin kendi kararıdır ve tüm enflasyon mimarisi buna dayanır
+- **İstemci erişimi tembeldir** (`useDrugCatalog`): abonelik ilk kullanımda kurulur, oturum boyunca
+  yaşar. `getDocs` değil `onSnapshot` — `persistentLocalCache` sayesinde sonraki oturumlarda
+  yalnızca değişiklikler çekilir
 
 ---
 

@@ -31,11 +31,15 @@ Custom hooks:
 - `useAuth()` — wraps `onAuthStateChanged`, returns `currentUser` and `loading`
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections with error callbacks (connection drop sets `dataLoading=false` instead of infinite spinner), returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
+- `useCombobox({ items, match, onPick, ... })` — the shared search-picker state machine (open/active/keyboard/Escape). `DrugPicker` and `CatalogPicker` share it; **Escape is consumed here** via `stopPropagation` so one Escape closes the list, not the whole modal
+- `useDrugCatalog()` — lazy, single subscription to `drugCatalog` via `useSyncExternalStore`. A user who never opens the drugs tab pays zero reads; `onSnapshot` (not `getDocs`) so later sessions fetch only deltas from the persistent cache
 - `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onToggleBatchLock, onReturnBatch, onDeleteServiceDebt, onApplyPayment, onAddDebtTransaction }` from `CustomerContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
 
-**Firestore collections:** `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`.
+**Firestore collections:** `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` (all per-user, `userId`-scoped) + `drugCatalog` (global, read-only shared catalog — no `userId`, written only by `scripts/loadDrugCatalog.js` via Admin SDK).
+
+**Security rules** name each collection explicitly — the blanket `match /{collection}/{docId}` was removed. Rules are evaluated as a **union**, so a broad rule cannot be narrowed by adding a specific one; leaving the blanket rule would have made the future per-collection migration (TASK-038) meaningless. `src/services/firestoreRules.test.js` gates this: a collection used in code but missing from the rules fails the suite.
 
 ### Key business rules
 
@@ -74,7 +78,8 @@ src/
 │   ├── layout/Header.jsx        # Nav header with tab switching
 │   ├── dashboard/DashboardView  # Summary stats & top debtors
 │   ├── customers/               # CustomersView (list+CRUD), CustomerDetail (detail+transactions)
-│   ├── drugs/                   # DrugsView (inventory+price), PriceImpactModal (preview/revert)
+│   ├── drugs/                   # DrugsView (inventory+price), PriceImpactModal (preview/revert),
+│   │                            # CatalogPicker (ortak katalogdan ilaç ekleme)
 │   ├── reports/                 # ReportsView (period picker + financial totals)
 │   ├── modals/                  # DebtModal (today+past unified), DrugPicker (arama seçici),
 │   │                            # PaymentModal, HistoryModal, BatchReturnModal,
@@ -92,7 +97,8 @@ src/
                                  # debtGrouping.js (groupDebtsByBatch),
                                  # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards),
                                  # reporting.js (period aggregation + classifyLog/FLOW_RECEIVABLE_SIGN),
-                                 # search.js (Türkçe katlamalı arama — 3 arama kutusu da bunu kullanır),
+                                 # search.js (Türkçe katlamalı arama — tüm arama kutuları bunu kullanır),
+                                 # drugCatalog.js (katalog arama alanı + iki katmanlı mükerrer kuralı),
                                  # csv.js (Excel tr-TR escaping/BOM), statementExport.js (cari ekstre),
                                  # statementPdfModel.js + statementPdfRenderer.js (lazy chunk boundary),
                                  # fonts.js (embedded Roboto + glyph gate),

@@ -23,6 +23,10 @@ scripts/backup-*.json
 *.xls
 *.csv
 
+# Katalog disa aktarimlari (VetKatalog zip'i vb.) — veri repoda tutulmaz,
+# Firestore'a scripts/ ile yuklenir
+*.zip
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

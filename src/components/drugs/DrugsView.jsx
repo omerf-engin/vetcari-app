@@ -7,6 +7,7 @@ import {
   revertBlockedMessage
 } from '../../utils/priceImpact';
 import PriceImpactModal from './PriceImpactModal';
+import CatalogPicker from './CatalogPicker';
 
 export default function DrugsView({
   drugs, drugDebts = [], customers = [], transactions = [],
@@ -17,6 +18,7 @@ export default function DrugsView({
   const [isAdding, setIsAdding] = useState(false);
   const [newDrugName, setNewDrugName] = useState('');
   const [newDrugPrice, setNewDrugPrice] = useState('');
+  const [selectedCatalog, setSelectedCatalog] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   // { mode, drug, newPrice, impact, batch? } — onay bekleyen fiyat işlemi
   const [pending, setPending] = useState(null);
@@ -78,12 +80,22 @@ export default function DrugsView({
     else onUpdatePrice(pending.drug.id, pending.newPrice);
   };
 
+  const closeAdd = () => {
+    setNewDrugName(''); setNewDrugPrice(''); setSelectedCatalog(null); setIsAdding(false);
+  };
+
+  // Katalogdan secim adi doldurur; fiyat her zaman klinigin kendi karari (katalog fiyat tasimaz)
+  const handleCatalogSelect = (doc) => {
+    setSelectedCatalog(doc);
+    setNewDrugName(doc.name);
+  };
+
   const handleAddSubmit = (e) => {
     e.preventDefault();
     const p = parseFloat(newDrugPrice);
     if (isNaN(p) || p <= 0) return;
-    onAddDrug(newDrugName, p);
-    setNewDrugName(''); setNewDrugPrice(''); setIsAdding(false);
+    onAddDrug(newDrugName, p, selectedCatalog?.catalogId);
+    closeAdd();
   };
 
   return (
@@ -100,14 +112,37 @@ export default function DrugsView({
           {!isAdding ? (
             <button onClick={() => setIsAdding(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"><Plus className="w-4 h-4" /> Yeni İlaç Ekle</button>
           ) : (
-            <form onSubmit={handleAddSubmit} className="flex flex-col sm:flex-row gap-3 w-full">
-              <input type="text" placeholder="İlaç Adı" value={newDrugName} onChange={(e) => setNewDrugName(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" autoFocus required />
-              <input type="number" step="0.1" min="0.1" placeholder="Satış Fiyatı (₺)" value={newDrugPrice} onChange={(e) => setNewDrugPrice(e.target.value)} className="w-full sm:w-48 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
-              <div className="flex gap-2">
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Ekle</button>
-                <button type="button" onClick={() => setIsAdding(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold transition-colors">İptal</button>
-              </div>
-            </form>
+            <div className="space-y-3">
+              {/* Katalogda olmayan ilac elle eklenmeye devam eder — asagidaki ad alani hep acik */}
+              <CatalogPicker drugs={drugs} onSelect={handleCatalogSelect} />
+
+              {selectedCatalog && (
+                <div className="flex items-start justify-between gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-indigo-900 break-words">{selectedCatalog.name}</p>
+                    <p className="text-xs text-indigo-700 mt-0.5">
+                      {[selectedCatalog.firma, selectedCatalog.form, selectedCatalog.unit].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedCatalog(null); setNewDrugName(''); }}
+                    className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 flex-shrink-0 touch-target"
+                  >
+                    Vazgeç
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={handleAddSubmit} className="flex flex-col sm:flex-row gap-3 w-full">
+                <input type="text" placeholder="İlaç Adı" value={newDrugName} onChange={(e) => setNewDrugName(e.target.value)} className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
+                <input type="number" step="0.1" min="0.1" placeholder="Satış Fiyatı (₺)" value={newDrugPrice} onChange={(e) => setNewDrugPrice(e.target.value)} className="w-full sm:w-48 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
+                <div className="flex gap-2">
+                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Ekle</button>
+                  <button type="button" onClick={closeAdd} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold transition-colors">İptal</button>
+                </div>
+              </form>
+            </div>
           )}
         </div>
 

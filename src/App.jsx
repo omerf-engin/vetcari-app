@@ -109,14 +109,19 @@ export default function App() {
     }
   };
 
-  const handleAddDrug = async (name, price) => {
+  const handleAddDrug = async (name, price, catalogId) => {
+    // Kesin katman: ayni katalog kalemi ikinci kez eklenemez
+    if (catalogId && drugs.some(d => d.catalogId === catalogId)) {
+      toast.warning('Bu katalog kalemi listenizde zaten var.');
+      return;
+    }
     const trimmedInfo = name.trim().toLowerCase();
     const exists = drugs.some(d => d.name.trim().toLowerCase() === trimmedInfo);
     if (exists) {
       toast.warning(`"${name}" adında bir ilaç sistemde zaten mevcut! Fiyatını değiştirmek için "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
-    try { await addDrug(name, price, currentUser.uid); toast.success('İlaç eklendi'); }
+    try { await addDrug(name, price, currentUser.uid, catalogId); toast.success('İlaç eklendi'); }
     catch (err) { handleError(err, 'İlaç Ekleme'); }
   };
 

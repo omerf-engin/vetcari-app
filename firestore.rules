@@ -70,5 +70,16 @@ service cloud.firestore {
       allow create: if canCreateOwned();
       allow update, delete: if canWriteOwned();
     }
+
+    // Ortak ilac katalogu (TASK-037) — SALT OKUNUR, sahipsiz.
+    //
+    // `userId` tasimaz: butun kliniklerin paylastigi bir urun referansidir. Yazma her
+    // istemciye kapali; katalogu yalnizca urun sahibi Admin SDK ile gunceller
+    // (`scripts/loadDrugCatalog.js`). Yazma acik kalsaydi herhangi bir veteriner tum
+    // musterilerin katalogunu degistirebilirdi — cok kiracili bir uruncde ciddi bir acik.
+    match /drugCatalog/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
   }
 }

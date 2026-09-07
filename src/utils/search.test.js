@@ -52,6 +52,12 @@ describe('searchMatch', () => {
     expect(searchMatch(name, 'armapen 500')).toBe(false);
   });
 
+  // Gercek katalog verisinde "ADVANTİX 4×4 ML" var; kullanici klavyeden 'x' yazar
+  it('carpim isareti ile duz x ayni sayilir', () => {
+    expect(searchMatch('ADVANTİX 4×4 ML', 'advantix 4x4')).toBe(true);
+    expect(searchMatch('ADVANTIX 4x4 ML', '4×4')).toBe(true);
+  });
+
   it('alakasiz sorguyu eslestirmez — kontrol gercekten ayirt ediyor', () => {
     expect(searchMatch('ARMAPEN', 'amoksisilin')).toBe(false);
     expect(searchMatch('İĞNE', 'ilac')).toBe(false);

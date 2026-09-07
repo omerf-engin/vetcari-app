@@ -187,10 +187,17 @@ export const updateCustomerName = async (customerId, newName) => {
   await updateDoc(doc(db, 'customers', customerId), { name: newName.trim() });
 };
 
-export const addDrug = async (name, price, userId) => {
+/**
+ * `catalogId` yalnizca ortak katalogdan eklenen ilaclarda bulunur (TASK-037); elle
+ * eklenen ilaclarda alan hic yazilmaz. Mukerrer engelinin KESIN katmani bunun uzerinden
+ * calisir — ad benzerligi tahmine dayali oldugu icin yalnizca uyari uretir.
+ */
+export const addDrug = async (name, price, userId, catalogId) => {
   const numPrice = parseFloat(price);
   if (!name.trim() || isNaN(numPrice) || numPrice <= 0) return;
-  await addDoc(collection(db, 'drugs'), { name: name.trim(), price: numPrice, userId });
+  const data = { name: name.trim(), price: numPrice, userId };
+  if (catalogId) data.catalogId = catalogId;
+  await addDoc(collection(db, 'drugs'), data);
 };
 
 export const deleteDrug = async (drugId) => {

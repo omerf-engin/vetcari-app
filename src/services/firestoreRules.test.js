@@ -88,13 +88,41 @@ describe('firestore.rules', () => {
     expect(body).toMatch(/resource\s*==\s*null/);
   });
 
-  it('her koleksiyon blogu okuma, olusturma ve degistirme iznini ayri ayri tanimlar', () => {
+  it('her blok iki gecerli sekilden birine uyar: sahipli ya da salt-okunur', () => {
     for (const name of collectionsInRules()) {
       const block = body.match(new RegExp(`match\\s+/${name}/\\{[^}]*\\}\\s*\\{([\\s\\S]*?)\\n    \\}`));
       expect(block, `${name} blogu okunamadi`).not.toBeNull();
-      expect(block[1], `${name}: allow read yok`).toMatch(/allow read:/);
-      expect(block[1], `${name}: allow create yok`).toMatch(/allow create:/);
-      expect(block[1], `${name}: allow update, delete yok`).toMatch(/allow update, delete:/);
+      const rule = block[1];
+
+      expect(rule, `${name}: allow read yok`).toMatch(/allow read:/);
+
+      // Salt-okunur sekil: paylasilan referans verisi (ornegin drugCatalog).
+      // Yazma TAMAMEN kapali olmali — `if false` disinda bir kosul kabul edilmez.
+      if (/allow write:/.test(rule)) {
+        expect(rule, `${name}: salt-okunur blokta yazma kosullu olamaz`).toMatch(/allow write:\s*if false\s*;/);
+        expect(rule, `${name}: salt-okunur blokta ayrica create olamaz`).not.toMatch(/allow create:/);
+        expect(rule, `${name}: salt-okunur blokta ayrica update/delete olamaz`).not.toMatch(/allow update|allow delete/);
+        continue;
+      }
+
+      // Sahipli sekil: kullanici verisi, `userId` uzerinden sahiplik.
+      expect(rule, `${name}: allow create yok`).toMatch(/allow create:/);
+      expect(rule, `${name}: allow update, delete yok`).toMatch(/allow update, delete:/);
+    }
+  });
+
+  it('salt-okunur koleksiyona hicbir istemci yazamaz', () => {
+    // Katalogu yalnizca Admin SDK gunceller. Yazma acilirsa herhangi bir klinik tum
+    // musterilerin katalogunu degistirebilir — cok kiracili uruncde ciddi acik.
+    const readOnly = [...collectionsInRules()].filter(name => {
+      const b = body.match(new RegExp(`match\\s+/${name}/\\{[^}]*\\}\\s*\\{([\\s\\S]*?)\\n    \\}`));
+      return b && /allow write:/.test(b[1]);
+    });
+
+    expect(readOnly, 'salt-okunur koleksiyon bulunamadi').toContain('drugCatalog');
+    for (const name of readOnly) {
+      const b = body.match(new RegExp(`match\\s+/${name}/\\{[^}]*\\}\\s*\\{([\\s\\S]*?)\\n    \\}`));
+      expect(b[1]).toMatch(/allow write:\s*if false\s*;/);
     }
   });
 });

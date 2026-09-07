@@ -1974,9 +1974,101 @@ degismedigi icin gerek yoktu):
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO — veri dosyasi bekleniyor |
+| **Status** | DONE (2026-09-07) |
 | **Priority** | P2 |
 | **Depends on** | TASK-036 |
+
+**Sonuc:** Test 573 → 615 · Lint 0/0 · Build basarili · Ana bundle 978,98 → 985,22 kB
+(+6,2 kB kod; katalog Firestore'da oldugu icin veri pakete SIFIR ekliyor) ·
+Firestore'da 1.141 katalog dokumani
+
+### Katalog verisi (2026-09-07'de alindi, olculdu)
+
+Kaynak: `vetkatalog-export-2026-09-06.zip` (kullanici tarafindan saglandi; repoya girmez).
+833 urun · 746 varyant satiri · fiyat/stok/barkod YOK (kullanici karariyla ortusuyor).
+
+**Kritik bulgu — ilk tasarim yanlisti.** `catalogId = urun_id` diyecektim; `urun_id` bir URUN
+KARTI kimligi, stok kalemi degil. Ayni urunun 50/100/250 ml varyantlari **ayni `urun_id`'yi**
+tasiyor (or. `DR. ANIMAL` 100 ML / 250 ML / 500 ML / 1 LT / 5 LT). Mukerrer engeli, 100 ml
+eklendikten sonra 250 ml eklenmesini **yanlislikla engellerdi** — tam da "250 ML ile 500 ML
+gercekten farkli urunlerdir" diye uyarilan senaryo veride yapisal olarak var.
+
+**Duzeltilmis kimlik:** `catalogId = ambalaj ? urun_id#NORMALIZE(ambalaj) : urun_id`
+(normalize = trim + tr-upper + coklu bosluk tekile). Olculdu: `(urun_id, ambalaj)` 746/746
+benzersiz, sifir cakisma; 44 bos-ambalajli varyantin **hicbiri** baska varyanti olan bir urunde
+degil, dolayisiyla bos olani `urun_id`'ye cokertmek guvenli.
+
+**Uretilen katalog (olculdu, tahmin degil):**
+
+| | |
+|---|---|
+| Dokuman | **1.141** (404 varyantsiz urun + 746 varyant − 9 taslak) |
+| `unit` tasiyan | 702 |
+| `etkenMaddeler` tasiyan | 1.141 (hepsi) |
+| `uyari` tasiyan | 42 |
+| Toplam | **337,9 kB** · dokuman basina ort. 302 bayt (en buyuk 553) |
+
+Ilk senkron cihaz basina ~1.141 okuma; sonrasinda `persistentLocalCache` yerelden servis eder.
+
+**Dokuman semasi:**
+```
+{ catalogId, urunId, name, form, firma, sinif, bolum,
+  unit?, etkenMaddeler?, uyari? }
+```
+
+**Kullanici kararlari (2026-09-07):**
+- `uyari` (dog-only / cat-caution) **saklanir ama arayuzde GOSTERILMEZ.** Gostermek uygulamayi
+  klinik karar destegine donusturur; bilincli olarak yapilmadi. Alan ileride acilabilir
+- `taslak=1` olan 9 urun **haric tutuldu** (kaynak dogrulamasi eksik; fail-closed)
+- Arama **ad + firma + form + etken madde** uzerinde calisir (muadil aramasi mumkun olsun diye)
+
+**TASK-022 icin not:** `ambalaj` serbest metindir (205 farkli deger: `100 ML`, `100 CC`,
+`10 TB`, `20 X 5 GR`, `80X4 GR`). Etiket olarak kullanilabilir ama **sayisal miktar
+hesaplanamaz** — stok takibi tasarlanirken bu bilinmeli.
+
+### Yapilanlar
+
+- **`scripts/catalogTransform.js`** — CSV → katalog dokumani, saf fonksiyon (Admin SDK'ya bagli
+  degil, vitest'ten test edilebiliyor). 17 test
+- **`scripts/loadDrugCatalog.js`** — Admin SDK ile yukleyici. Dokuman id'si = `catalogId`,
+  dolayisiyla IDEMPOTENT. `--dry-run` (Admin SDK olmadan da calisir, dinamik import), `--prune`
+  (bayat kayitlari siler, acikca istenmedikce silmez). `firebase-admin` devDependency olarak
+  eklendi — uretim agacinda **sifir zafiyet**, `dist`'te firebase-admin izi **sifir**
+- **`firestore.rules`** — `drugCatalog` blogu: herkese okuma, `allow write: if false`.
+  Kural kapisi (`firestoreRules.test.js`) artik IKI sekli ayirt ediyor: *sahipli* (5 koleksiyon)
+  ve *salt-okunur*; salt-okunur blokta yazmanin kosullu olmasi bile testi kirar
+- **`src/hooks/useCombobox.js`** — arama secicisinin durum makinesi `DrugPicker` ile paylasildi.
+  Olcut: refactor sonrasi **DrugPicker'in 13 testi degismeden gecti**
+- **`src/hooks/useDrugCatalog.js`** — `useSyncExternalStore` ile tembel, tek abonelik. Katalogu
+  hic acmayan kullanici hic okuma odemez; sekme degistiren kullanici yeniden odemez
+- **`src/utils/drugCatalog.js`** + **`src/components/drugs/CatalogPicker.jsx`** — arama
+  (ad + firma + form + etken madde) ve iki katmanli mukerrer kurali
+- **`addDrug(name, price, userId, catalogId?)`** — dorduncu parametre opsiyonel
+
+### Uygulama sirasinda bulunan iki kusur
+
+1. **Firestore dokuman kimliginde `/` yasak.** Gercek veride `50 MG — KEDİ/KÖPEK (10 TB)` gibi
+   ambalajlar var; yukleme 1000. dokumanda patladi ve katalog yarim yazili kaldi.
+   `normalizePackage` artik `/` → `-` cevirir (yalnizca KIMLIK; `unit` alani ham metni tasir).
+   Yukleyiciye yazmadan once toplu kimlik denetimi eklendi — hata artik batch ortasinda degil,
+   en basta ve tumunu birden bildirerek cikar
+2. **Carpim isareti `×` ile duz `x` ayri sayiliyordu.** Katalogda `ADVANTİX 4×4 ML` yaziyor ama
+   kullanici klavyeden `x` yazar; katlama olmadan bu kayit aramada **hic bulunamiyordu**.
+   `utils/search.js`'teki `fold` tablosuna `× → x` eklendi. Bu kusuru, testi gercekci veriyle
+   yazmak ortaya cikardi
+
+### Tarayicida dogrulanan (gercek Firestore, test ilaclari sonunda silindi)
+
+- Katalog yuklendi ve arama alani aktif geldi (loading/error yok)
+- **Etken madde aramasi:** "amoksisilin" yazinca adinda bu kelime GECMEYEN CLAVOBAY, SYNULOX,
+  MEGASİL geldi — muadil aramasi calisiyor
+- Katalogdan secim → fiyat → ekleme; `drugs` dokumani `catalogId` ile olustu
+- **Kesin mukerrer:** ayni kalem tekrar arandiginda satir PASIF, "Listende zaten var" + mevcut
+  fiyat gorunuyor
+- **Bilesik kimligin sinavi:** `Biyokan LA ... 100 ml` eklendikten sonra ayni `urun_id`'yi
+  paylasan `250 ml` ve `50 ml` **secilebilir kaldi**. Kimlik `urun_id` olsaydi ucu de engellenirdi
+- Yukleyici iki kez calistirildi: 1.141 → 1.141, mukerrer yok
+- Konsol tertemiz, hicbir adimda `permission-denied` yok
 
 **Amac:** Klinik, ilac listesini sifirdan elle kurmak zorunda kalmasin. Ortak bir katalogdan
 arayip secsin; katalogda olmayan ilaci kendi listesine elle eklemeye devam edebilsin.
@@ -2000,7 +2092,7 @@ arayip secsin; katalogda olmayan ilaci kendi listesine elle eklemeye devam edebi
 
 ### Deliverables
 
-- **`drugCatalog` koleksiyonu:** `{ catalogId, name, unit }` — `userId` YOK, global
+- **`drugCatalog` koleksiyonu:** yukaridaki sema — `userId` YOK, global, 1.141 dokuman
 - **Guvenlik kurali:** katalog icin herkese okuma, **hic kimseye yazma** (`allow write: if false`).
   Katalogu yalnizca urun sahibi gunceller (Console / Admin SDK)
 - ~~**Blanket kuraldan cikis (mimari hazirlik)**~~ — **2026-09-07'de yapildi**, bkz. asagidaki
@@ -2010,7 +2102,9 @@ arayip secsin; katalogda olmayan ilaci kendi listesine elle eklemeye devam edebi
 - **Mukerrer kurali iki katmanli:**
   - *Kesin:* `catalogId` eslesirse katalog sonucu **secilemez**, "Listende zaten var — <fiyat>"
     rozetiyle gorunur. Gizlenmez: gorunmezlik kullaniciyi "katalogda yok" diye elle eklemeye
-    iter ve tam da onlemek istedigimiz mukerreri yaratir
+    iter ve tam da onlemek istedigimiz mukerreri yaratir.
+    **Kimlik bilesik oldugu icin ayni urunun farkli ambalaji ENGELLENMEZ** — 100 ml ekliyken
+    250 ml eklenebilir; ikisi ayri stok kalemidir
   - *Olasi:* elle girilmis eski kayitlar icin ad benzerligi yalnizca UYARIDIR, engel degil —
     "250 ML" ile "500 ML" gercekten farkli urunlerdir, tahmine dayanarak mesru bir eklemeyi
     engellemek mukerrerden daha kotudur

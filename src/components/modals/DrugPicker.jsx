@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo, useId } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
 import { fmtTL, fmtQty } from '../../utils/formatters';
 import { searchMatch, parseQtyToken } from '../../utils/search';
+import { useCombobox } from '../../hooks/useCombobox';
 
 // Patolojik uzunlukta listeye karşı bir tavan; gezinmeyi kırmayacak kadar yüksek tutuldu.
 // (Daha düşük bir sınır, adını hatırlamayıp listeyi tarayan kullanıcıyı yarı yolda bırakıyordu.)
@@ -15,72 +15,21 @@ const RENDER_LIMIT = 200;
  * `overflow-y-auto` olduğu için mutlak bir liste kırpılırdı.
  */
 export default function DrugPicker({ drugs, onPick }) {
-  const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-  const inputRef = useRef(null);
-  const listId = useId();
+  // Etkileşim sözleşmesi (liste ne zaman açılır, Escape'i kim tüketir, seçimden sonra
+  // odak nerede kalır) `useCombobox`'ta — CatalogPicker ile paylaşılıyor.
+  const {
+    query, term, parsed, open, results, shown, activeIdx, activeItem,
+    inputRef, listId, pick, setActive, toggle, handleKeyDown, handleChange, close,
+  } = useCombobox({
+    items: drugs,
+    match: (drug, t) => searchMatch(drug.name, t),
+    onPick: (drug, p) => onPick(drug.id, p.qty ?? 1),
+    parseQuery: parseQtyToken,
+    renderLimit: RENDER_LIMIT,
+  });
 
-  const { term, qty } = useMemo(() => parseQtyToken(query), [query]);
-
-  const results = useMemo(
-    () => drugs.filter(d => searchMatch(d.name, term)),
-    [drugs, term]
-  );
-  const shown = results.slice(0, RENDER_LIMIT);
-  const activeIdx = Math.min(active, Math.max(0, shown.length - 1));
-
-  // Liste odaklanınca DEĞİL, yazınca / ok tuşuyla / listeyi açma düğmesiyle açılır.
-  // Odakta açsaydık seçimden sonraki `focus()` çağrısı listeyi hemen yeniden açardı.
-  // Adını hatırlamayan kullanıcı için düğme şart: dokunmatik cihazda ok tuşu yok.
-  const setOpenState = (next) => setOpen(next);
-
-  const pick = (drug) => {
-    if (!drug) return;
-    onPick(drug.id, qty ?? 1);
-    setQuery('');
-    setActive(0);
-    setOpenState(false);
-    inputRef.current?.focus();
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      // Liste açıkken Escape'i BURADA tüketiyoruz: `stopPropagation` olayın modalın
-      // `document` üzerindeki kapatma dinleyicisine ulaşmasını engeller. Tek Escape
-      // hem listeyi hem formu kapatmamalı — yanlış yazımı düzelten kullanıcı her şeyi
-      // kaybederdi. Liste kapalıyken olay serbest bırakılır, modal normalde kapanır.
-      if (open) {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpenState(false);
-      }
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!open) setOpenState(true);
-      else setActive(i => Math.min(i + 1, shown.length - 1));
-      return;
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActive(i => Math.max(i - 1, 0));
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (open) pick(shown[activeIdx]);
-    }
-  };
-
-  const handleChange = (e) => {
-    setQuery(e.target.value);
-    setActive(0);
-    if (!open) setOpenState(true);
-  };
-
-  const activeOption = open ? shown[activeIdx] : null;
+  const qty = parsed.qty;
+  const activeOption = activeItem;
 
   return (
     <div>
@@ -100,7 +49,7 @@ export default function DrugPicker({ drugs, onPick }) {
           aria-activedescendant={activeOption ? `${listId}-${activeOption.id}` : undefined}
           value={query}
           onChange={handleChange}
-          onBlur={() => setOpenState(false)}
+          onBlur={close}
           /* Sekme İlaç'a geçtiğinde seçici mount olur; odak doğrudan buraya gelsin ki
              kullanıcı hiçbir şeye tıklamadan yazmaya başlayabilsin */
           autoFocus
@@ -113,7 +62,7 @@ export default function DrugPicker({ drugs, onPick }) {
         <button
           type="button"
           onMouseDown={e => e.preventDefault()} /* odak alanda kalsın */
-          onClick={() => { setOpenState(!open); inputRef.current?.focus(); }}
+          onClick={toggle}
           aria-label={open ? 'Listeyi kapat' : 'Tüm ilaçları göster'}
           title={open ? 'Listeyi kapat' : 'Tüm ilaçları göster'}
           className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors touch-target"
