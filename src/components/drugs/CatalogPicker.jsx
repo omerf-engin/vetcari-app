@@ -1,8 +1,11 @@
+import { useMemo } from 'react';
 import { Search, ChevronDown, Check, AlertTriangle } from 'lucide-react';
 import { fmtTL } from '../../utils/formatters';
 import { useCombobox } from '../../hooks/useCombobox';
 import { useDrugCatalog } from '../../hooks/useDrugCatalog';
-import { matchesCatalog, ownedByCatalogId, similarOwnedName } from '../../utils/drugCatalog';
+import {
+  matchesCatalog, ownedByCatalogId, similarOwnedName, buildStopTokens
+} from '../../utils/drugCatalog';
 
 const RENDER_LIMIT = 200;
 
@@ -22,6 +25,10 @@ const RENDER_LIMIT = 200;
 export default function CatalogPicker({ drugs, onSelect }) {
   const { catalog, loading, error } = useDrugCatalog();
   const owned = ownedByCatalogId(drugs);
+
+  // Ayırt edici olmayan kelimeler katalogdan öğrenilir; 1.141 dokümanın kelime frekansı
+  // her render'da çıkarılmamalı
+  const stopTokens = useMemo(() => buildStopTokens(catalog), [catalog]);
 
   const {
     term, open, results, shown, activeIdx, activeItem,
@@ -99,7 +106,7 @@ export default function CatalogPicker({ drugs, onSelect }) {
             <>
               {shown.map((doc, i) => {
                 const existing = owned.get(doc.catalogId);
-                const similar = existing ? null : similarOwnedName(drugs, doc);
+                const similar = existing ? null : similarOwnedName(drugs, doc, stopTokens);
                 return (
                   <button
                     key={doc.catalogId}
@@ -132,10 +139,13 @@ export default function CatalogPicker({ drugs, onSelect }) {
                     {existing && (
                       <p className="text-xs text-slate-500 mt-1">Listende zaten var</p>
                     )}
+                    {/* "Aynı olabilir" DEMİYOR: eşleştirme ürün ailesi düzeyinde, ambalaj
+                        düzeyinde değil (ambalaj sayıları ayırt edici kelime sayılmıyor).
+                        Not, algoritmanın gerçekten hesapladığı şeyi söyler. */}
                     {similar && (
                       <p className="text-xs text-amber-800 mt-1 flex items-start gap-1">
                         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
-                        Listendeki &ldquo;{similar.name}&rdquo; ile aynı olabilir
+                        Listende benzer kayıt: &ldquo;{similar.name}&rdquo;
                       </p>
                     )}
                   </button>

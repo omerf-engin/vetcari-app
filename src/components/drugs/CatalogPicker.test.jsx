@@ -110,11 +110,39 @@ describe('CatalogPicker', () => {
     type(input, 'advantix');
 
     const option = screen.getByRole('option');
-    expect(option).toHaveTextContent('aynı olabilir');
+    // "Ayni olabilir" DEMEZ: esleme urun ailesi duzeyinde, ambalaj duzeyinde degil
+    expect(option).toHaveTextContent('Listende benzer kayıt');
     expect(option).not.toBeDisabled();
 
     fireEvent.click(option);
     expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutasyon denetiminde SIZAN yol: tiklama HTML `disabled` oznitelig sayesinde engelleniyor,
+  // ama klavye o oznitelig baypas eder — yalnizca useCombobox'taki isDisabled guard'i durdurur.
+  it('pasif satir KLAVYEYLE de secilemez', () => {
+    const drugs = [{ id: 'd1', name: 'Biyokan 100', price: 1812, catalogId: 'r-arma-biyokan#100 ML' }];
+    const { onSelect, input } = setup({ drugs });
+
+    type(input, 'biyokan 100');
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('pasif satiri atlayip sonraki secilebilir satir klavyeyle secilir', () => {
+    const drugs = [{ id: 'd1', name: 'Biyokan 100', price: 1812, catalogId: 'r-arma-biyokan#100 ML' }];
+    const { onSelect, input } = setup({ drugs });
+
+    type(input, 'biyokan');
+    fireEvent.keyDown(input, { key: 'ArrowDown' }); // pasif olandan sonrakine gec
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect.mock.calls[0][0].catalogId).toBe('r-arma-biyokan#250 ML');
   });
 
   it('eslesme yoksa elle eklemeye yonlendirir', () => {

@@ -39,6 +39,8 @@ Custom hooks:
 
 **Firestore collections:** `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` (all per-user, `userId`-scoped) + `drugCatalog` (global, read-only shared catalog — no `userId`, written only by `scripts/loadDrugCatalog.js` via Admin SDK).
 
+A `drugs` doc created from the catalog carries `catalogId` (the exact-duplicate guard keys on it) and `unit` (package label, shown as a badge). Hand-typed drugs carry neither — the badge is not rendered when `unit` is absent. `addDrug(name, price, userId, catalogMeta)` takes `{ catalogId, unit }` as its optional fourth argument.
+
 **Security rules** name each collection explicitly — the blanket `match /{collection}/{docId}` was removed. Rules are evaluated as a **union**, so a broad rule cannot be narrowed by adding a specific one; leaving the blanket rule would have made the future per-collection migration (TASK-038) meaningless. `src/services/firestoreRules.test.js` gates this: a collection used in code but missing from the rules fails the suite.
 
 ### Key business rules
@@ -98,7 +100,8 @@ src/
                                  # batchCancel.js / priceImpact.js / paymentRevert.js (undo guards),
                                  # reporting.js (period aggregation + classifyLog/FLOW_RECEIVABLE_SIGN),
                                  # search.js (Türkçe katlamalı arama — tüm arama kutuları bunu kullanır),
-                                 # drugCatalog.js (katalog arama alanı + iki katmanlı mükerrer kuralı),
+                                 # drugCatalog.js (katalog arama alanı + iki katmanlı mükerrer kuralı
+                                 #   + kelime örtüşmeli benzerlik; stop listesi VERİDEN öğrenilir),
                                  # csv.js (Excel tr-TR escaping/BOM), statementExport.js (cari ekstre),
                                  # statementPdfModel.js + statementPdfRenderer.js (lazy chunk boundary),
                                  # fonts.js (embedded Roboto + glyph gate),

@@ -2,10 +2,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 // DrugsView -> CatalogPicker -> useDrugCatalog -> services/firebase zinciri, mock'lanmazsa
-// birim testinden GERCEK Firestore'a baglanti acar. Katalog bu dosyanin konusu degil;
-// kendi testi `CatalogPicker.test.jsx`'te.
+// birim testinden GERCEK Firestore'a baglanti acar.
+// `vi.mock` fabrikasi yukari tasinir; sabitler `vi.hoisted` ile onunla birlikte tasinmali
+const { CATALOG } = vi.hoisted(() => ({
+  CATALOG: [{
+    catalogId: 'r-arma-biyokan#250 ML', urunId: 'r-arma-biyokan',
+    name: 'Biyokan LA Enjeksiyonluk Çözelti - 250 ml',
+    firma: 'Arma İlaç', form: 'Enjeksiyonluk Çözelti', unit: '250 ML',
+  }],
+}));
 vi.mock('../../hooks/useDrugCatalog', () => ({
-  useDrugCatalog: () => ({ catalog: [], loading: false, error: null }),
+  useDrugCatalog: () => ({ catalog: CATALOG, loading: false, error: null }),
 }));
 
 import DrugsView from './DrugsView';
@@ -42,12 +49,116 @@ const renderView = (props = {}) => {
   return handlers;
 };
 
+// --- Ilac ekleme akisi yardimcilari ---
+const openAdd = () => fireEvent.click(screen.getByRole('button', { name: /Yeni İlaç Ekle/ }));
+const nameInput = () => screen.getByPlaceholderText('İlaç Adı');
+const priceInput = () => screen.getByPlaceholderText('Satış Fiyatı (₺)');
+const submitAdd = () => fireEvent.click(screen.getByRole('button', { name: /^Ekle$/ }));
+
+const pickFromCatalog = () => {
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'biyokan' } });
+  fireEvent.click(screen.getByRole('option'));
+};
+
 /** Fiyat duzenleme moduna gecip yeni fiyati yazar ve kaydeder. */
 const editPrice = (value) => {
   fireEvent.click(screen.getByRole('button', { name: /Fiyatı Güncelle/ }));
   fireEvent.change(screen.getByRole('spinbutton'), { target: { value } });
   fireEvent.click(screen.getByRole('button', { name: /Kaydet/ }));
 };
+
+// Bu akis TASK-037'de yeniden yapilandirildi ve o zaman KAPSAMSIZ kalmisti (denetimde bulundu)
+describe('DrugsView — ilac ekleme', () => {
+  it('elle eklemede katalog verisi gonderilmez', () => {
+    const { onAddDrug } = renderView();
+    openAdd();
+
+    fireEvent.change(nameInput(), { target: { value: 'Elle Girilen İlaç' } });
+    fireEvent.change(priceInput(), { target: { value: '250' } });
+    submitAdd();
+
+    expect(onAddDrug).toHaveBeenCalledWith('Elle Girilen İlaç', 250, undefined);
+  });
+
+  it('katalogdan secim adi doldurur ve cip gosterir', () => {
+    renderView();
+    openAdd();
+    pickFromCatalog();
+
+    expect(nameInput()).toHaveValue('Biyokan LA Enjeksiyonluk Çözelti - 250 ml');
+    expect(screen.getByRole('button', { name: 'Vazgeç' })).toBeInTheDocument();
+    expect(screen.getByText(/Arma İlaç · Enjeksiyonluk Çözelti · 250 ML/)).toBeInTheDocument();
+  });
+
+  it('katalogdan eklemede catalogId ve unit birlikte gonderilir', () => {
+    const { onAddDrug } = renderView();
+    openAdd();
+    pickFromCatalog();
+
+    fireEvent.change(priceInput(), { target: { value: '1200' } });
+    submitAdd();
+
+    expect(onAddDrug).toHaveBeenCalledWith(
+      'Biyokan LA Enjeksiyonluk Çözelti - 250 ml',
+      1200,
+      { catalogId: 'r-arma-biyokan#250 ML', unit: '250 ML' }
+    );
+  });
+
+  it('Vazgec secimi ve adi temizler, elle yazmaya birakir', () => {
+    const { onAddDrug } = renderView();
+    openAdd();
+    pickFromCatalog();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vazgeç' }));
+    expect(nameInput()).toHaveValue('');
+
+    fireEvent.change(nameInput(), { target: { value: 'Baska Ilac' } });
+    fireEvent.change(priceInput(), { target: { value: '99' } });
+    submitAdd();
+
+    expect(onAddDrug).toHaveBeenCalledWith('Baska Ilac', 99, undefined);
+  });
+
+  it('Iptal tum durumu sifirlar', () => {
+    renderView();
+    openAdd();
+    pickFromCatalog();
+    fireEvent.change(priceInput(), { target: { value: '500' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'İptal' }));
+    expect(screen.queryByPlaceholderText('İlaç Adı')).not.toBeInTheDocument();
+
+    openAdd();
+    expect(nameInput()).toHaveValue('');
+    expect(priceInput()).toHaveValue(null);
+    expect(screen.queryByRole('button', { name: 'Vazgeç' })).not.toBeInTheDocument();
+  });
+
+  it('gecersiz fiyat yazma yapmaz', () => {
+    const { onAddDrug } = renderView();
+    openAdd();
+    fireEvent.change(nameInput(), { target: { value: 'X' } });
+    fireEvent.change(priceInput(), { target: { value: '0' } });
+    submitAdd();
+
+    expect(onAddDrug).not.toHaveBeenCalled();
+  });
+
+  it('ambalaj rozeti yalnizca unit tasiyan ilacta cizilir', () => {
+    renderView({
+      drugs: [
+        { id: 'd1', name: 'Katalogdan', price: 100, catalogId: 'c1', unit: '250 ML' },
+        { id: 'd2', name: 'Elle Girilen', price: 50 },
+      ],
+    });
+
+    expect(screen.getByText('250 ML')).toBeInTheDocument();
+    // Elle girilen satirda BOS ROZET olmamali
+    const manualRow = screen.getAllByRole('row').find(r => r.textContent.includes('Elle Girilen'));
+    expect(manualRow.querySelectorAll('span.rounded-full')).toHaveLength(0);
+  });
+});
 
 describe('DrugsView — fiyat degisikligi', () => {
   it('acik borc yokken modal acmadan dogrudan kaydeder', () => {

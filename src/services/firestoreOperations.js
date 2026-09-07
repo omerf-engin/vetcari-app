@@ -188,15 +188,19 @@ export const updateCustomerName = async (customerId, newName) => {
 };
 
 /**
- * `catalogId` yalnizca ortak katalogdan eklenen ilaclarda bulunur (TASK-037); elle
- * eklenen ilaclarda alan hic yazilmaz. Mukerrer engelinin KESIN katmani bunun uzerinden
- * calisir — ad benzerligi tahmine dayali oldugu icin yalnizca uyari uretir.
+ * `catalogMeta` yalnizca ortak katalogdan eklenen ilaclarda gelir (TASK-037):
+ * `{ catalogId, unit }`. Elle eklenen ilaclarda bu alanlar hic yazilmaz.
+ *
+ * Mukerrer engelinin KESIN katmani `catalogId` uzerinden calisir; ad benzerligi tahmine
+ * dayali oldugu icin yalnizca uyari uretir. `unit` (ambalaj) ilac kaydina kopyalanir ki
+ * katalog degisse bile kayit kendi birimini tasisin.
  */
-export const addDrug = async (name, price, userId, catalogId) => {
+export const addDrug = async (name, price, userId, catalogMeta) => {
   const numPrice = parseFloat(price);
   if (!name.trim() || isNaN(numPrice) || numPrice <= 0) return;
   const data = { name: name.trim(), price: numPrice, userId };
-  if (catalogId) data.catalogId = catalogId;
+  if (catalogMeta?.catalogId) data.catalogId = catalogMeta.catalogId;
+  if (catalogMeta?.unit) data.unit = catalogMeta.unit;
   await addDoc(collection(db, 'drugs'), data);
 };
 

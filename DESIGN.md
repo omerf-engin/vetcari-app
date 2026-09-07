@@ -469,6 +469,10 @@ Uzun bir listeden hızlı kalem eklemenin deseni. Kalıcı bir arama alanı, alt
   yok" diye elle eklemeye iter ve tam da önlenmek istenen mükerreri yaratır. Tahmine dayalı
   benzerlik ise **engellemez, yalnızca uyarır** — yanlış bir tahmin meşru bir eklemeyi
   engellerse mükerrerden daha çok zarar verir.
+- **Uyarı, hesaplanandan fazlasını iddia etmez.** Benzerlik eşleştirmesi ürün ailesi düzeyinde
+  çalışır (ambalaj sayıları ayırt edici sayılmaz), bu yüzden metin "aynıdır" değil
+  **"Listende benzer kayıt: X"** der. Bir bildirim, arkasındaki hesabın desteklemediği bir
+  kesinliği ima ederse kullanıcı ya yanılır ya da bildirimleri yok saymayı öğrenir.
 
 ### Toast
 

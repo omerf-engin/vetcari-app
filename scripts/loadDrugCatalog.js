@@ -56,13 +56,19 @@ async function main() {
     process.exit(1);
   }
 
-  const { docs, skippedDraft, collisions } = buildCatalogDocs({ urunlerCsv, varyantlarCsv });
+  const { docs, skippedDraft, collisions, orphanVariants } = buildCatalogDocs({ urunlerCsv, varyantlarCsv });
 
   console.log('Donusum:');
   console.log(`  uretilen dokuman        ${docs.length}`);
   console.log(`  haric tutulan taslak    ${skippedDraft}`);
   console.log(`  ambalaj (unit) tasiyan  ${docs.filter(d => d.unit).length}`);
   console.log(`  etken madde tasiyan     ${docs.filter(d => d.etkenMaddeler).length}`);
+
+  // Sessiz veri kaybina karsi: urunu bulunmayan varyant satiri atlanir ama SAYILIR
+  if (orphanVariants.length) {
+    console.log(`  UYARI: urunu bulunmayan varyant satiri ${orphanVariants.length} (atlandi)`);
+    [...new Set(orphanVariants)].slice(0, 5).forEach(id => console.log(`    ${id}`));
+  }
 
   // Cakisma sessizce gecilmemeli: iki farkli kalem ayni kimlige dusuyorsa katalog bozuktur
   if (collisions.length) {

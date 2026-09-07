@@ -94,7 +94,11 @@ export default function DrugsView({
     e.preventDefault();
     const p = parseFloat(newDrugPrice);
     if (isNaN(p) || p <= 0) return;
-    onAddDrug(newDrugName, p, selectedCatalog?.catalogId);
+    onAddDrug(
+      newDrugName,
+      p,
+      selectedCatalog ? { catalogId: selectedCatalog.catalogId, unit: selectedCatalog.unit } : undefined
+    );
     closeAdd();
   };
 
@@ -161,7 +165,18 @@ export default function DrugsView({
               )}
               {filteredDrugs.map(drug => (
                 <tr key={drug.id} className="hover:bg-slate-50/50">
-                  <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-800">{drug.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-800">
+                    <span className="inline-flex items-center gap-2">
+                      {drug.name}
+                      {/* Ambalaj yalnizca katalogdan eklenen ilaclarda var; elle girilenlerde
+                          alan yok ve BOS ROZET CIZILMEZ */}
+                      {drug.unit && (
+                        <span className="bg-slate-100 text-slate-500 border border-slate-200 text-[10px] px-2 py-0.5 rounded-full font-bold tracking-wide">
+                          {drug.unit}
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-slate-700">
                     {editingId === drug.id ? (
                       <input type="number" step="0.1" min="0.1" value={tempPrice} onChange={(e) => setTempPrice(e.target.value)} className="border-2 border-indigo-400 rounded-md px-2 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" autoFocus />

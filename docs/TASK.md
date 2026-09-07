@@ -1978,9 +1978,120 @@ degismedigi icin gerek yoktu):
 | **Priority** | P2 |
 | **Depends on** | TASK-036 |
 
-**Sonuc:** Test 573 → 615 · Lint 0/0 · Build basarili · Ana bundle 978,98 → 985,22 kB
-(+6,2 kB kod; katalog Firestore'da oldugu icin veri pakete SIFIR ekliyor) ·
-Firestore'da 1.141 katalog dokumani
+**Sonuc:** Test 573 → 636 · Lint 0/0 · Build basarili · Ana bundle 978,98 → 986,02 kB
+(+7,0 kB kod; katalog Firestore'da oldugu icin veri pakete SIFIR ekliyor) ·
+Firestore'da 1.141 katalog dokumani.
+
+Ilk turda cekirdek tamamlandi; ardindan yapilan DENETIMDE bes eksik bulundu ve hepsi
+kapatildi. Denetim bulgulari ve nasil kapatildiklari asagida — "tamamlandi" demeden once
+neyin dogrulanmadigi da kayitli.
+
+### Denetimde bulunan eksikler ve kapatilmalari (2026-09-07)
+
+**1. ISLEVSEL KUSUR — benzerlik uyarisi gorevini yapmiyor.**
+`similarOwnedName` cift yonlu `includes` kullaniyor. Gercek katalog uzerinde olculdu
+(1.141 satir):
+
+| Elle girilmis ad | Uyari tetikleyen satir |
+|---|---|
+| `ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML` (kullanicinin gercek kaydi) | **0** |
+| `Vitamin` | 19 |
+| `LA` | **118 (%10,3)** |
+| tek harf `K` | **427 (%37,4)** |
+
+Hem **cok gevsek** (kisa ad katalogun onda birini isaretler, kullanici uyariyi yok saymayi
+ogrenir) hem **cok dar** (`ENJ. SUSP.` ↔ `ENJEKSIYONLUK SUSPANSIYON` gibi gercek varyasyonlari
+hic yakalamaz — yani var olma sebebini karsilamiyor). Dogrusu kelime ortusmesi (token overlap)
++ esik olurdu.
+
+**2. `DrugsView` ekleme akisi TESTSIZ.** O dosyadaki 10 testin hepsi fiyat guncelleme/geri
+alma hakkinda; `onAddDrug` yalnizca sahte fonksiyon olarak duruyor, hicbir test cagirildigini
+dogrulamiyor. Formun yapisi bu gorevde degistirildi (katalog cipi, `closeAdd`, `catalogId`
+aktarimi) ve hicbiri kapsanmiyor. Elle ilac ekleme tarayicida da denenmedi.
+
+**3. Mutasyon denetiminde bir sizinti.** "Pasif satir yine de secilebiliyor" mutasyonu testi
+GECTI: test pasif satira tiklayip `onSelect` cagrilmadigini dogruluyor ama bu HTML `disabled`
+oznitelig sayesinde geciyor — `useCombobox`'taki `isDisabled` guard'i sinanmiyor. Asil risk
+KLAVYE yolu: pasif satira ok tusuyla gelip Enter'a basmak `disabled` oznitelini baypas eder,
+yalnizca o guard durdurur. Diger 5 mutasyon yakalandi.
+
+**4. Dogrulanmamis kabul kriterleri** (bu gorevde yazilip sonra denenmeyenler):
+- "Hicbir istemci yazamaz" DAVRANISSAL olarak denenmedi; kural testi yalnizca dosyadaki metni
+  kontrol ediyor
+- Cevrimdisi ilk acilis durumu tarayicida denenmedi (birim testi var)
+- Katalogdan eklenen ilacla BORC YAZMA uctan uca denenmedi (test ilaclari borc yazilmadan silindi)
+- Yukleyicinin `--prune` yolu hic calistirilmadi
+
+**5. Karar sorusu — `unit` alani `drugs` dokumanina kopyalanmiyor.** Ambalaj yalnizca katalogda
+duruyor. Kullanicinin gerekcesi "adet birimi tutarli olsun" idi; ad genelde ambalaji iceriyor
+(`- 250 ml`) ama uygulamada ilacin birimi ayri bir alan olarak hicbir yerde gorunmuyor.
+Kasitli mi, eksik mi — netlesmedi.
+
+### Kapatma (2026-09-07)
+
+**1 — Benzerlik kelime ortusmesine gecirildi.** Cift yonlu `includes` kalkti. Yeni yol:
+`tokenizeName` + `buildStopTokens` (ayirt edici olmayan kelimeler VERIDEN ogrenilir; katalogun
+%2'sinden fazlasinda gecen kelime elenir) + `similarityScore` (paylasilan ayirt edici kelime /
+min kume) + esik 0,5. Gercek katalogda olculdu:
+
+| Elle girilmis ad | Once | Sonra |
+|---|---|---|
+| `ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML` (gercek kayit) | 0 | **3** (kendi ailesi) |
+| `ARMAPEN LA ENJ. SUSP. - 250 ML` (gercek kayit) | — | **5** (kendi ailesi) |
+| `LA` | 118 | **0** |
+| tek harf `K` | 427 | **9** |
+| `Vitamin` | 19 | 11 |
+
+**Uyari metni de degisti.** Ambalaj sayilari elendigi icin esleme URUN AILESI duzeyindedir;
+`Armaflor 100/250/50 ml` birbirinden ayrilamaz. Eski metin ("... ile ayni olabilir") 3 satirin
+2'sinde YANLIS bir sey iddia ediyordu. Yeni metin algoritmanin gercekten hesapladigi seyi
+soyluyor: **"Listende benzer kayit: X"**.
+
+Ambalaj sayilarini ayirt edici yapmak (ve esigi 0,67'ye cikarmak) isabeti artirirdi ama faydali
+sinyali kaybettirirdi: 100 ml eklerken elle girilmis 250 ml'nin varligini bilmek ise yarar.
+Hata maliyetleri asimetrik — kacirilan uyari mukerrer kayit (iki `drugId`, bolunmus borc
+gecmisi) demek, yanlis uyari yalnizca gurultu. **Kapsama isabete tercih edildi.**
+
+**2 — `unit` ilac kaydina yaziliyor ve listede gorunuyor.** `addDrug`'in dorduncu parametresi
+`{ catalogId, unit }` nesnesi oldu. `DrugsView` tablosunda ad yaninda ambalaj rozeti cikiyor;
+elle girilmis ilaclarda alan olmadigi icin **bos rozet cizilmiyor** (testi var).
+
+**3 — `DrugsView` ekleme akisi test edildi:** elle ekleme · katalogdan ekleme (`catalogId`+`unit`
+birlikte gonderiliyor) · "Vazgec" · "Iptal" durumu sifirliyor · gecersiz fiyat · rozetin yokluk
+durumu. 7 yeni test.
+
+**4 — Klavyeyle pasif satir testi eklendi.** Onceki turda mutasyon SIZMISTI: test tiklamayi
+deniyordu ve HTML `disabled` oznitelig sayesinde geciyordu; `useCombobox`'taki `isDisabled`
+guard'i sinanmiyordu. Artik ok tusu + Enter yolu da test ediliyor.
+
+**Mutasyon denetimi: 9 kasitli kusurun 9'u da yakalandi** — pasif satir (onceki turda sizan),
+stop listesi devre disi, benzerlik esigi 0, skor min yerine max, `catalogId` filtresi kaldirildi,
+`unit` gonderilmiyor, rozet kosulsuz ciziliyor, Iptal temizlemiyor, yetim varyant sayaci yok.
+
+**5 — Yukleyiciye "yetim varyant" sayaci eklendi.** `urunler.csv`'de karsiligi olmayan varyant
+satiri artik sessizce atilmiyor, ozette raporlaniyor. Bugunku disa aktarimda 0 tane.
+
+### Dogrulanan / dogrulanmayan (durust kayit)
+
+**Tarayicida gercek Firestore ile dogrulandi:**
+- Benzerlik uyarisi: `armaflor` aramasinda 3 varyantin hepsinde "Listende benzer kayit:
+  ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML" cikti — **duzeltmeden once burada hicbir sey yoktu**
+- Katalogdan ilac eklendi, listede `100 ML` rozeti gorundu, elle girilmis iki ilacta rozet yok
+- O ilacla borc yazildi (900 TL), islem karti dogru gorundu, iptal edildi, ilac ve musteri silindi
+- **Kural davranisi (sayfadan calistirilan JS ile):** `drugCatalog`'a yazma → `permission-denied` ·
+  `drugs`'a baskasinin `userId`'siyle yazma → `permission-denied` · kurala yazilmamis rastgele
+  koleksiyona yazma → `permission-denied` (blanket kural kaldirmanin canlida etkili oldugunun
+  kaniti; eskiden bu BASARILI olurdu) · katalog okuma → basarili
+- `--prune` yolu: bir satiri eksik kaynakla calistirildi, **tam olarak 1 dokuman** silindi
+  (1.141 → 1.140), sonra tam katalog geri yuklendi
+- Yukleyici iki kez calistirildi: 1.141 → 1.141, mukerrer yok
+
+**Dogrulanmadi (bilerek):**
+- **Cevrimdisi ilk acilis tarayicida gorulmedi.** MCP araclariyla Firestore'u cevrimdisina almanin
+  guvenilir bir yolu yok. `CatalogPicker.test.jsx` yukleniyor/hata/bos durumlarini kapsiyor ama
+  gercek cevrimdisi davranisi bir cihazda denenmedi
+- Kural davranisi **elle** dogrulandi, otomatik degil. Tekrarlanabilir hale getirmek icin
+  bkz. BAKIM-002
 
 ### Katalog verisi (2026-09-07'de alindi, olculdu)
 
@@ -2223,6 +2334,38 @@ urunun onundeki en buyuk engel. Katalogdan daha buyuk bir is.
 **Acik sorular (implementasyondan once netlesmeli):** bir kullanici birden fazla klinige uye
 olabilir mi (klinik secici gerekir mi) · roller kac kademe · personel kendi girdigi kaydi silebilir
 mi · faturalama/abonelik bu modele nasil oturur.
+
+---
+
+## BAKIM-002: Guvenlik Kurallari icin Emulator Testleri
+
+| Alan | Deger |
+|------|-------|
+| **Status** | TODO |
+| **Priority** | P2 |
+| **Depends on** | TASK-037 |
+
+**Neden:** `src/services/firestoreRules.test.js` kural DOSYASININ metnini denetliyor —
+koleksiyonlarin kurala yazildigini, blanket kalibin geri gelmedigini, salt-okunur blokta
+yazmanin kapali oldugunu. Ama kuralin GERCEKTE ne yaptigini test etmiyor.
+
+TASK-037'de davranis elle dogrulandi (tarayicidan calistirilan JS ile: katalogа yazma
+`permission-denied`, baskasinin `userId`'siyle yazma `permission-denied`, tanimsiz koleksiyona
+yazma `permission-denied`). Bu **tek seferlik ve tekrarlanamaz**; kural bir gun yanlislikla
+gevsetilirse hicbir test bunu yakalamaz.
+
+### Deliverables
+
+- `@firebase/rules-unit-testing` + Firestore emulatoru (`firebase emulators:exec`)
+- Kural davranis testleri: sahiplik (A kullanicisi B'nin kaydini okuyamaz/yazamaz) ·
+  `drugCatalog` okunur ama yazilamaz · kurala yazilmamis koleksiyon reddedilir ·
+  `resource == null` dalinin silinmis dokuman okumasindaki davranisi
+- `npm run test:rules` script'i
+
+### Notes
+
+Emulator **Java gerektiriyor**; CI'da da kurulmasi gerekir. Bu yuzden TASK-037 kapsamindan
+cikarildi ve ayri gorev olarak yazildi — kriter "denenmedi" olarak asili birakilmadi.
 
 ---
 

@@ -109,9 +109,9 @@ export default function App() {
     }
   };
 
-  const handleAddDrug = async (name, price, catalogId) => {
+  const handleAddDrug = async (name, price, catalogMeta) => {
     // Kesin katman: ayni katalog kalemi ikinci kez eklenemez
-    if (catalogId && drugs.some(d => d.catalogId === catalogId)) {
+    if (catalogMeta?.catalogId && drugs.some(d => d.catalogId === catalogMeta.catalogId)) {
       toast.warning('Bu katalog kalemi listenizde zaten var.');
       return;
     }
@@ -121,7 +121,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir ilaç sistemde zaten mevcut! Fiyatını değiştirmek için "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
-    try { await addDrug(name, price, currentUser.uid, catalogId); toast.success('İlaç eklendi'); }
+    try { await addDrug(name, price, currentUser.uid, catalogMeta); toast.success('İlaç eklendi'); }
     catch (err) { handleError(err, 'İlaç Ekleme'); }
   };
 

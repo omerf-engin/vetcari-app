@@ -110,6 +110,9 @@ export function buildCatalogDocs({ urunlerCsv, varyantlarCsv }) {
   const seen = new Set();
   const collisions = [];
   const withVariants = new Set();
+  // `urunler.csv`'de karsiligi olmayan varyant satiri sessizce atilirsa veri kaybi
+  // fark edilmez. Bugunku disa aktarimda 0 tane var; sayaci yine de raporlanir.
+  const orphanVariants = [];
 
   const push = (catalogId, urun, name, unit) => {
     if (seen.has(catalogId)) { collisions.push(catalogId); return; }
@@ -120,7 +123,11 @@ export function buildCatalogDocs({ urunlerCsv, varyantlarCsv }) {
   // 1) Varyanti olan urunler: her varyant ayri bir stok kalemi
   for (const v of varyantlar) {
     const urun = urunById.get(v.urun_id);
-    if (!urun) continue; // taslak ya da eslesmeyen satir
+    if (!urun) {
+      // Taslak urunun varyanti kasitli olarak atlanir; digerleri gercek bir tutarsizliktir
+      if (!draftIds.has(v.urun_id)) orphanVariants.push(v.urun_id);
+      continue;
+    }
     withVariants.add(v.urun_id);
     const unit = String(v.ambalaj ?? '').trim();
     push(buildCatalogId(v.urun_id, unit), urun, v.varyant_adi || urun.urun_adi, unit);
@@ -133,7 +140,7 @@ export function buildCatalogDocs({ urunlerCsv, varyantlarCsv }) {
   }
 
   docs.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-  return { docs, skippedDraft: draftIds.size, collisions };
+  return { docs, skippedDraft: draftIds.size, collisions, orphanVariants };
 }
 
 // Not: aramanin uzerinde calistigi metin (`catalogHaystack`) burada DEGIL,

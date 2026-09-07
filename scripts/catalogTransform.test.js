@@ -111,6 +111,20 @@ describe('buildCatalogDocs', () => {
     expect(docs.some(d => d.urunId === 'r-test-taslak')).toBe(false);
   });
 
+  // Sessiz veri kaybina karsi sayac: urunu bulunmayan varyant satiri atlanir ama RAPORLANIR
+  it('urunu bulunmayan varyant satiri sayilir, sessizce atilmaz', () => {
+    const varyantlar = VARYANTLAR + '\nr-yok-boyle-urun,HAYALET,HAYALET,10 ML';
+    const { orphanVariants, docs } = buildCatalogDocs({ urunlerCsv: URUNLER, varyantlarCsv: varyantlar });
+
+    expect(orphanVariants).toEqual(['r-yok-boyle-urun']);
+    expect(docs.some(d => d.name === 'HAYALET')).toBe(false);
+  });
+
+  it('taslak urunun varyanti yetim SAYILMAZ — kasitli olarak elenmis', () => {
+    const { orphanVariants } = build();
+    expect(orphanVariants).toEqual([]);
+  });
+
   it('kimlik cakismasi olmaz', () => {
     const { docs, collisions } = build();
     expect(collisions).toEqual([]);
