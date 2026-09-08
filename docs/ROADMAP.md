@@ -1,8 +1,9 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 7 Eylul 2026 (TASK-036 coklu ilac girisi + TASK-037 ortak ilac katalogu
-> tamamlandi; guvenlik kurallari blanket kaliptan cikarildi, yayinlandi ve davranissal olarak
-> dogrulandi). Test 636, lint 0/0, build basarili. Firestore'da 1.141 katalog dokumani.
+> Son guncelleme: 8 Eylul 2026 (TASK-039 katalog secici iyilestirmeleri tamamlandi; TASK-037'de
+> atlanan cevrimdisi dogrulamasi yapildi ve **gercek bir kusuru ortaya cikardi** — katalog
+> cevrimdisiyken "bos" gorunuyordu, duzeltildi). Test 671, lint 0/0, build basarili.
+> Firestore'da 1.141 katalog dokumani.
 > Kalan: TASK-038 (tek defter cok kullanici, P1), BAKIM-002 (kural emulator testleri),
 > TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu).
 

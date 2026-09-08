@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 
 // DrugsView -> CatalogPicker -> useDrugCatalog -> services/firebase zinciri, mock'lanmazsa
 // birim testinden GERCEK Firestore'a baglanti acar.
@@ -56,8 +56,10 @@ const priceInput = () => screen.getByPlaceholderText('Satış Fiyatı (₺)');
 const submitAdd = () => fireEvent.click(screen.getByRole('button', { name: /^Ekle$/ }));
 
 const pickFromCatalog = () => {
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'biyokan' } });
-  fireEvent.click(screen.getByRole('option'));
+  // Rol tek basina yetmez: sinif suzgecindeki `<select>` de `combobox`, `<option>`lari da
+  // `option` rolu tasir. Arama kutusu ADIYLA, sonuc satiri SONUC LISTESINDEN alinir.
+  fireEvent.change(screen.getByRole('combobox', { name: 'Katalogdan Ara' }), { target: { value: 'biyokan' } });
+  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option'));
 };
 
 /** Fiyat duzenleme moduna gecip yeni fiyati yazar ve kaydeder. */

@@ -32,7 +32,7 @@ Custom hooks:
 - `useFirestore(currentUser)` — real-time `onSnapshot` listeners on 5 Firestore collections with error callbacks (connection drop sets `dataLoading=false` instead of infinite spinner), returns `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions`, `dataLoading`
 - `useToast()` — returns `{ toast, confirm }` from `ToastContext`
 - `useCombobox({ items, match, onPick, ... })` — the shared search-picker state machine (open/active/keyboard/Escape). `DrugPicker` and `CatalogPicker` share it; **Escape is consumed here** via `stopPropagation` so one Escape closes the list, not the whole modal
-- `useDrugCatalog()` — lazy, single subscription to `drugCatalog` via `useSyncExternalStore`. A user who never opens the drugs tab pays zero reads; `onSnapshot` (not `getDocs`) so later sessions fetch only deltas from the persistent cache
+- `useDrugCatalog()` — lazy, single subscription to `drugCatalog` via `useSyncExternalStore`. A user who never opens the drugs tab pays zero reads; `onSnapshot` (not `getDocs`) so later sessions fetch only deltas from the persistent cache. Returns `fromCache` alongside `catalog`/`loading`/`error`, because **offline `onSnapshot` does not error** — it delivers an empty cached snapshot, so without that flag "offline" is indistinguishable from "the catalog is genuinely empty" (measured; see TASK-037)
 - `useCustomer()` — returns `{ customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onToggleBatchLock, onReturnBatch, onDeleteServiceDebt, onApplyPayment, onAddDebtTransaction }` from `CustomerContext`
 
 **Data layer:** All Firestore CRUD lives in `src/services/firestoreOperations.js`. Uses `writeBatch()` for multi-document operations. Creates transaction audit logs on writes. Firebase config is initialized in `src/services/firebase.js` with IndexedDB persistence enabled.
@@ -40,6 +40,10 @@ Custom hooks:
 **Firestore collections:** `customers`, `drugs`, `serviceDebts`, `drugDebts`, `transactions` (all per-user, `userId`-scoped) + `drugCatalog` (global, read-only shared catalog — no `userId`, written only by `scripts/loadDrugCatalog.js` via Admin SDK).
 
 A `drugs` doc created from the catalog carries `catalogId` (the exact-duplicate guard keys on it) and `unit` (package label, shown as a badge). Hand-typed drugs carry neither — the badge is not rendered when `unit` is absent. `addDrug(name, price, userId, catalogMeta)` takes `{ catalogId, unit }` as its optional fourth argument.
+
+`CatalogPicker` carries two filters that combine with AND: `bolum` as chips (ruminant 720 / pet 421) and `sinif` as a **select**, not chips — measured, the class filter barely narrows a specific query (`vitamin`+pet: 70 of 70 are supplement) and earns its keep only while browsing (ruminant 1141→720→305). Note when writing tests: a `<select>` has ARIA role `combobox` and its `<option>`s share the `option` role with result rows, so a bare `getByRole('combobox')` / `getAllByRole('option')` matches the wrong nodes — query the input **by name** and the rows **inside the listbox**.
+
+The **possible**-duplicate layer (`similarOwned`) warns but never blocks, and returns two strengths: `samePackage: true` when the family name *and* the package signature agree ("Listende aynı ambalaj var"), otherwise a family-level note ("Listende benzer kayıt"). The package signature never raises the threshold — silencing the 250 ml warning while adding 100 ml would recreate the duplicate it exists to prevent. `packageSignature` counts only **standalone** numeric tokens (the 12 in `b12` is not a package) and keeps `4×4` intact, since splitting it would make `4×4 ML` equal `4 ML`. Similarity is **Jaccard** (shared over union), not `shared/min` — the latter scores any single-token name 1.0 no matter how common the word (measured: `Vitamin` warned on 11 rows, now 2, with recall unchanged at 100%).
 
 **Security rules** name each collection explicitly — the blanket `match /{collection}/{docId}` was removed. Rules are evaluated as a **union**, so a broad rule cannot be narrowed by adding a specific one; leaving the blanket rule would have made the future per-collection migration (TASK-038) meaningless. `src/services/firestoreRules.test.js` gates this: a collection used in code but missing from the rules fails the suite.
 
@@ -101,7 +105,7 @@ src/
                                  # reporting.js (period aggregation + classifyLog/FLOW_RECEIVABLE_SIGN),
                                  # search.js (Türkçe katlamalı arama — tüm arama kutuları bunu kullanır),
                                  # drugCatalog.js (katalog arama alanı + iki katmanlı mükerrer kuralı
-                                 #   + kelime örtüşmeli benzerlik; stop listesi VERİDEN öğrenilir),
+                                 #   + Jaccard benzerlik; stop listesi VERİDEN öğrenilir),
                                  # csv.js (Excel tr-TR escaping/BOM), statementExport.js (cari ekstre),
                                  # statementPdfModel.js + statementPdfRenderer.js (lazy chunk boundary),
                                  # fonts.js (embedded Roboto + glyph gate),

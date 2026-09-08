@@ -2087,11 +2087,54 @@ satiri artik sessizce atilmiyor, ozette raporlaniyor. Bugunku disa aktarimda 0 t
 - Yukleyici iki kez calistirildi: 1.141 → 1.141, mukerrer yok
 
 **Dogrulanmadi (bilerek):**
-- **Cevrimdisi ilk acilis tarayicida gorulmedi.** MCP araclariyla Firestore'u cevrimdisina almanin
-  guvenilir bir yolu yok. `CatalogPicker.test.jsx` yukleniyor/hata/bos durumlarini kapsiyor ama
-  gercek cevrimdisi davranisi bir cihazda denenmedi
+- ~~**Cevrimdisi ilk acilis tarayicida gorulmedi.** MCP araclariyla Firestore'u cevrimdisina
+  almanin guvenilir bir yolu yok.~~ → **Bu iki cumle de yanlisti; asagiya bakiniz.**
 - Kural davranisi **elle** dogrulandi, otomatik degil. Tekrarlanabilir hale getirmek icin
   bkz. BAKIM-002
+
+### Atlanan dogrulamanin gizledigi KUSUR (2026-09-08)
+
+Yukaridaki "dogrulanmadi" maddesi iki hata iceriyordu:
+
+1. **Cevrimdisina almanin yolu vardi.** Sayfadan surumlu modul yoluyla `disableNetwork(db)` /
+   `enableNetwork(db)` cagrilabiliyor — kural dogrulamasinda zaten kullanilan yontemin aynisi.
+   "Yolu yok" demek olcum yerine tahmindi.
+2. **Atlanan dogrulama gercek bir kusuru gizliyordu.** `useDrugCatalog`, `snapshot.metadata`'yi
+   hic okumuyordu. Cevrimdisiyken `onSnapshot` **hata vermez** — onbellekten bos bir anlik
+   goruntu verir. Hata dali yalnizca izin/sorgu hatalarinda calisiyor. Sonuc: cevrimdisi + bos
+   onbellekte kullanici *"Katalog bos."* goruyordu ve 1.141 kayitlik listeyi elle kurmaya
+   girisebilirdi. Yazdigim "cevrimdisi olabilirsiniz" mesaji o senaryoda **hic gorunmuyordu**.
+
+**Tarayicida olculdu (2026-09-08).** Hicbir zaman onbelleklenmemis bir sorgu (soguk onbellegin
+birebir karsiligi) uc kosulda izlendi:
+
+| Kosul | Olay | `size` | `fromCache` | sure |
+|---|---|---|---|---|
+| Cevrimici, soguk onbellek | 1 | 0 | **false** | 128 ms |
+| Cevrimdisi, soguk onbellek | 1 | 0 | **true** | 21 ms |
+| Cevrimdisi, sicak onbellek | 1 | **1141** | true | 1 ms |
+
+Ilk satir kritik: cevrimici acilista once bos bir onbellek anlik goruntusu GELMIYOR, bu yuzden
+"bos + fromCache" guvenli bir ayrac — zaman asimi/gecikme gerekmiyor. Ucuncu satir da
+`persistentLocalCache` iddiasinin ilk kez olculmus kaniti.
+
+**Duzeltme.** `useDrugCatalog` artik `fromCache` yayinliyor; `CatalogPicker` dort bos durumu
+ayiriyor (yukleniyor / hata / **henuz indirilmedi** / gercekten bos) ve son ikisi ayni cumleyi
+kurmuyor. "Henuz indirilmedi" halinde arama alani pasif, elle ekleme yolu acik. Kural:
+*veriyi bilmiyorsak "yok" demeyiz* — fail-closed doktrininin arayuzdeki karsiligi.
+
+**Tarayicida dogrulandi:** cevrimdisi + sicak onbellek → uyari yok, arama calisiyor (3 sonuc);
+cevrimdisi + soguk onbellek → yeni mesaj cikti, alan pasif, "Katalog bos." **cikmadi**; ag geri
+acilinca 1.141 kayit dondu. Soguk kosul, kancanin sorgusuna gecici olarak eslesmeyen bir
+`where` eklenip cevrimdisi abone olunarak uretildi (gercek Firestore anlik goruntusu; degisiklik
+geri alindi).
+
+**Test:** `src/hooks/useDrugCatalog.test.js` yeni (9 test — kancanin ilk testleri).
+`CatalogPicker.test.jsx`'e dort bos durum + sicak onbellek (yanlis alarm) testleri eklendi.
+9 mutasyonun 9'u yakalandi; bunlardan biri kusurun kendisi (`fromCache` hic yayinlanmiyor).
+
+**Alinan ders:** "dogrulanmadi (bilerek)" diye yazilan bir kabul kriteri, kapatilmis sayilmaz.
+Atlama gerekcesi ("araci yok") olculmemis bir varsayimdi ve yanlisti.
 
 ### Katalog verisi (2026-09-07'de alindi, olculdu)
 
@@ -2334,6 +2377,121 @@ urunun onundeki en buyuk engel. Katalogdan daha buyuk bir is.
 **Acik sorular (implementasyondan once netlesmeli):** bir kullanici birden fazla klinige uye
 olabilir mi (klinik secici gerekir mi) · roller kac kademe · personel kendi girdigi kaydi silebilir
 mi · faturalama/abonelik bu modele nasil oturur.
+
+---
+
+## TASK-039: Katalog Secici Iyilestirmeleri (ambalaj gucu, gurultu, bolum)
+
+| Alan | Deger |
+|------|-------|
+| **Status** | DONE (2026-09-08) |
+| **Priority** | P3 |
+| **Depends on** | TASK-037 |
+
+TASK-037 kapanisinda "bilincli olarak cozulmedi" diye yazilan dort maddeden **ucu**. Dorduncusu
+(cevrimdisi dogrulamasi) kabul kriteriydi ve gercek bir kusur cikti — TASK-037 altinda kapatildi.
+Bu ucu kabul kriterinin otesinde iyilestirme oldugu icin ayri gorev yazildi.
+
+### B1 — Ambalaj duzeyi ayrimi (sinyal kaybetmeden)
+
+Esleme urun ailesi duzeyindeydi: ambalaj sayilari stop kelime oldugu icin 100/250/50 ml
+varyantlarinin ucu de ayni notu aliyordu.
+
+"Sayilari ayirt edici yap + esigi yukselt" **yanlis cozum** olurdu: 100 ml eklerken listedeki
+250 ml'nin uyarisini susturur, tam da onlenmek istenen mukerreri geri getirirdi. Bunun yerine
+**iki guc**: aile skoru (eskisi) + **ambalaj imzasi**. Ikisi de tutuyorsa "Listende ayni ambalaj
+var", yalnizca aile tutuyorsa eskisi gibi "Listende benzer kayit". Bilgi artar, uyari eksilmez.
+
+`packageSignature` yalnizca **basli basina sayi olan** kelimeleri alir — `b12` icindeki 12
+ambalaj degildir. `4×4` **bozulmadan** tasinir: parcalarina ayrilip tekillestirilseydi
+`4×4 ML` ile `4 ML` ayni imzayi alirdi (4 pipetlik kutu ile tek pipet ayni sey degil). Bu kusur
+gelistirme sirasinda testin yakaladigi gercek bir hataydi. Katalog imzasi `name + unit`'ten
+kurulur (ad ambalaji tasimayabilir, `unit` tasir); imzasiz dokuman (93 tane) asla "guclu" olmaz.
+
+### B2 — Jenerik ad gurultusu
+
+Plandaki hipotez **nadirlik agirligiydi (IDF) ve olcum onu curuttu**: `vitamin` katalogda 11
+dokumanda geciyor, `armaflor` 3, `armapen` 5, `k` 9, `b12` 10. "Gurultu" ile "ayirt edici"
+arasinda temiz bir nadirlik esigi yok. Ustelik skor `min(|a|,|b|)`'ye bolundugu icin **tek
+kelimelik bir ad her zaman 1.0 aliyordu** — kelime ne kadar yaygin olursa olsun. Sorun nadirlik
+degil **kapsama** idi.
+
+Cozum: **birlesime bol (Jaccard)**. Gercek katalogda olculdu (1.141 dokuman, esik 0.5):
+
+| kural | Vitamin | K | B12 | ARMAFLOR | ARMAPEN | isabet | gurultu (ortanca/p90/en cok) |
+|---|---|---|---|---|---|---|---|
+| `min` (eski) | 11 | 9 | 10 | 3 | 5 | %100 | 4 / 13 / 30 |
+| birlesim (yeni) | **2** | 6 | 9 | 3 | 4 | %100 | **2 / 4 / 8** |
+
+"Isabet" = katalog adinin AYNISI elle girilmisse mutlaka uyarilmasi; ikisinde de %100, yani
+gurultu duserken hicbir gercek mukerrer kacmiyor. ARMAPEN'de dusen tek kayit "Armapen
+Enjeksiyonluk Suspansiyon **Tozu ve Cozucusu**" (0.20) — zaten farkli bir urun. Esik 0.34 / 0.4 /
+0.5'te ayni sonucu veriyor, yani sonuc esige duyarli degil; 0.5 korundu.
+
+**Kalan sinir (durust kayit):** `B12` 10 → 9, `K` 9 → 6. Bunlar tam olarak cozulmedi ve
+cozulemez de: adi gercekten "B12" olan bir kayit belirsizdir, veri bunu cozmuyor. Zaten o
+durumda uyarmak buyuk olcude DOGRU.
+
+### B3 — Bolum ve sinif suzgeci
+
+`bolum` ve `sinif` alanlari katalogda vardi ama kullanilmiyordu. Olculen dagilim:
+**ruminant 720 / pet 421** ve **ilac 345 · supplement 328 · antiparaziter 232 · bakim 194 ·
+asi 42**; ikisinde de bos olan yok. (Plandaki 495/338 rakami yanlisti — o, 833 urun kartinin
+dagilimiydi, 1.141 varyant dokumaninin degil.)
+
+**Bolum** ic ice uc cip olarak eklendi: "vitamin" aramasi **189 → 119 (Ciftlik) → 70 (Pet)**.
+
+**Sinif** ise ACILIR LISTE, cip degil — cunku olcum degerinin nerede oldugunu gosterdi:
+
+| Sorgu | Hepsi | +Bolum | +Sinif (en buyuk kova) |
+|---|---|---|---|
+| `vitamin` + pet | 189 | 70 | **70** — hic daralmiyor, 70'i de supplement |
+| `kalsiyum` + pet | 39 | 10 | 9 — kayda degmez |
+| `tablet` + pet | 143 | 104 | **48** |
+| (bos, gezinme) + ruminant | 1141 | 720 | **305** |
+
+Arama terimi sinifi zaten ima ediyor; sinif suzgeci asil isini **adi hatirlamayip listeye goz
+atarken** goruyor — chevron'un (TASK-036) var olma sebebiyle ayni senaryo. Ikincil bir eksene
+cip sirasinin gorsel agirligini vermek olcumle celisirdi. Tarayicida dogrulandi:
+**1141 → 720 (Ciftlik) → 305 (Ciftlik+Ilac)**, "Hepsi"ye donunce 1141.
+
+Iki suzgec **VE** ile birlesir. Suzgec acikken sonuc bos kalirsa mesaj suzgeci hatirlatir —
+"kayit yok" demek yaniltici olurdu, kayit katalogda var, suzgecin disinda kaliyor.
+
+**Onemli:** stop kelime istatistigi her zaman **tum** katalogdan cikarilir, suzulmus listeden
+degil; yoksa bir kelimenin "ayirt edici" olup olmadigi secili suzgece gore degisirdi.
+
+**ARIA carpismasi (kayda deger).** `<select>` de ARIA'da `combobox` rolu tasir, icindeki
+`<option>` etiketleri de sonuc satirlariyla ayni `option` rolunu. Testlerdeki genel
+`getByRole('combobox')` / `getAllByRole('option')` sorgulari bu yuzden kirildi. Cozum sorguyu
+daraltmak oldu: arama kutusu **adiyla**, sonuc satirlari **sonuc listesinin icinden**
+(`within(getByRole('listbox'))`). Genel sorgu zaten kirilgandi; bu degisiklik testleri
+saglamlastirdi. `DrugsView.test.jsx`'teki `pickFromCatalog` yardimcisi da ayni sekilde duzeltildi.
+
+**Dar ekran olculdu:** 320 / 360 / 390 / 768 px'te tasma yok, sayfa yatay kaymiyor; 390 px altinda
+satir ikiye boluniyor (28 → 50 px). Her iki denetim de `touch-target` tasiyor.
+
+**Mutasyon:** 7 mutasyonun 7'si yakalandi. Ilk turda 1 sizdi ("bos sonuc ipucu yalnizca bolume
+bakiyor") — ipucu testi yalnizca bolum suzgecini kullaniyordu; yalnizca sinif suzgeci acikken de
+sinayan test eklendi.
+
+### Dogrulama
+
+- 671 test (TASK-037 sonrasi 647), lint 0, build temiz
+- **19 mutasyonun 19'u yakalandi** (12 benzerlik/bolum + 7 sinif). Ilk turda ikisi sizdi ve
+  ikisi de gercek test bosluguydu: (1) `max` ile bolme — sabit katalog, Jaccard ile `max`'in
+  ayristigi durumu (**her iki tarafta da** eslesmeyen kelime) hic icermiyordu; (2) bos sonuc
+  ipucunun yalnizca bolume bakmasi. Ikisi icin de test eklendi
+- Sabit kataloga kisaltmali kayitlar (c21-c25) eklendi: gercek katalogda `enj` 185, `susp` 26
+  dokumanda geciyor ve ikisi de eleniyor. Kisaltmasiz bir sabit katalog gercege benzemiyordu ve
+  "ENJ. SÜSP." yazan kullanicinin kaydini bulan kodu yanlis yere kiriyordu
+- Tarayicida gercek katalogla: `armaflor` aramasinda 250 ml → "ayni ambalaj var", 100/50 ml →
+  "benzer kayit" (once ucu de ayniydi); suzgec 1141 → 720 → 421
+
+### Notes
+
+`similarOwnedName` → **`similarOwned`** olarak adlandirildi: artik ilac degil
+`{ drug, samePackage }` donduruyor, eski ad yanlis olurdu.
 
 ---
 

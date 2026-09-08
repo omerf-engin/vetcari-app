@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  catalogHaystack, matchesCatalog, ownedByCatalogId, similarOwnedName,
+  catalogHaystack, matchesCatalog, ownedByCatalogId, similarOwned,
   buildStopTokens, similarityScore, tokenizeName,
+  packageSignature, catalogPackageSignature, SIMILARITY_THRESHOLD,
 } from './drugCatalog';
 
 /**
@@ -10,6 +11,11 @@ import {
  * Gercek katalogun istatistiksel sekli taklit edilir: jenerik kelimeler (`ml`,
  * `enjeksiyonluk`, `cozelti`, `la`, ambalaj sayilari) COK gecer ve elenmeli; marka
  * kelimeleri (`armaflor`, `armapen`) AZ gecer ve ayirt edici kalmali.
+ *
+ * KISALTMALAR da (c21-c25) bilerek var: gercek katalogda `enj` 185, `susp` 26 dokumanda
+ * geciyor (olcum 2026-09-08), yani ikisi de eleniyor. Kisaltmasiz bir sabit katalog bu
+ * yonuyle gercege benzemez ve "ENJ. SÜSP." yazan kullanicinin kaydini bulan kodu yanlis
+ * yere kirmis olurdu.
  */
 const FIXTURE = [
   { catalogId: 'c1', name: 'Armaflor Enjeksiyonluk Çözelti - 100 ml' },
@@ -32,6 +38,12 @@ const FIXTURE = [
   { catalogId: 'c18', name: 'Butafosfan Enjeksiyonluk Çözelti - 250 ml' },
   { catalogId: 'c19', name: 'Gentamisin LA Enjeksiyonluk Çözelti - 100 ml' },
   { catalogId: 'c20', name: 'Marbofloksasin Enjeksiyonluk Çözelti - 50 ml' },
+  // Kisaltmali yazim — `enj` ve `susp` gercek katalogda oldugu gibi elenecek kadar sik
+  { catalogId: 'c21', name: 'Oksitetrasiklin LA Enj. Çözelti - 100 ml' },
+  { catalogId: 'c22', name: 'Tulatromisin Enj. Çözelti - 50 ml' },
+  { catalogId: 'c23', name: 'Amoksisilin Enj. Süsp. - 100 ml' },
+  { catalogId: 'c24', name: 'Seftiofur Enj. Süsp. - 250 ml' },
+  { catalogId: 'c25', name: 'Penisilin Enj. Süsp. - 50 ml' },
 ];
 const STOP = buildStopTokens(FIXTURE);
 const own = (name) => [{ id: 'd1', name }];
@@ -144,47 +156,141 @@ describe('similarityScore', () => {
   it('ayirt edici kelimesi kalmayan ad 0 verir', () => {
     expect(similarityScore('LA', 'Armapen LA Enjeksiyonluk Süspansiyon - 100 ml', STOP)).toBe(0);
   });
+
+  // BIRLESIME bolunur, `max`'a degil. Ikisi yalnizca su durumda ayrisir: her IKI tarafta
+  // da eslesmeyen kelime var. `max` bunu 0.5 sayip esigi gecirir, birlesim 0.33'e dusurur.
+  // Gercek katalogda fark buyuk: gurultu ortancasi 3 -> 2, p90 7 -> 4, en cok 17 -> 8.
+  it('iki tarafta da eslesmeyen kelime varsa skor duser', () => {
+    // a = {vitamin, b12}, b = {vitamin, ad3e} -> paylasilan 1, birlesim 3
+    const score = similarityScore('Vitamin B12', FIXTURE[8].name, STOP);
+    expect(score).toBeCloseTo(1 / 3, 5);
+    expect(score).toBeLessThan(SIMILARITY_THRESHOLD);
+  });
 });
 
-describe('similarOwnedName', () => {
+describe('packageSignature', () => {
+  it('basli basina sayilari imzaya alir', () => {
+    expect(packageSignature('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML')).toBe('250');
+  });
+
+  it('kelime ICINDEKI sayiyi ambalaj sanmaz', () => {
+    // "b12" bir etken madde adi; icindeki 12 ambalaj degil
+    expect(packageSignature('Vitamin B12 Enjeksiyonluk')).toBe('');
+    expect(packageSignature('AD3E Solüsyon')).toBe('');
+  });
+
+  it('carpim bicimini BOZMADAN tasir (× ve x ayni imza)', () => {
+    expect(packageSignature('ADVANTİX 4×4 ML')).toBe('4x4');
+    expect(packageSignature('ADVANTIX 4X4 ML')).toBe('4x4');
+  });
+
+  // 4 pipetlik kutu ile tek pipet ayni sey degil — parcalanip tekillestirilseydi olurdu
+  it('4×4 ile 4 ayni imzayi ALMAZ', () => {
+    expect(packageSignature('ADVANTİX 4×4 ML')).not.toBe(packageSignature('ADVANTİX 4 ML'));
+  });
+
+  // Katalogda ambalaj hem adda hem `unit`'te gecer; ayni kelime iki kez sayilmamali
+  it('ad ve unit tekrari imzayi ikilemez', () => {
+    expect(catalogPackageSignature({ name: 'Armaflor - 250 ml', unit: '250 ML' })).toBe('250');
+  });
+
+  it('yazim sirasi imzayi degistirmez', () => {
+    expect(packageSignature('20/20 - 100 ml')).toBe(packageSignature('100 ml 20 20'));
+  });
+
+  it('katalog imzasi ad ambalaji tasimasa da `unit` alanindan kurulur', () => {
+    expect(catalogPackageSignature({ name: 'REVERSAL', unit: '10 ML' })).toBe('10');
+    expect(catalogPackageSignature({ name: 'REVERSAL' })).toBe('');
+  });
+});
+
+describe('similarOwned', () => {
   // Duzeltmenin ASIL SEBEBI: eski surum bu kaydi bulamiyordu (tek fark bir tire)
   it('elle girilmis kaydi katalogdaki karsiligiyla eslestirir', () => {
-    const hit = similarOwnedName(own('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML'), FIXTURE[1], STOP);
-    expect(hit?.name).toBe('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML');
+    const hit = similarOwned(own('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML'), FIXTURE[1], STOP);
+    expect(hit?.drug.name).toBe('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML');
   });
 
   it('kisaltmali yazim da eslesir (ENJ. SUSP. <-> Enjeksiyonluk Süspansiyon)', () => {
-    expect(similarOwnedName(own('ARMAPEN LA ENJ. SÜSP. - 250 ML'), FIXTURE[3], STOP)).not.toBeNull();
+    expect(similarOwned(own('ARMAPEN LA ENJ. SÜSP. - 250 ML'), FIXTURE[3], STOP)).not.toBeNull();
   });
 
   // GURULTU OLCUMU — mutasyon denetiminin isiracagi iddia bu.
   // Stop listesi devre disi kalirsa "LA" katalogun onda birinde uyari tetikler.
   it('jenerik kisa ad HICBIR kayitla eslesmez', () => {
-    const hits = FIXTURE.filter(d => similarOwnedName(own('LA'), d, STOP));
+    const hits = FIXTURE.filter(d => similarOwned(own('LA'), d, STOP));
     expect(hits).toHaveLength(0);
   });
 
   it('tek harflik ad hicbir kayitla eslesmez', () => {
-    const hits = FIXTURE.filter(d => similarOwnedName(own('K'), d, STOP));
+    const hits = FIXTURE.filter(d => similarOwned(own('K'), d, STOP));
     expect(hits).toHaveLength(0);
   });
 
   it('jenerik uzun ad yalnizca kendi ailesini isaretler', () => {
-    const hits = FIXTURE.filter(d => similarOwnedName(own('Oksitosin'), d, STOP));
+    const hits = FIXTURE.filter(d => similarOwned(own('Oksitosin'), d, STOP));
     expect(hits.map(h => h.catalogId)).toEqual(['c7']);
+  });
+
+  // TASK-039: eskiden `min`'e bolunuyordu, tek kelimelik ad her zaman 1.0 aliyordu.
+  // "Vitamin" iki Vitamin kaydini da isaretliyordu; artik yalnizca adi gercekten
+  // "Vitamin"e yakin olani. (Gercek katalogda 11 -> 2.)
+  it('yaygin tek kelimelik ad tum aileyi isaretlemez', () => {
+    const hits = FIXTURE.filter(d => similarOwned(own('Vitamin'), d, STOP));
+    expect(hits.map(h => h.catalogId)).toEqual(['c9']);
+  });
+
+  it('tek jenerik kelime paylasan ad eslesmez', () => {
+    expect(similarOwned(own('Vitamin B12'), FIXTURE[8], STOP)).toBeNull();
   });
 
   it('catalogId tasiyan kaydi dikkate almaz — kesin katman onu zaten goruyor', () => {
     const drugs = [{ id: 'd1', name: 'Armaflor Enjeksiyonluk Çözelti - 250 ml', catalogId: 'x' }];
-    expect(similarOwnedName(drugs, FIXTURE[1], STOP)).toBeNull();
+    expect(similarOwned(drugs, FIXTURE[1], STOP)).toBeNull();
   });
 
   it('alakasiz kaydi benzer saymaz', () => {
-    expect(similarOwnedName(own('Sarı Solüsyon'), FIXTURE[1], STOP)).toBeNull();
+    expect(similarOwned(own('Sarı Solüsyon'), FIXTURE[1], STOP)).toBeNull();
   });
 
   it('bos adli katalog kaydinda ve stop listesi yoksa null doner', () => {
-    expect(similarOwnedName(own('X'), { name: '' }, STOP)).toBeNull();
-    expect(similarOwnedName(own('X'), FIXTURE[1], null)).toBeNull();
+    expect(similarOwned(own('X'), { name: '' }, STOP)).toBeNull();
+    expect(similarOwned(own('X'), FIXTURE[1], null)).toBeNull();
+  });
+});
+
+// TASK-039 B1: ambalaj duzeyi ayrimi. Amac uyari EKSILTMEK degil, guclu olani ayirmak.
+describe('similarOwned — ambalaj gucu', () => {
+  const ARMAFLOR_100 = FIXTURE[0];
+  const ARMAFLOR_250 = FIXTURE[1];
+
+  it('ayni ambalaj GUCLU isaretlenir', () => {
+    const hit = similarOwned(own('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML'), ARMAFLOR_250, STOP);
+    expect(hit.samePackage).toBe(true);
+  });
+
+  // Kritik: farkli ambalaj uyariyi SUSTURMAZ, yalnizca zayif not olur.
+  // Susturulsaydi 100 ml eklerken listedeki 250 ml gorunmez olurdu.
+  it('farkli ambalaj hala uyarir ama zayif kalir', () => {
+    const hit = similarOwned(own('ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML'), ARMAFLOR_100, STOP);
+    expect(hit).not.toBeNull();
+    expect(hit.samePackage).toBe(false);
+  });
+
+  it('imzasiz katalog kaydi asla GUCLU olmaz — bilinmeyen esitlik degildir', () => {
+    const doc = { catalogId: 'x', name: 'Oksitosin Enjeksiyonluk Çözelti' }; // sayi yok
+    const hit = similarOwned(own('Oksitosin'), doc, STOP);
+    expect(hit).not.toBeNull();
+    expect(hit.samePackage).toBe(false);
+  });
+
+  it('birden cok eslesmede ambalaji tutan tercih edilir', () => {
+    const drugs = [
+      { id: 'd1', name: 'ARMAFLOR ENJEKSIYONLUK COZELTI 100 ML' }, // once geliyor, zayif
+      { id: 'd2', name: 'ARMAFLOR ENJEKSIYONLUK COZELTI 250 ML' }, // sonra geliyor, guclu
+    ];
+    const hit = similarOwned(drugs, ARMAFLOR_250, STOP);
+    expect(hit.drug.id).toBe('d2');
+    expect(hit.samePackage).toBe(true);
   });
 });

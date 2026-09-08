@@ -469,10 +469,16 @@ Uzun bir listeden hızlı kalem eklemenin deseni. Kalıcı bir arama alanı, alt
   yok" diye elle eklemeye iter ve tam da önlenmek istenen mükerreri yaratır. Tahmine dayalı
   benzerlik ise **engellemez, yalnızca uyarır** — yanlış bir tahmin meşru bir eklemeyi
   engellerse mükerrerden daha çok zarar verir.
-- **Uyarı, hesaplanandan fazlasını iddia etmez.** Benzerlik eşleştirmesi ürün ailesi düzeyinde
-  çalışır (ambalaj sayıları ayırt edici sayılmaz), bu yüzden metin "aynıdır" değil
+- **Uyarı, hesaplanandan fazlasını iddia etmez — ne fazlasını, ne azını.** Ambalaj imzası da
+  tutuyorsa metin **"Listende aynı ambalaj var: X"**, yalnızca ürün ailesi tutuyorsa
   **"Listende benzer kayıt: X"** der. Bir bildirim, arkasındaki hesabın desteklemediği bir
-  kesinliği ima ederse kullanıcı ya yanılır ya da bildirimleri yok saymayı öğrenir.
+  kesinliği ima ederse kullanıcı ya yanılır ya da bildirimleri yok saymayı öğrenir; hesap
+  daha fazlasını biliyorken az söylemek de aynı ölçüde kayıptır.
+- **Veriyi bilmiyorsak "yok" demeyiz.** Boş bir liste tek başına bir cümle değildir: yükleniyor
+  mu, hata mı aldı, henüz inmedi mi, gerçekten boş mu — dördü dört ayrı metindir. Çevrimdışı
+  Firestore hata vermez, önbellekten boş liste verir; "Katalog boş." demek kullanıcıyı 1.141
+  kayıtlık listeyi elle kurmaya iter. Bilinmeyen durum, kullanıcıyı yanlış işe sokan bir
+  kesinlikle sunulmaz — ve kaçış yolu (elle ekleme) hep açık kalır.
 
 ### Toast
 

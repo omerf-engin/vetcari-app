@@ -1,11 +1,12 @@
 # VetCari Akıllı Defter — Mimari Dokümanı
 
-> **Sürüm:** 1.9  
-> **Son güncelleme:** 7 Eylül 2026  
-> **Durum:** Üretimde. TASK-036 (arama tabanlı çoklu ilaç girişi) ve TASK-037 (ortak ilaç
-> kataloğu) tamamlandı; güvenlik kuralları blanket kalıptan çıkarıldı ve yayınlandı. 615 test.
-> Kalan: TASK-038 (tek defter çok kullanıcı, P1), TASK-022 (ilaç stok takibi),
-> TASK-023 (TypeScript migrasyonu)
+> **Sürüm:** 1.10  
+> **Son güncelleme:** 8 Eylül 2026  
+> **Durum:** Üretimde. TASK-036 (arama tabanlı çoklu ilaç girişi), TASK-037 (ortak ilaç kataloğu)
+> ve TASK-039 (katalog seçici iyileştirmeleri) tamamlandı; güvenlik kuralları blanket kalıptan
+> çıkarıldı ve yayınlandı. 671 test.
+> Kalan: TASK-038 (tek defter çok kullanıcı, P1), BAKIM-002 (kural emülatör testleri),
+> TASK-022 (ilaç stok takibi), TASK-023 (TypeScript migrasyonu)
 
 ### Ortak İlaç Kataloğu (TASK-037)
 
@@ -24,6 +25,14 @@ ile günceller — `scripts/loadDrugCatalog.js`.
 - **İstemci erişimi tembeldir** (`useDrugCatalog`): abonelik ilk kullanımda kurulur, oturum boyunca
   yaşar. `getDocs` değil `onSnapshot` — `persistentLocalCache` sayesinde sonraki oturumlarda
   yalnızca değişiklikler çekilir
+- **Çevrimdışı hâli hatadan ayrılır** (TASK-039'la birlikte düzeltildi): çevrimdışı `onSnapshot`
+  hata vermez, önbellekten **boş** anlık görüntü verir. Kanca bu yüzden `fromCache` yayınlar ve
+  arayüz dört bos durumu ayırır (yükleniyor / hata / henüz inmedi / gerçekten boş). Ölçüldü:
+  çevrimiçi soğuk önbellek `fromCache=false`, çevrimdışı soğuk `true`, çevrimdışı sıcak
+  `1141 kayıt` — yani çevrimiçi açılışta yanlış alarm verecek bir "boş önbellek" anı yok
+- **Mükerrer uyarısı iki güçlüdür** (TASK-039): ürün ailesi (Jaccard, eşik 0.5) + ambalaj imzası.
+  Ambalaj eşiği yükseltmek için değil, **notu güçlendirmek** için kullanılır — farklı ambalaj
+  hâlâ uyarır
 
 ---
 
