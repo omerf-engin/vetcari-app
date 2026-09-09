@@ -1,6 +1,10 @@
 # Logs
 logs
 *.log
+
+# Firebase emulator artiklari (BAKIM-002 — `npm run test:rules`)
+# `*.log` zaten firestore-debug.log'u kapsiyor; bu klasor ayrica gerekiyor.
+.firebase/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

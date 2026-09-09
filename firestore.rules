@@ -41,34 +41,52 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == request.resource.data.userId;
     }
 
+    // Guncelleme HEM eski HEM yeni sahibin ben olmasini ister.
+    //
+    // Yalnizca eskiye bakmak yetmiyordu: kendi kaydimin `userId` alanini baskasinin
+    // uid'i yapip ONUN defterine kayit enjekte edebiliyordum. Veri sizintisi degil
+    // (B'nin kayitlarini hala okuyamiyorum) ama bir muhasebe urununde baska klinigin
+    // defterine sahte borc yazilabilmesi kabul edilemez. BAKIM-002'de yazilan emulator
+    // testi bu acigi kanitladi; uygulamada `userId`'yi degistiren mesru bir yol yok.
+    //
+    // `delete` bu kontrolu ISTEYEMEZ: silmede `request.resource` yoktur.
+    function canUpdateOwned() {
+      return canWriteOwned() && canCreateOwned();
+    }
+
     match /customers/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update, delete: if canWriteOwned();
+      allow update: if canUpdateOwned();
+      allow delete: if canWriteOwned();
     }
 
     match /drugs/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update, delete: if canWriteOwned();
+      allow update: if canUpdateOwned();
+      allow delete: if canWriteOwned();
     }
 
     match /serviceDebts/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update, delete: if canWriteOwned();
+      allow update: if canUpdateOwned();
+      allow delete: if canWriteOwned();
     }
 
     match /drugDebts/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update, delete: if canWriteOwned();
+      allow update: if canUpdateOwned();
+      allow delete: if canWriteOwned();
     }
 
     match /transactions/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update, delete: if canWriteOwned();
+      allow update: if canUpdateOwned();
+      allow delete: if canWriteOwned();
     }
 
     // Ortak ilac katalogu (TASK-037) — SALT OKUNUR, sahipsiz.

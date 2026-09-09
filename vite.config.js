@@ -8,5 +8,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
+    // `tests/rules/` calisan bir Firestore emulatoru (ve Java) ister; ana pakete
+    // karismasi emulator olmayan her ortamda kirmizi yanmasi demek olurdu.
+    // Ayri yapilandirmayla calisir: `npm run test:rules` (bkz. vitest.rules.config.js)
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/rules/**'],
   },
 })

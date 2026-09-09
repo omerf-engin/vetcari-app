@@ -107,7 +107,14 @@ describe('firestore.rules', () => {
 
       // Sahipli sekil: kullanici verisi, `userId` uzerinden sahiplik.
       expect(rule, `${name}: allow create yok`).toMatch(/allow create:/);
-      expect(rule, `${name}: allow update, delete yok`).toMatch(/allow update, delete:/);
+
+      // `update` ve `delete` AYRI yazilir ve ayni kurali paylasmaz. Guncelleme yazilan
+      // dokumanin sahibini de dogrulamali (aksi halde baskasinin defterine kayit
+      // enjekte edilebiliyor, BAKIM-002); silme bunu isteyemez cunku `request.resource`
+      // yoktur. Birlesik `allow update, delete:` bu ayrimi imkansiz kilardi.
+      expect(rule, `${name}: allow update yok`).toMatch(/allow update:/);
+      expect(rule, `${name}: allow delete yok`).toMatch(/allow delete:/);
+      expect(rule, `${name}: update ve delete ayni satirda olmamali`).not.toMatch(/allow update,\s*delete:/);
     }
   });
 

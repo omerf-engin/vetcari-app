@@ -2548,7 +2548,7 @@ sinayan test eklendi.
 
 | Alan | Deger |
 |------|-------|
-| **Status** | TODO |
+| **Status** | DONE (2026-09-10) |
 | **Priority** | P2 |
 | **Depends on** | TASK-037 |
 
@@ -2573,6 +2573,59 @@ gevsetilirse hicbir test bunu yakalamaz.
 
 Emulator **Java gerektiriyor**; CI'da da kurulmasi gerekir. Bu yuzden TASK-037 kapsamindan
 cikarildi ve ayri gorev olarak yazildi — kriter "denenmedi" olarak asili birakilmadi.
+
+### Yapilanlar (2026-09-10)
+
+- **Java kuruldu:** Temurin JDK 21 (`winget`, `EclipseAdoptium.Temurin.21.JDK`). Makinede
+  hicbir JDK yoktu; kullanici onayiyla kuruldu
+- `@firebase/rules-unit-testing` ^5.0.2 · `firebase.json`'a `emulators` blogu
+  (firestore 8080, UI kapali, `singleProjectMode`)
+- **`tests/rules/firestore.rules.test.js` — 64 davranis testi.** Proje kimligi
+  `demo-vetcari`: `demo-` oneki emulator disina cikmayi imkansiz kilar, gercek `vetcari`
+  projesine yanlislikla baglanma riski yok
+- **Ayri yapilandirma** (`vitest.rules.config.js`): ana `npm test` bu klasoru DISLAR
+  (`vite.config.js` icinde `exclude`), cunku emulator+Java olmayan ortamda kirmizi yanardi.
+  `fileParallelism: false` — emulator tek ornek ve testler arasi `clearFirestore()` var
+- `npm run test:rules` emulatoru kendisi baslatip kapatir (`emulators:exec`)
+
+### BULUNAN ACIK — sahiplik devriyle enjeksiyon
+
+Testleri yazarken `canWriteOwned`'in yalnizca **mevcut** dokumanin sahibine baktigi fark
+edildi; yazilan dokumani dogrulamiyordu. Emulatorde kanitlandi:
+
+> A, kendi kaydinin `userId` alanini B'nin uid'i yapabiliyordu — yani **baska bir klinigin
+> defterine sahte borc/musteri/islem enjekte edebiliyordu.**
+
+Veri **sizintisi degil** (B'nin kayitlari hala okunamiyor, B'nin mevcut kaydinin uzerine de
+yazilamiyor) ama bir muhasebe urununde baska klinigin defterine kayit yazilabilmesi kabul
+edilemez. Uygulama arayuzunden erisilebilir degil; kotu niyetli, kimligi dogrulanmis bir
+kullanicinin SDK cagrisi gerektirir. TASK-038 ile cok kiracililik gercek olunca etkisi buyur.
+
+**Duzeltme:** `canUpdateOwned() = canWriteOwned() && canCreateOwned()` — guncelleme HEM eski
+HEM yeni sahibin ayni kullanici olmasini ister. `allow update, delete:` ayrildi; `delete` bu
+kontrolu isteyemez, silmede `request.resource` yoktur.
+
+**Uygulamayi kirmadigi dogrulandi:** `firestoreOperations.js`'te `userId`'yi baskasina
+ceviren mesru bir yol yok; `revertPaymentOperations`'in `set(ref, before)` yolu da guvenli,
+cunku `snapshotOf` yalnizca `id` ve `rev` siliyor, `userId` korunuyor (bunun icin ayri test
+yazildi). 676 birim testi degismeden geciyor.
+
+`src/services/firestoreRules.test.js` de guncellendi: artik `allow update` ve `allow delete`
+AYRI satirlarda olmali; birlesik `allow update, delete:` kalibi bu ayrimi imkansiz kilardi.
+
+### Dogrulama
+
+- `npm run test:rules` → **64 test**, emulatorde gecti
+- **9 kural mutasyonunun 9'u yakalandi:** sahiplik okumadan kalkti · sahiplik yazmadan kalkti ·
+  `canCreateOwned` userId dogrulamiyor · `resource == null` dali silindi ·
+  `drugCatalog` yazmaya acildi · blanket kalip geri geldi · `canUpdateOwned` yeni sahibi
+  dogrulamiyor · `allow update` yine `canWriteOwned` kullaniyor · `signedIn()` hep true
+- `npm test` 676, lint 0, build temiz
+
+### YAYINLANMADI
+
+Kural degisikligi **yalnizca depoda**; canlida hala eski (acik) kural duruyor.
+`firebase deploy --only firestore:rules --project vetcari` kullanici onayiyla calistirilacak.
 
 ---
 
