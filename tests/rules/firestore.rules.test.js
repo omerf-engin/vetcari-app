@@ -130,6 +130,121 @@ describe('Sahiplik devri — enjeksiyon acigi (BAKIM-002)', () => {
   });
 });
 
+/**
+ * GECIS DONEMI (TASK-038a). Eski `userId` yolu ile yeni klinik yolu BIRLIKTE acik.
+ * Amac: goc scripti calisirken ve sorgular henuz `userId` uzerindeyken kesinti olmamasi.
+ *
+ * Burada sinanan asil sey ucuncu bir yolun ACILMAMIS olmasi — ozellikle eski yol
+ * uzerinden baska bir klinige kayit enjekte edilememesi.
+ */
+describe('Gecis donemi — klinik yolu (TASK-038a)', () => {
+  const KLINIK_A = 'klinik-a';
+  const KLINIK_B = 'klinik-b';
+  const PERSONEL = 'personel-uid';   // KLINIK_A uyesi, ALI'den farkli kisi
+  const YABANCI = 'yabanci-uid';     // hicbir uyeligi yok
+
+  const asPersonel = () => testEnv.authenticatedContext(PERSONEL).firestore();
+  const asYabanci = () => testEnv.authenticatedContext(YABANCI).firestore();
+
+  beforeEach(async () => {
+    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
+    await seed(`memberships/${PERSONEL}`, { clinicId: KLINIK_A, role: 'staff' });
+    await seed(`memberships/${VELI}`, { clinicId: KLINIK_B, role: 'owner' });
+    await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
+  });
+
+  it('ayni klinigin BASKA bir uyesi defteri okur — isin butun amaci', async () => {
+    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
+    await assertSucceeds(getDoc(doc(asPersonel(), 'customers/d1')));
+  });
+
+  it('ayni klinigin uyesi kayit olusturur (kendi uid, klinigin clinicId)', async () => {
+    await assertSucceeds(setDoc(doc(asPersonel(), 'customers/yeni'),
+      { userId: PERSONEL, clinicId: KLINIK_A, name: 'Musteri' }));
+  });
+
+  it('ayni klinigin uyesi BASKASININ girdigi kaydi gunceller', async () => {
+    await seed('drugDebts/d1', { userId: ALI, clinicId: KLINIK_A, amount: 100 });
+    await assertSucceeds(updateDoc(doc(asPersonel(), 'drugDebts/d1'), { amount: 200 }));
+  });
+
+  it('BASKA klinigin uyesi okuyamaz/yazamaz', async () => {
+    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
+    await assertFails(getDoc(doc(asVeli(), 'customers/d1')));
+    await assertFails(updateDoc(doc(asVeli(), 'customers/d1'), { name: 'x' }));
+  });
+
+  it('hic uyeligi olmayan kullanici klinik verisine erisemez', async () => {
+    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
+    await assertFails(getDoc(doc(asYabanci(), 'customers/d1')));
+  });
+
+  // GECIS PENCERESININ KRITIK KILIDI: eski `userId` yolu acikken kendi kaydima
+  // BASKA bir klinigin clinicId'sini yazabilseydim, BAKIM-002'de kapatilan enjeksiyon
+  // acigi bu sefer `clinicId` uzerinden geri gelirdi.
+  it('eski userId yoluyla BASKA klinige kayit ENJEKTE edilemez', async () => {
+    await assertFails(setDoc(doc(asAli(), 'customers/enjekte'),
+      { userId: ALI, clinicId: KLINIK_B, name: 'sahte' }));
+  });
+
+  it('kendi kaydinin clinicId sini baska klinige cevirmek reddedilir', async () => {
+    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
+    await assertFails(updateDoc(doc(asAli(), 'customers/d1'), { clinicId: KLINIK_B }));
+  });
+
+  // Goc henuz damgalamadiysa kayit clinicId TASIMAZ; eski yol calismaya devam etmeli
+  it('clinicId tasimayan ESKI kayit sahibi tarafindan hala okunur/yazilir', async () => {
+    await seed('customers/eski', { userId: ALI, name: 'Goc oncesi' });
+    await assertSucceeds(getDoc(doc(asAli(), 'customers/eski')));
+    await assertSucceeds(updateDoc(doc(asAli(), 'customers/eski'), { name: 'y' }));
+  });
+
+  it('clinicId tasimayan eski kayit KLINIK YOLUYLA okunamaz (henuz damgalanmadi)', async () => {
+    await seed('customers/eski', { userId: ALI, name: 'Goc oncesi' });
+    await assertFails(getDoc(doc(asPersonel(), 'customers/eski')));
+  });
+});
+
+describe('memberships / clinics — yetkilendirmenin dayanagi, salt okunur', () => {
+  const KLINIK_A = 'klinik-a';
+  const KLINIK_B = 'klinik-b';
+
+  beforeEach(async () => {
+    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
+    // VELI'nin BASKA bir klinikte uyeligi OLMALI. Olmasaydi asagidaki "baskasininkini
+    // okumaz" iddiasi yanlis sebepten gecerdi (uye olmadigi icin reddedilir) ve kural
+    // "her uye her klinigi okur"a gevsetilse bile test yesil kalirdi — mutasyon
+    // denetimi bunu yakaladi.
+    await seed(`memberships/${VELI}`, { clinicId: KLINIK_B, role: 'owner' });
+    await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
+  });
+
+  it('kendi uyeligini okur', async () => {
+    await assertSucceeds(getDoc(doc(asAli(), `memberships/${ALI}`)));
+  });
+
+  // VELI'nin kendi uyeligi VAR; yine de ALI'ninkini goremez
+  it('BASKASININ uyeligini okuyamaz', async () => {
+    await assertSucceeds(getDoc(doc(asVeli(), `memberships/${VELI}`)));
+    await assertFails(getDoc(doc(asVeli(), `memberships/${ALI}`)));
+  });
+
+  // En kritik yazma kisiti: acik olsaydi kullanici kendini istedigi klinige uye yapardi
+  it('kendine uyelik YAZAMAZ — yetkilendirmenin anahtari istemcide degil', async () => {
+    await assertFails(setDoc(doc(asVeli(), `memberships/${VELI}`), { clinicId: KLINIK_A, role: 'owner' }));
+    await assertFails(updateDoc(doc(asAli(), `memberships/${ALI}`), { role: 'owner' }));
+    await assertFails(deleteDoc(doc(asAli(), `memberships/${ALI}`)));
+  });
+
+  // `clinics` icin kural blogu BILEREK yok: uygulama henuz okumuyor, blogu olmayan
+  // koleksiyon reddedilir. Uyesi bile olsa erisemez — varsayilan fail-closed calisiyor.
+  it('clinics koleksiyonuna istemci HIC erisemez (blogu yok, fail-closed)', async () => {
+    await assertFails(getDoc(doc(asAli(), `clinics/${KLINIK_A}`)));
+    await assertFails(updateDoc(doc(asAli(), `clinics/${KLINIK_A}`), { seatLimit: 99 }));
+    await assertFails(setDoc(doc(asAli(), 'clinics/yeni'), { name: 'sahte' }));
+  });
+});
+
 describe('Sorgu (list) davranisi — useFirestore bunun uzerine kurulu', () => {
   it('userId filtreli sorgu CALISIR', async () => {
     await seed('customers/d1', { userId: ALI, name: 'x' });

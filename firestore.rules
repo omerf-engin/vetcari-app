@@ -26,19 +26,65 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // --------------------------------------------------------------------------------
+    // GECIS DONEMI (TASK-038a, genislet/goc et/daralt).
+    //
+    // Bir dokuman su an IKI yoldan sahiplenilebilir:
+    //   ESKI: `resource.data.userId == request.auth.uid`  (tek kullanicili model)
+    //   YENI: uyeligimdeki `clinicId`, dokumanin `clinicId`'si ile ayni
+    //
+    // Ikisi birlikte acik tutuluyor ki goc scripti calisirken ve sorgular henuz
+    // `userId` uzerindeyken uygulama kesintisiz calissin. Goc oturunca ESKI yol
+    // kaldirilacak (6. asama) ve `tests/rules/` o zaman eski yolun REDDEDILDIGINI sinar.
+    // --------------------------------------------------------------------------------
+
+    // Tek klinik uyeligi karari sayesinde dokuman kimligi dogrudan uid; kural tek
+    // dokuman okumasiyla hem varligi hem `clinicId`'yi ogrenir. `&&` kisa devre yaptigi
+    // icin uyelik yoksa `get()` hic calismaz, ayni yol iki kez okunmus da olmaz.
+    function isMember() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/memberships/$(request.auth.uid));
+    }
+
+    function myClinicId() {
+      return get(/databases/$(database)/documents/memberships/$(request.auth.uid)).data.clinicId;
+    }
+
+    function inClinicExisting() {
+      return isMember() && myClinicId() == resource.data.clinicId;
+    }
+
+    function inClinicIncoming() {
+      return isMember() && myClinicId() == request.resource.data.clinicId;
+    }
+
+    // Gecis doneminin KRITIK kilidi.
+    //
+    // Eski `userId` yolu acikken, kendi kaydima BASKA bir klinigin `clinicId`'sini
+    // yazabilseydim, BAKIM-002'de kapatilan enjeksiyon acigi gecis penceresinde geri
+    // gelirdi (bu sefer `userId` degil `clinicId` uzerinden). Bu yuzden: yazilan
+    // dokumanda `clinicId` VARSA mutlaka benim klinigim olmali.
+    function incomingClinicSafe() {
+      return !('clinicId' in request.resource.data) || inClinicIncoming();
+    }
+
     // `resource == null` dali TASK-033'ten geliyor: silinmis bir dokumani okurken kural
     // `resource.data.userId`'ye dokunursa `permission-denied` doner ve cagiran taraf
     // "silinmis mi" sorusunu soramaz. Surum kontrolu (rev) bu davranisa dayaniyor.
     function canReadOwned() {
-      return signedIn() && (resource == null || request.auth.uid == resource.data.userId);
+      return signedIn() && (resource == null
+        || request.auth.uid == resource.data.userId
+        || inClinicExisting());
     }
 
     function canWriteOwned() {
-      return signedIn() && request.auth.uid == resource.data.userId;
+      return signedIn() && (request.auth.uid == resource.data.userId || inClinicExisting());
     }
 
     function canCreateOwned() {
-      return signedIn() && request.auth.uid == request.resource.data.userId;
+      return signedIn()
+        && (request.auth.uid == request.resource.data.userId || inClinicIncoming())
+        && incomingClinicSafe();
     }
 
     // Guncelleme HEM eski HEM yeni sahibin ben olmasini ister.
@@ -99,5 +145,27 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if false;
     }
+
+    // Klinik kimligi (TASK-038a) — istemciye SALT OKUNUR.
+    //
+    // Uyelik ve klinik kayitlarini yalnizca goc scripti (Admin SDK) olusturur. Istemciye
+    // yazma acilsaydi bir kullanici kendini istedigi klinige uye yapip o defteri acabilirdi
+    // — yani butun yetkilendirmenin anahtarini kendisi basardi. Bu koleksiyonlar tum
+    // sahiplik kontrolunun dayanagi oldugu icin en dar sekilde tutuluyor.
+    //
+    // Self-servis davet akisi TASK-038b'de gelecek ve KENDI kurallariyla acilacak;
+    // o zamana kadar ikinci kullanici elle (script ile) baglanir.
+    match /memberships/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // NOT: `clinics` koleksiyonunun kural blogu BILEREK yok.
+    //
+    // Goc scripti (Admin SDK) klinik dokumanlarini olusturur ama uygulama henuz hicbirini
+    // OKUMUYOR — klinik adi/koltuk sayisi TASK-038b'nin arayuzunde gerekecek. Kurala
+    // simdiden yazmak, hicbir seyin kullanmadigi bir erisim acmak olurdu; blogu olmayan
+    // koleksiyon reddedilir, yani varsayilan fail-closed. Arayuz okumaya basladiginda
+    // kendi blogu eklenecek.
   }
 }
