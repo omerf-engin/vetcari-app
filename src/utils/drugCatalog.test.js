@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   catalogHaystack, matchesCatalog, ownedByCatalogId, similarOwned,
-  buildStopTokens, similarityScore, tokenizeName,
+  buildStopTokens, similarityScore, tokenizeName, distinctiveTokens,
   packageSignature, catalogPackageSignature, SIMILARITY_THRESHOLD,
 } from './drugCatalog';
 
@@ -44,6 +44,17 @@ const FIXTURE = [
   { catalogId: 'c23', name: 'Amoksisilin Enj. Süsp. - 100 ml' },
   { catalogId: 'c24', name: 'Seftiofur Enj. Süsp. - 250 ml' },
   { catalogId: 'c25', name: 'Penisilin Enj. Süsp. - 50 ml' },
+  // Tek harf TUZAGI: ikisinde de "K" var ama ayni sey degiller — Fitadinon gercek K
+  // vitamini, Baytril'de "K" marka soneki. Bu iki satir olmadan asagidaki "K" testi
+  // bosta calisiyordu (fixture'da hic `k` kelimesi yoktu).
+  { catalogId: 'c26', name: 'Fitadinon K Enjeksiyonluk Çözelti - 100 ml' },
+  { catalogId: 'c27', name: 'Baytril K Enjeksiyonluk Çözelti - 50 ml' },
+  // Beden kodlari: tek harf ayirt edici sayilirsa AYNI urunun bedenleri farkli aile gorunur
+  { catalogId: 'c28', name: 'Nexgard Dog 11 mg (S)' },
+  { catalogId: 'c29', name: 'Nexgard Dog 28 mg (M)' },
+  // IKI harflik kelime kanittir: "B6" bir vitamin adi, "K" gibi belirsiz degil.
+  // Esik 2 yerine 3 olsaydi bu kayit bulunamazdi.
+  { catalogId: 'c30', name: 'Nörobiyon B6 Enjeksiyonluk Çözelti - 100 ml' },
 ];
 const STOP = buildStopTokens(FIXTURE);
 const own = (name) => [{ id: 'd1', name }];
@@ -142,6 +153,26 @@ describe('buildStopTokens', () => {
   });
 });
 
+describe('distinctiveTokens', () => {
+  it('tek harflik kelimeleri ve stop kelimeleri eler', () => {
+    expect([...distinctiveTokens('Baytril K Enjeksiyonluk Çözelti - 50 ml', STOP)]).toEqual(['baytril']);
+  });
+
+  it('iki harften uzun kelimeler kalir — B12 kanit sayilir', () => {
+    expect([...distinctiveTokens('Butafos-B12 Enj. Çözelti', STOP)].sort()).toEqual(['b12', 'butafos']);
+  });
+
+  // Esigin tam olarak 2 oldugunu sabitler: 3 olsaydi "B6" kanit olmaktan cikardi.
+  // Gercek katalogda da 3 olcumle daha kotuydu (Vitamin 2 -> 3, gurultu artiyor).
+  it('IKI harflik kelime hala kanittir', () => {
+    expect([...distinctiveTokens('Nörobiyon B6 Enjeksiyonluk Çözelti - 100 ml', STOP)].sort())
+      .toEqual(['b6', 'norobiyon']);
+
+    const hit = similarOwned(own('B6'), FIXTURE.find(d => d.catalogId === 'c30'), STOP);
+    expect(hit).not.toBeNull();
+  });
+});
+
 describe('similarityScore', () => {
   it('yalnizca noktalama farki tam eslesme sayilir', () => {
     // Kullanicinin gercek kaydi ile katalog arasindaki fark yalnizca bir tire
@@ -222,9 +253,27 @@ describe('similarOwned', () => {
     expect(hits).toHaveLength(0);
   });
 
+  // Katalogda "K" iki ayri sey: FITADINON K gercek K vitamini, BAYTRIL K'de marka soneki.
+  // Tek harf, ayni olduklarini iddia etmeye yetmez. (Gercek katalogda 6 -> 0, "C" 10 -> 0.)
   it('tek harflik ad hicbir kayitla eslesmez', () => {
+    // Once testin BOSTA calismadigini dogrula: fixture'da gercekten `k` tasiyan kayit var
+    const kTasiyan = FIXTURE.filter(d => tokenizeName(d.name).includes('k'));
+    expect(kTasiyan.length).toBeGreaterThan(1);
+
     const hits = FIXTURE.filter(d => similarOwned(own('K'), d, STOP));
     expect(hits).toHaveLength(0);
+  });
+
+  // Tek harf ayirt edici sayilsaydi AYNI urunun bedenleri farkli aile gorunurdu.
+  // Gercek katalogda 57 dokuman bu yuzden ailesinden kopmustu (NEXGARD DOG S/M/L).
+  it('tek harflik beden kodu ayni aileyi bolmez', () => {
+    const s = FIXTURE.find(d => d.catalogId === 'c28');
+    const m = FIXTURE.find(d => d.catalogId === 'c29');
+
+    const hit = similarOwned(own(s.name), m, STOP);
+    expect(hit).not.toBeNull();
+    // Ambalaj imzalari farkli (11 vs 28), o yuzden GUCLU degil zayif not
+    expect(hit.samePackage).toBe(false);
   });
 
   it('jenerik uzun ad yalnizca kendi ailesini isaretler', () => {
@@ -232,12 +281,19 @@ describe('similarOwned', () => {
     expect(hits.map(h => h.catalogId)).toEqual(['c7']);
   });
 
-  // TASK-039: eskiden `min`'e bolunuyordu, tek kelimelik ad her zaman 1.0 aliyordu.
-  // "Vitamin" iki Vitamin kaydini da isaretliyordu; artik yalnizca adi gercekten
-  // "Vitamin"e yakin olani. (Gercek katalogda 11 -> 2.)
+  // TASK-039: eskiden `min`'e bolunuyordu, tek kelimelik ad her zaman 1.0 aliyordu ve
+  // "Vitamin" katalogun her yerini isaretliyordu. (Gercek katalogda 11 -> 2.)
+  //
+  // c10 ("Vitamin B Kompleks") burada UYARIYOR ve bu bilincli bir odunlesim: tek harflik
+  // "B" atilinca o kaydin ayirt edici kelimeleri {vitamin, kompleks}'e dusuyor, yani
+  // jenerik "Vitamin"e yaklasiyor. Gercek katalogda bu tetiklenmiyor ("Vitamin" 2'de
+  // kaliyor); alternatif — tek harfi paydada tutup paylasilan saymamak — ISABETI
+  // %100'den %95,5'e dusurdugu icin reddedildi (bkz. TASK-039).
   it('yaygin tek kelimelik ad tum aileyi isaretlemez', () => {
     const hits = FIXTURE.filter(d => similarOwned(own('Vitamin'), d, STOP));
-    expect(hits.map(h => h.catalogId)).toEqual(['c9']);
+
+    expect(hits.map(h => h.catalogId)).toEqual(['c9', 'c10']); // yalnizca Vitamin adlilar
+    expect(hits.length).toBeLessThan(FIXTURE.length / 10);     // katalogun geri kalani sessiz
   });
 
   it('tek jenerik kelime paylasan ad eslesmez', () => {

@@ -47,6 +47,31 @@ const STOP_MIN = 3;
 export const SIMILARITY_THRESHOLD = 0.5;
 
 /**
+ * Tek harflik kelime kanıt sayılmaz.
+ *
+ * Katalogda "K" iki ayrı şey demek: `FİTADİNON K` gerçek K vitamini, `BAYTRIL K` ise
+ * enrofloksasin — "K" orada marka soneki. Tek harf, aynı olduklarını iddia etmeye yetmez.
+ * Sorun kelimenin YAYGINLIĞI değil (stop listesi onu zaten eliyor), UZUNLUĞU.
+ *
+ * Ölçüldü (1.141 doküman): `K` 6 → **0**, `C` 10 → **0**; `B12` 9, `Vitamin` 2, `ARMAFLOR` 3,
+ * `ARMAPEN` 4 ve isabet %100 hiç değişmedi. `B12` bilerek düşmüyor: dokuz eşleşmenin dokuzu da
+ * gerçekten B12 ürünü, elle "B12" yazmış kullanıcıyı orada uyarmak doğru.
+ *
+ * Beklenmedik ikinci kazanç: `(S)`/`(M)`/`(L)` beden kodları da ayırt edici olmaktan çıktı,
+ * böylece `NEXGARD DOG S/M/L` gibi 57 dokümanın beden varyantları doğru şekilde **aynı aile**
+ * sayıldı — eskiden tek harf onları birbirinden ayırıyordu. Ambalaj imzası farklı olduğu için
+ * bunlar zaten güçlü değil zayıf not alır.
+ */
+const MIN_TOKEN_LENGTH = 2;
+
+/** Bir adın karşılaştırmaya giren kelimeleri: yeterince uzun VE ayırt edici olanlar. */
+export function distinctiveTokens(name, stopTokens) {
+  return new Set(
+    tokenizeName(name).filter(t => t.length >= MIN_TOKEN_LENGTH && !stopTokens.has(t))
+  );
+}
+
+/**
  * Ayırt edici olmayan kelimeleri **veriden öğrenir**: `ml`, `enj`, `çözelti`, `la` ve
  * ambalaj sayıları katalogun büyük bölümünde geçer, dolayısıyla bir eşleşme sinyali değildir.
  * Elle bakım gerektiren bir kelime listesi tutulmaz.
@@ -84,8 +109,8 @@ export function buildStopTokens(catalog) {
  * Eşik 0.34 / 0.4 / 0.5'te aynı sonucu veriyor — sonuç eşiğe duyarlı değil.
  */
 export function similarityScore(nameA, nameB, stopTokens) {
-  const a = new Set(tokenizeName(nameA).filter(t => !stopTokens.has(t)));
-  const b = new Set(tokenizeName(nameB).filter(t => !stopTokens.has(t)));
+  const a = distinctiveTokens(nameA, stopTokens);
+  const b = distinctiveTokens(nameB, stopTokens);
   if (!a.size || !b.size) return 0;
 
   let shared = 0;

@@ -2123,11 +2123,20 @@ ayiriyor (yukleniyor / hata / **henuz indirilmedi** / gercekten bos) ve son ikis
 kurmuyor. "Henuz indirilmedi" halinde arama alani pasif, elle ekleme yolu acik. Kural:
 *veriyi bilmiyorsak "yok" demeyiz* — fail-closed doktrininin arayuzdeki karsiligi.
 
-**Tarayicida dogrulandi:** cevrimdisi + sicak onbellek → uyari yok, arama calisiyor (3 sonuc);
-cevrimdisi + soguk onbellek → yeni mesaj cikti, alan pasif, "Katalog bos." **cikmadi**; ag geri
-acilinca 1.141 kayit dondu. Soguk kosul, kancanin sorgusuna gecici olarak eslesmeyen bir
-`where` eklenip cevrimdisi abone olunarak uretildi (gercek Firestore anlik goruntusu; degisiklik
-geri alindi).
+**Tarayicida dogrulandi — LITERAL senaryo (2026-09-08, ikinci tur):**
+
+Ilk turda soguk kosul, kancanin sorgusuna gecici bir `where` eklenerek taklit edilmisti. Ikinci
+turda gercegi yapildi: `terminate(db)` + **`clearIndexedDbPersistence(db)`** ile Firestore
+onbellegi tamamen silindi, sayfa yeniden yuklendi, katalog abonesi kurulmadan once
+`disableNetwork(db)` cagrildi. Hile yok; gercek bos onbellek, gercek cevrimdisi, gercek acilis.
+
+- Auth ayri bir IndexedDB'de (`firebaseLocalStorageDb`) durdugu icin **oturum dusmedi**
+- Katalog seciciyi acinca: "Katalog henuz indirilmedi — cevrimdisi olabilirsiniz…" cikti,
+  arama alani + iki suzgec pasif, **"Katalog bos." CIKMADI**, elle ekleme yolu acik kaldi
+- Kurtarma yolu da olculdu: `enableNetwork(db)` sonrasi **sayfa yenilenmeden 1.901 ms** icinde
+  uyari kayboldu, denetimler acildi, 1.141 kayit geldi. Arayuzdeki "Baglaninca katalog
+  kendiliginden inecek" cumlesi artik iddia degil, olculmus davranis
+- Cevrimdisi + **sicak** onbellek: uyari yok, arama calisiyor (armaflor → 3 sonuc)
 
 **Test:** `src/hooks/useDrugCatalog.test.js` yeni (9 test — kancanin ilk testleri).
 `CatalogPicker.test.jsx`'e dort bos durum + sicak onbellek (yanlis alarm) testleri eklendi.
@@ -2428,9 +2437,39 @@ gurultu duserken hicbir gercek mukerrer kacmiyor. ARMAPEN'de dusen tek kayit "Ar
 Enjeksiyonluk Suspansiyon **Tozu ve Cozucusu**" (0.20) — zaten farkli bir urun. Esik 0.34 / 0.4 /
 0.5'te ayni sonucu veriyor, yani sonuc esige duyarli degil; 0.5 korundu.
 
-**Kalan sinir (durust kayit):** `B12` 10 → 9, `K` 9 → 6. Bunlar tam olarak cozulmedi ve
-cozulemez de: adi gercekten "B12" olan bir kayit belirsizdir, veri bunu cozmuyor. Zaten o
-durumda uyarmak buyuk olcude DOGRU.
+**Kalan sinir kapatildi — ve "cozulemez" degerlendirmesi YANLISTI (ikinci tur, 2026-09-08).**
+
+Ilk turda `B12` 10 → 9 ve `K` 9 → 6 icin "veri bunu cozmuyor" yazmistim. **Hangi kayitlarin
+uyardigina bakmamistim**; bakinca ikisinin ayni sorun olmadigi cikti:
+
+- **`B12` (9 eslesme) bir kusur DEGIL.** Dokuzunun dokuzu da gercekten B12 urunu
+  (`Butafos-B12`, `FOSBAYVIT-B12`, `TEKNOSOL - B12`, `HEMOTECH B12`). Elle "B12" yazmis
+  kullaniciyi bunlarin hepsinde uyarmak dogru davranis
+- **`K` (6 eslesme) gercek gurultu.** Listede `FITADINON K` (gercek K vitamini) ile
+  `BAYTRIL K` (enrofloksasin — "K" orada marka soneki) yan yana. Tek harf, ayni olduklarini
+  iddia etmeye yetmez
+
+Yani sorun kelimenin **yayginligi** degil (stop listesi onu zaten eliyor), **uzunlugu**.
+Cozum: ayirt edici kelime en az **2 harf** olmali (`MIN_TOKEN_LENGTH`). Olculdu:
+
+| | K | C | B12 | Vitamin | ARMAFLOR | ARMAPEN | isabet |
+|---|---|---|---|---|---|---|---|
+| once | 6 | **10** | 9 | 2 | 3 | 4 | %100 |
+| sonra | **0** | **0** | 9 | 2 | 3 | 4 | %100 |
+
+`C` hic sinanmamisti ve tek basina 10 kayitta uyariyormus. Beklenmedik ikinci kazanc:
+`(S)`/`(M)`/`(L)` beden kodlari da ayirt edici olmaktan cikinca **57 dokumanin** beden
+varyantlari dogru sekilde ayni aile sayildi (`NEXGARD DOG S/M/L`) — eskiden tek harf onlari
+birbirinden ayiriyordu. Ambalaj imzalari farkli oldugu icin bunlar **zayif** not aliyor.
+
+**Reddedilen alternatif (olcumle):** "tek harf paydada kalsin ama paylasilan sayilmasin" daha
+zarif duruyordu; **isabeti %100'den %95,5'e dusurdu** — katalogun ~51 kaydi, adi birebir elle
+yazilsa uyarmayacakti. Kacirilan uyari mukerrer kayit demek, o yuzden reddedildi.
+
+**Bilincli odunlesim:** tek harf atilinca "Vitamin B Kompleks" gibi bir ad, ayirt edici
+kelimeleri {vitamin, kompleks}'e dustugu icin jenerik "Vitamin"e yaklasir. Gercek katalogda
+tetiklenmiyor (`Vitamin` 2'de kaliyor) ama mekanizma gercek; sabit katalog testinde acikca
+kayitli.
 
 ### B3 — Bolum ve sinif suzgeci
 
@@ -2477,11 +2516,15 @@ sinayan test eklendi.
 
 ### Dogrulama
 
-- 671 test (TASK-037 sonrasi 647), lint 0, build temiz
-- **19 mutasyonun 19'u yakalandi** (12 benzerlik/bolum + 7 sinif). Ilk turda ikisi sizdi ve
-  ikisi de gercek test bosluguydu: (1) `max` ile bolme — sabit katalog, Jaccard ile `max`'in
-  ayristigi durumu (**her iki tarafta da** eslesmeyen kelime) hic icermiyordu; (2) bos sonuc
-  ipucunun yalnizca bolume bakmasi. Ikisi icin de test eklendi
+- 675 test (TASK-037 sonrasi 647), lint 0, build temiz
+- **29 mutasyonun 29'u yakalandi** (12 benzerlik/bolum + 7 sinif + 10 uzunluk/gerileme). Ilk
+  turlarda ikisi sizdi ve ikisi de gercek test bosluguydu: (1) `max` ile bolme — sabit katalog,
+  Jaccard ile `max`'in ayristigi durumu (**her iki tarafta da** eslesmeyen kelime) hic
+  icermiyordu; (2) bos sonuc ipucunun yalnizca bolume bakmasi. Ikisi icin de test eklendi
+- Sabit kataloga tek harf tuzagi eklendi (`FITADINON K` + `BAYTRIL K`): eskiden "K" testi
+  **bosta calisiyordu**, fixture'da hic `k` kelimesi yoktu. Test artik once fixture'in gercekten
+  `k` tasidigini dogruluyor. Ayrica `B6` kaydi esigin tam olarak 2 oldugunu sabitliyor (3
+  olsaydi iki harflik kanit kaybolurdu — gercek katalogda da 3 olcumle daha kotu)
 - Sabit kataloga kisaltmali kayitlar (c21-c25) eklendi: gercek katalogda `enj` 185, `susp` 26
   dokumanda geciyor ve ikisi de eleniyor. Kisaltmasiz bir sabit katalog gercege benzemiyordu ve
   "ENJ. SÜSP." yazan kullanicinin kaydini bulan kodu yanlis yere kiriyordu
