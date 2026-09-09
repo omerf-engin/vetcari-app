@@ -2370,8 +2370,8 @@ kural `resource.data.userId == request.auth.uid`.
 - Iki farkli hesap ayni defteri gorur ve ikisi de islem yapabilir
 - Her islem kaydinda kimin yaptigi gorunur; eski kayitlarda "bilinmiyor" yazar
 - Uye olmayan bir kullanici o klinigin hicbir dokumanini okuyamaz/yazamaz (kural testi)
-- Rol farki en az bir yerde anlamli olur (ornegin yalnizca sahip ilac silebilir / uye davet
-  edebilir) — kapsam ayrica netlestirilecek
+- Rol farki en az iki yerde anlamli olur: yalnizca  uye davet eder;  yalnizca
+  KENDI girdigi islemi iptal edebilir (karar 3),  hepsini
 - Gocmeden sonra mevcut tek kullanicili defterler aynen calisir; veri kaybi olmaz
 - Mevcut test paketi gecer + cok kullanicili izolasyon icin yeni testler
 
@@ -2383,9 +2383,36 @@ kaldigi surece koleksiyonlar teker teker tasinamaz, hepsi ayni anda degismek zor
 **Bu bir P1 cunku urun karari:** uygulama kliniklere satilacaksa "tek kisilik defter" varsayimi
 urunun onundeki en buyuk engel. Katalogdan daha buyuk bir is.
 
-**Acik sorular (implementasyondan once netlesmeli):** bir kullanici birden fazla klinige uye
-olabilir mi (klinik secici gerekir mi) · roller kac kademe · personel kendi girdigi kaydi silebilir
-mi · faturalama/abonelik bu modele nasil oturur.
+### Urun kararlari (kullanici, 2026-09-10) — acik sorular KAPANDI
+
+1. **Bir kullanici tek klinige uye.** Coklu uyelik yok.
+2. **Iki rol yeter:** `owner` / `staff`.
+3. **Personel kendi girdigi kaydi silebilir**, ama islemin **izi kayitlarda kalir** (bugunku
+   iptal davranisinin aynisi: borc dokumani silinir, log KALIR ve ustu cizili gorunur).
+4. **Faturalama:** standart pakete **1 owner + 1 staff** dahil; ek personel ek ucrete tabi.
+
+### Bu kararlarin ZORLADIGI uc sonuc
+
+**(a) Tek uyelik, `memberships` dokumanini gereksiz kilabilir.** Bir kullanici tek klinige
+aitse, kimlik dogrudan **auth custom claim**'inde tasinabilir (`request.auth.token.clinicId`).
+Kural o zaman `request.auth.token.clinicId == resource.data.clinicId` olur: **sifir dokuman
+okumasi**. `memberships` + `get()` yolunda ise her kural degerlendirmesi bir okuma harcar.
+Bedeli: claim'i basan bir sunucu tarafi (Cloud Function ya da Admin SDK) gerekir. Karar
+implementasyondan once verilmeli — kural sekli buna bagli.
+
+**(b) "Kendi girdigi kayit" ifadesi `actorId`'yi ZORUNLU kiliyor.** Bugun hicbir borc
+dokumaninda ya da logda "kim girdi" yok. Silme yetkisini "kendi kaydi" ile sinirlamak icin
+iptal guard'i (`utils/batchCancel.js`) islemi baslatan `entry` logunun `actorId`'sine bakmali:
+`actorId == su anki kullanici` **ya da** rol `owner`. Bu, `actorId`'yi kozmetik bir alandan
+**yetki alanina** yukseltiyor — eski kayitlarda alan yok, orada fail-closed davranilmali
+(owner iptal edebilir, staff edemez; "bilinmiyor" uydurulmaz).
+
+**(c) Koltuk siniri istemciden zorlanamaz.** Firestore kurallari **sayamaz** (aggregate sorgu
+yok). "1 owner + 1 staff" sinirini kuralda uygulamak icin klinik dokumaninda bir `memberCount`
+tutmak ve kuralin `get(clinic).data.memberCount < seatLimit` bakmasi gerekir — ama `memberCount`
+istemciden yazilabildigi surece bu sinir tavsiye niteliginde kalir. **Bu, projenin ilk gercek
+sunucu tarafi ihtiyaci.** Faturalama zorlamasi ya bir Cloud Function'a taşınmali ya da bilincli
+olarak "yumusak sinir + faturada mutabakat" kabul edilmeli.
 
 ---
 
