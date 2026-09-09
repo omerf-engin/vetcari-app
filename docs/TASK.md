@@ -2370,8 +2370,8 @@ kural `resource.data.userId == request.auth.uid`.
 - Iki farkli hesap ayni defteri gorur ve ikisi de islem yapabilir
 - Her islem kaydinda kimin yaptigi gorunur; eski kayitlarda "bilinmiyor" yazar
 - Uye olmayan bir kullanici o klinigin hicbir dokumanini okuyamaz/yazamaz (kural testi)
-- Rol farki en az iki yerde anlamli olur: yalnizca  uye davet eder;  yalnizca
-  KENDI girdigi islemi iptal edebilir (karar 3),  hepsini
+- Rol farki en az iki yerde anlamli olur: yalnizca `owner` uye davet eder; `staff` yalnizca
+  KENDI girdigi islemi iptal edebilir (karar 3), `owner` hepsini
 - Gocmeden sonra mevcut tek kullanicili defterler aynen calisir; veri kaybi olmaz
 - Mevcut test paketi gecer + cok kullanicili izolasyon icin yeni testler
 
