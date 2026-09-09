@@ -2516,7 +2516,7 @@ sinayan test eklendi.
 
 ### Dogrulama
 
-- 675 test (TASK-037 sonrasi 647), lint 0, build temiz
+- 676 test (TASK-037 sonrasi 647), lint 0, build temiz
 - **29 mutasyonun 29'u yakalandi** (12 benzerlik/bolum + 7 sinif + 10 uzunluk/gerileme). Ilk
   turlarda ikisi sizdi ve ikisi de gercek test bosluguydu: (1) `max` ile bolme — sabit katalog,
   Jaccard ile `max`'in ayristigi durumu (**her iki tarafta da** eslesmeyen kelime) hic
@@ -2525,6 +2525,12 @@ sinayan test eklendi.
   **bosta calisiyordu**, fixture'da hic `k` kelimesi yoktu. Test artik once fixture'in gercekten
   `k` tasidigini dogruluyor. Ayrica `B6` kaydi esigin tam olarak 2 oldugunu sabitliyor (3
   olsaydi iki harflik kanit kaybolurdu — gercek katalogda da 3 olcumle daha kotu)
+- **Stop kelime ORAN dali sinanmiyormus.** Sabit katalog 30 kayit oldugu icin esik hep taban
+  dalindan geciyordu (`max(3, 30*0.02=0.6) = 3`). Mutasyon denetimi dogruladi: `STOP_RATIO = 0`
+  yapilinca butun paket **yesil kaliyordu**. O mutasyon gercek katalogda yikici olurdu — limit
+  3'e duser, `armaflor` (3 dokuman) stop kelime olur ve ARMAFLOR eslesmesi tamamen kaybolurdu.
+  Sabit kataloga dokunmadan, 300 kayitlik **sentetik** bir katalogla oran dali icin ayri test
+  yazildi (%3.3 elenir, %1.7 elenmez); mutasyon artik yakalaniyor
 - Sabit kataloga kisaltmali kayitlar (c21-c25) eklendi: gercek katalogda `enj` 185, `susp` 26
   dokumanda geciyor ve ikisi de eleniyor. Kisaltmasiz bir sabit katalog gercege benzemiyordu ve
   "ENJ. SÜSP." yazan kullanicinin kaydini bulan kodu yanlis yere kiriyordu

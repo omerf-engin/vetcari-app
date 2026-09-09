@@ -153,6 +153,32 @@ describe('buildStopTokens', () => {
   });
 });
 
+/**
+ * Sabit katalog 30 kayit oldugu icin esik HEP taban dalindan geciyor
+ * (`max(3, 30*0.02=0.6) = 3`) ve ORAN dali hic sinanmiyordu. Mutasyon denetimi bunu
+ * dogruladi: `STOP_RATIO = 0` yapilinca butun paket yesil kaliyordu.
+ *
+ * O mutasyon gercek katalogda yikici olurdu: limit 3'e duser, `armaflor` (3 dokuman)
+ * stop kelime olur ve ARMAFLOR eslesmesi tamamen kaybolurdu. Bu yuzden oran dali
+ * sabit katalogdan bagimsiz, SENTETIK bir katalogla sinanir.
+ */
+describe('buildStopTokens — oran dali', () => {
+  // 300 kayit -> limit = max(3, 300*0.02 = 6) = 6
+  const BUYUK = Array.from({ length: 300 }, (_, i) => ({
+    catalogId: `b${i}`,
+    name: [`Urun${i}`, i < 10 ? 'yaygin' : '', i < 5 ? 'nadir' : ''].filter(Boolean).join(' '),
+  }));
+
+  it('esik ORANA gore olusur, tabana gore degil', () => {
+    const stop = buildStopTokens(BUYUK);
+
+    expect(stop.has('yaygin')).toBe(true);   // 10/300 = %3.3, oranin ustunde
+    // 5/300 = %1.7: TABANIN (3) ustunde ama ORANIN altinda. Oran silinseydi
+    // bu kelime de elenir ve marka adlari ayirt edici olmaktan cikardi.
+    expect(stop.has('nadir')).toBe(false);
+  });
+});
+
 describe('distinctiveTokens', () => {
   it('tek harflik kelimeleri ve stop kelimeleri eler', () => {
     expect([...distinctiveTokens('Baytril K Enjeksiyonluk Çözelti - 50 ml', STOP)]).toEqual(['baytril']);
