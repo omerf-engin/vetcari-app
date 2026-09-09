@@ -5,7 +5,7 @@
 > cevrimdisiyken "bos" gorunuyordu, duzeltildi). Test 676, lint 0/0, build basarili.
 > Firestore'da 1.141 katalog dokumani.
 > BAKIM-002 tamamlandi: kural DAVRANIS testleri (emulator, 64 test) — yazilirken bir
-> **sahiplik devri acigi** bulundu ve kapatildi; kural degisikligi henuz YAYINLANMADI.
+> **sahiplik devri acigi** bulundu ve kapatildi. Kural yayinlandi ve CANLIDA dogrulandi.
 > Kalan: TASK-038 (tek defter cok kullanici, P1), TASK-022 (ilac stok takibi),
 > TASK-023 (TypeScript migrasyonu).
 

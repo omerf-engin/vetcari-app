@@ -2622,10 +2622,25 @@ AYRI satirlarda olmali; birlesik `allow update, delete:` kalibi bu ayrimi imkans
   dogrulamiyor · `allow update` yine `canWriteOwned` kullaniyor · `signedIn()` hep true
 - `npm test` 676, lint 0, build temiz
 
-### YAYINLANMADI
+### Yayinlandi ve CANLIDA dogrulandi (2026-09-10)
 
-Kural degisikligi **yalnizca depoda**; canlida hala eski (acik) kural duruyor.
-`firebase deploy --only firestore:rules --project vetcari` kullanici onayiyla calistirilacak.
+`firebase deploy --only firestore:rules --project vetcari` — kullanici onayiyla calistirildi,
+kurallar derlendi ve yayinlandi.
+
+Deploy mesajina guvenilmedi; acigin gercekten kapandigi **uretimde** sinandi. Gercek bir
+oturumla, tek kullanimlik bir `drugs` kaydi uzerinde:
+
+| Adim | Sonuc |
+|---|---|
+| Kendi `userId`'imle olustur | izin verildi |
+| Normal guncelleme (fiyat) | izin verildi — **gerileme yok** |
+| `userId`'yi baskasina cevir (`updateDoc`) | **permission-denied** |
+| `setDoc` ile sahiplik devri | **permission-denied** |
+| Dokumanin sahibi | hala ben |
+| Temizlik (sil) | silindi — kalinti yok |
+
+Ardindan sayfa yenilendi: veri normal yuklendi, konsolda tek bir `permission-denied` yok.
+Sikilastirma uygulamanin hicbir yolunu kirmiyor.
 
 ---
 
