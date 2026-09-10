@@ -2391,6 +2391,39 @@ urunun onundeki en buyuk engel. Katalogdan daha buyuk bir is.
    iptal davranisinin aynisi: borc dokumani silinir, log KALIR ve ustu cizili gorunur).
 4. **Faturalama:** standart pakete **1 owner + 1 staff** dahil; ek personel ek ucrete tabi.
 
+### Ilerleme — TASK-038a (klinik veri modeline goc)
+
+Gorev ikiye bolundu: **038a** veri modeli gocu (kullanici fark gormez), **038b** davet akisi
+ve rol arayuzu. Goc davete ihtiyac duymuyor; mevcut her kullanici kendi kliniginin `owner`'i
+olur. Riskli olan 038a; tek basina oturmasi gerekiyor.
+
+- [x] **1. asama — indeksler (yayinlandi 2026-09-10).** Bes bilesik indeksin BESI de
+      kullanimda (dordu musteri silme yolundaki aktif borc kontrolunde, biri
+      `useFirestore`'un transactions dinleyicisinde). Hepsine `clinicId` ikizi eklendi,
+      eskiler duruyor. Sorgular cevrilmeden once ikizler hazir olmali; yoksa dinleyiciler
+      "index required" ile duser ve uygulama BOS acilir
+- [x] **2. asama — kural genislemesi (yayinlandi 2026-09-10).** Sahiplik iki yoldan kabul
+      ediliyor: eski `userId` esitligi VEYA uyelikteki `clinicId`. `useClinic` kancasi
+      eklendi (plandaki siralama duzeltildi: 5. asamada degil burada, cunku cift yazma
+      `clinicId`'yi bilmek zorunda)
+- [ ] 3. asama — `ctx = { clinicId, actorId }` ile cift yazma
+- [ ] 4. asama — goc scripti (`--dry-run` + Firestore export once)
+- [ ] 5. asama — sorgu gecisi
+- [ ] 6. asama — daraltma (eski `userId` yolu kaldirilir)
+
+**Gecis penceresinin kritik kilidi — planda gorulmemisti.** Eski `userId` yolu acikken
+kullanici kendi kaydina BASKA bir klinigin `clinicId`'sini yazabilseydi, BAKIM-002'de
+kapatilan enjeksiyon acigi bu sefer `clinicId` uzerinden geri gelirdi. `incomingClinicSafe`
+bunu kapatiyor: yazilan dokumanda `clinicId` varsa mutlaka kendi klinigim olmali.
+
+`clinics` icin kural blogu BILEREK yazilmadi — uygulama henuz okumuyor, blogu olmayan
+koleksiyon reddedilir (varsayilan fail-closed). Arayuz okumaya baslayinca (038b) eklenecek.
+
+**Canlida dogrulandi (2026-09-10):** `clinicId`'siz olusturma izin veriliyor (gerileme yok) ·
+yabanci `clinicId` ile olusturma **permission-denied** · kendi kaydina yabanci `clinicId`
+ekleme **permission-denied** · normal guncelleme calisiyor · kendi uyeligi okunuyor,
+baskasininki **permission-denied**. Test kaydi silindi, kalinti yok.
+
 ### Bu kararlarin ZORLADIGI uc sonuc
 
 **(a) Tek uyelik, `memberships` dokumanini gereksiz kilabilir.** Bir kullanici tek klinige
