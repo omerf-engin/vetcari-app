@@ -16,6 +16,9 @@ import {
 import { todayLocal } from './dates';
 import { summarizePeriod } from './reporting';
 
+// Goc oncesi durum: uyelik yok, `clinicId` null ve dokumana yazilmaz (TASK-038a).
+const SESSION = { actorId: 'uid1', clinicId: null };
+
 const mockBatch = createMockBatch();
 // Surum kontrollu islemler transaction kullaniyor; yazmalari ayni diziye dussun
 setTransactionSink(mockBatch.operations);
@@ -75,7 +78,7 @@ describe('yazim yolu -> rapor: hicbir hareket olculemeyen kalmaz', () => {
       drugPaidAmount: 200,
       drugPaidDate: '2026-01-21',
       applyInflation: true
-    }, 'uid1');
+    }, SESSION);
 
     const s = summarize();
     expect(s.unmeasured).toBe(0);
@@ -86,38 +89,38 @@ describe('yazim yolu -> rapor: hicbir hareket olculemeyen kalmaz', () => {
     await applyPaymentOperations(
       { id: 'cust1', balance: 0 }, 1500,
       [{ id: 's1', type: 'service', deduct: 1000 }],
-      [{ id: 's1', customerId: 'cust1', amount: 2000 }], [], 'uid1'
+      [{ id: 's1', customerId: 'cust1', amount: 2000 }], [], SESSION
     );
     expect(summarize().unmeasured).toBe(0);
   });
 
   it('iade ve fazla iade', async () => {
-    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, 4, 0, 'uid1');
+    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, 4, 0, SESSION);
     expect(summarize().unmeasured).toBe(0);
 
     mockBatch.operations.length = 0;
-    await returnDrug({ id: 'dd2', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 50 }, 8, 0, 'uid1');
+    await returnDrug({ id: 'dd2', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 50 }, 8, 0, SESSION);
     expect(summarize().unmeasured).toBe(0);
   });
 
   it('zam', async () => {
     await updateDrugPrice('drug1', 120, [
       { id: 'dd1', drugId: 'drug1', customerId: 'cust1', qty: 5, maxPrice: 100, isFixed: false }
-    ], 'uid1', 100);
+    ], SESSION, 100);
     expect(summarize().unmeasured).toBe(0);
   });
 
   it('iptaller', async () => {
-    await cancelDebtItemOperations('cust1', { id: 'dd1', type: 'drug', qty: 4, maxPrice: 25, drugId: 'drug1' }, 'Hatalı', 'uid1');
+    await cancelDebtItemOperations('cust1', { id: 'dd1', type: 'drug', qty: 4, maxPrice: 25, drugId: 'drug1' }, 'Hatalı', SESSION);
     expect(summarize().unmeasured).toBe(0);
 
     mockBatch.operations.length = 0;
-    await cancelDebtTransactionOperations('cust1', [{ id: 's1', type: 'service', amount: 500 }], 'b1', 'Hatalı', 'uid1');
+    await cancelDebtTransactionOperations('cust1', [{ id: 's1', type: 'service', amount: 500 }], 'b1', 'Hatalı', SESSION);
     expect(summarize().unmeasured).toBe(0);
   });
 
   it('kilit logu ne toplanir ne olculemez sayilir', async () => {
-    await toggleDebtLock({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', isFixed: false }, 'uid1');
+    await toggleDebtLock({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', isFixed: false }, SESSION);
     const s = summarize();
     expect(s.unmeasured).toBe(0);
     expect(s.movementCount).toBe(0);
@@ -130,7 +133,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
     await addDebtTransactionOperations('cust1', {
       date: TODAY,
       service: { desc: 'Muayene', amount: 1000, paidAmount: 400, paidDate: TODAY }
-    }, 'uid1');
+    }, SESSION);
 
     const s = summarize();
     expect(s.debtOpened).toBe(1000);
@@ -143,7 +146,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
     await addDebtTransactionOperations('cust1', {
       date: TODAY,
       service: { desc: 'Muayene', amount: 1000, paidAmount: 995, paidDate: TODAY }
-    }, 'uid1');
+    }, SESSION);
 
     const s = summarize();
     expect(s.debtOpened).toBe(1000);
@@ -157,7 +160,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
     await applyPaymentOperations(
       { id: 'cust1', balance: 0 }, 1500,
       [{ id: 's1', type: 'service', deduct: 1000 }],
-      [{ id: 's1', customerId: 'cust1', amount: 2000 }], [], 'uid1'
+      [{ id: 's1', customerId: 'cust1', amount: 2000 }], [], SESSION
     );
 
     const s = summarize();
@@ -171,7 +174,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
     await applyPaymentOperations(
       { id: 'cust1', balance: 400 }, 600,
       [{ id: 's1', type: 'service', deduct: 1000 }],
-      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], 'uid1'
+      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], SESSION
     );
 
     const s = summarize();
@@ -182,7 +185,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
 
   it('fazla iadede yalnizca borca sayilan kisim alacagi azaltir', async () => {
     // 5 adet x 50 = 250 borc, 8 adet iade -> 250 kapanir, 150 avansa
-    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 50 }, 8, 0, 'uid1');
+    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 50 }, 8, 0, SESSION);
 
     const s = summarize();
     expect(s.returned).toBe(250);
@@ -193,7 +196,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
 
   it('iade + supurucu birlikte borcun tamamini kapatir', async () => {
     // 10 adet x 50 = 500 borc, 9.9 adet iade -> kalan 5 TL supurulur
-    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, 9.9, 0, 'uid1');
+    await returnDrug({ id: 'dd1', customerId: 'cust1', drugId: 'drug1', qty: 10, maxPrice: 50 }, 9.9, 0, SESSION);
 
     const s = summarize();
     expect(Math.round((s.returned + s.writeoff) * 100) / 100).toBe(500);
@@ -203,7 +206,7 @@ describe('yazim yolu -> rapor: toplamlar', () => {
   it('zam alacagi artirir', async () => {
     await updateDrugPrice('drug1', 120, [
       { id: 'dd1', drugId: 'drug1', customerId: 'cust1', qty: 5, maxPrice: 100, isFixed: false }
-    ], 'uid1', 100);
+    ], SESSION, 100);
 
     const s = summarize();
     expect(s.priceUp).toBe(100);
@@ -217,7 +220,7 @@ describe('yazim yolu -> rapor: eleme', () => {
       { id: 'cust1', balance: 0 }, 1500,
       [{ id: 's1', type: 'service', deduct: 1000 }],
       // `desc` sart: `revertPaymentOperations` koleksiyonu `before.desc` varligindan secer
-      [{ id: 's1', customerId: 'cust1', desc: 'Muayene', amount: 2000 }], [], 'uid1'
+      [{ id: 's1', customerId: 'cust1', desc: 'Muayene', amount: 2000 }], [], SESSION
     );
 
     // Geri alma, odeme gruubunun kendi loglariyla beslenir (uygulamadaki akisin aynisi)
@@ -226,7 +229,7 @@ describe('yazim yolu -> rapor: eleme', () => {
 
     // Surum kontrolu (TASK-033): geri alinacak borc dokumani var olmali
     seedDoc('serviceDebts/s1', { customerId: 'cust1', desc: 'Muayene', amount: 1000 });
-    await revertPaymentOperations({ id: 'cust1', balance: 500 }, paymentLogs, 'Yanlış', 'uid1');
+    await revertPaymentOperations({ id: 'cust1', balance: 500 }, paymentLogs, 'Yanlış', SESSION);
 
     const s = summarize();
     expect(s.collected).toBe(0);
@@ -239,14 +242,14 @@ describe('yazim yolu -> rapor: eleme', () => {
     await addDebtTransactionOperations('cust1', {
       date: TODAY,
       service: { desc: 'Muayene', amount: 1000 }
-    }, 'uid1');
+    }, SESSION);
 
     const entryBatchId = writtenLogs()[0].batchId;
     expect(summarize().debtOpened).toBe(1000);
 
     seedDoc('serviceDebts/s1', { customerId: 'cust1', amount: 1000 });
     await cancelDebtTransactionOperations(
-      'cust1', [{ id: 's1', type: 'service', amount: 1000 }], entryBatchId, 'Hatalı giriş', 'uid1'
+      'cust1', [{ id: 's1', type: 'service', amount: 1000 }], entryBatchId, 'Hatalı giriş', SESSION
     );
 
     const s = summarize();
@@ -260,12 +263,12 @@ describe('yazim yolu -> rapor: eleme', () => {
     await addDebtTransactionOperations('cust1', {
       date: TODAY,
       service: { desc: 'Muayene', amount: 1000 }
-    }, 'uid1');
+    }, SESSION);
 
     const debtId = writtenLogs()[0].debtId;
 
     await cancelDebtItemOperations(
-      'cust1', { id: debtId, type: 'service', desc: 'Muayene', amount: 1000 }, 'Kalanı sil', 'uid1'
+      'cust1', { id: debtId, type: 'service', desc: 'Muayene', amount: 1000 }, 'Kalanı sil', SESSION
     );
 
     const s = summarize();
@@ -280,12 +283,12 @@ describe('yazim yolu -> rapor: donem yerlesimi', () => {
     await addDebtTransactionOperations('cust1', {
       date: '2026-01-20',
       service: { desc: 'Muayene', amount: 1000 }
-    }, 'uid1');
+    }, SESSION);
 
     await applyPaymentOperations(
       { id: 'cust1', balance: 0 }, 300,
       [{ id: 's1', type: 'service', deduct: 300 }],
-      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], 'uid1'
+      [{ id: 's1', customerId: 'cust1', amount: 1000 }], [], SESSION
     );
 
     const ocak = summarize({ start: '2026-01-01', end: '2026-01-31' });
@@ -302,7 +305,7 @@ describe('yazim yolu -> rapor: donem yerlesimi', () => {
       date: '2026-01-20',
       drugItems: [item({ id: 'drug1', price: 120 }, 5, 100)],
       applyInflation: true
-    }, 'uid1');
+    }, SESSION);
 
     expect(summarize({ start: '2026-01-01', end: '2026-01-31' }).inflation).toBe(0);
     expect(summarize({ start: TODAY, end: TODAY }).inflation).toBe(100);

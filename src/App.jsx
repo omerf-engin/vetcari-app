@@ -7,6 +7,7 @@ import DrugsView from './components/drugs/DrugsView';
 import ReportsView from './components/reports/ReportsView';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/auth/Login';
+import { useClinic } from './hooks/useClinic';
 import { useFirestore } from './hooks/useFirestore';
 import { useToast } from './hooks/useToast';
 import { CustomerProvider } from './contexts/CustomerContext';
@@ -44,8 +45,17 @@ const revsOf = (...debtArrays) => {
 
 export default function App() {
   const { currentUser, loading } = useAuth();
+  const { clinicId } = useClinic(currentUser);
   const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(currentUser);
   const { toast, confirm } = useToast();
+
+  // Yazma işlemlerinin taşıdığı kimlik (TASK-038a): kim yaptı + hangi defter.
+  // Tek nesne, çünkü iki ayrı konumsal parametre yer değiştirse hata SESSİZ olurdu.
+  // Göç tamamlanana kadar `clinicId` null; `ownerFields` alanı o zaman hiç yazmaz.
+  const session = useMemo(
+    () => ({ actorId: currentUser?.uid ?? null, clinicId }),
+    [currentUser, clinicId]
+  );
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
 
@@ -61,7 +71,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir müşteri zaten kayıtlı! Lütfen ayırt edici bir ek belirterek farklı bir isim girin.`);
       return;
     }
-    try { await addCustomer(name, currentUser.uid); toast.success('Müşteri eklendi'); }
+    try { await addCustomer(name, session); toast.success('Müşteri eklendi'); }
     catch (err) { handleError(err, 'Müşteri Ekleme'); }
   };
 
@@ -102,7 +112,7 @@ export default function App() {
     );
     if (ok) {
       try {
-        await deleteCustomer(customerId, currentUser.uid);
+        await deleteCustomer(customerId, session);
         setSelectedCustomerId(null);
         toast.success('Müşteri silindi');
       } catch (err) { handleError(err, 'Müşteri Silme'); }
@@ -121,7 +131,7 @@ export default function App() {
       toast.warning(`"${name}" adında bir ilaç sistemde zaten mevcut! Fiyatını değiştirmek için "Fiyatı Güncelle" butonunu kullanabilirsiniz.`);
       return;
     }
-    try { await addDrug(name, price, currentUser.uid, catalogMeta); toast.success('İlaç eklendi'); }
+    try { await addDrug(name, price, session, catalogMeta); toast.success('İlaç eklendi'); }
     catch (err) { handleError(err, 'İlaç Ekleme'); }
   };
 
@@ -144,7 +154,7 @@ export default function App() {
   const handleUpdateDrugPrice = async (drugId, newPrice) => {
     const drug = drugs.find(d => d.id === drugId);
     try {
-      await updateDrugPrice(drugId, newPrice, drugDebts, currentUser.uid, drug?.price);
+      await updateDrugPrice(drugId, newPrice, drugDebts, session, drug?.price);
       toast.success('Fiyat güncellendi');
     }
     catch (err) { handleError(err, 'Fiyat Güncelleme'); }
@@ -163,7 +173,7 @@ export default function App() {
     try {
       // Modal'ın taşıdığı `priceLogs` bayat olabilir; yazıma guard'ın taze grubu gider
       const res = await revertDrugPriceOperations(
-        drugId, fresh.batch.logs, currentUser.uid, revsOf(drugDebts)
+        drugId, fresh.batch.logs, session, revsOf(drugDebts)
       );
       if (!res.ok) { toast.error(revertBlockedMessage(res.reason)); return; }
       toast.success('Zam geri alındı');
@@ -174,30 +184,30 @@ export default function App() {
   const toggleDebtLockHandler = useCallback(async (debtId) => {
     const debt = drugDebts.find(d => d.id === debtId);
     if (!debt) return;
-    try { await toggleDebtLock(debt, currentUser.uid); }
+    try { await toggleDebtLock(debt, session); }
     catch (err) { handleError(err, 'Kilit Değiştirme'); }
-  }, [drugDebts, currentUser, handleError]);
+  }, [drugDebts, session, handleError]);
 
   const toggleBatchLockHandler = useCallback(async (debts) => {
     if (!debts || debts.length === 0) return;
-    try { await toggleBatchLockOperations(debts, currentUser.uid); }
+    try { await toggleBatchLockOperations(debts, session); }
     catch (err) { handleError(err, 'Toplu Kilit Değiştirme'); }
-  }, [currentUser, handleError]);
+  }, [session, handleError]);
 
   const handleDrugReturn = useCallback(async (debt, returnQty) => {
     const customer = customers.find(c => c.id === debt.customerId);
     if (!customer) return;
-    try { await returnDrug(debt, returnQty, customer.balance, currentUser.uid); }
+    try { await returnDrug(debt, returnQty, customer.balance, session); }
     catch (err) { handleError(err, 'İade İşlemi'); }
-  }, [customers, currentUser, handleError]);
+  }, [customers, session, handleError]);
 
   const handleBatchReturn = useCallback(async (items) => {
     if (!items || items.length === 0) return;
     const customer = customers.find(c => c.id === items[0].debt.customerId);
     if (!customer) return;
-    try { await returnBatchOperations(items, customer.balance, currentUser.uid); toast.success('İade işlemi uygulandı'); }
+    try { await returnBatchOperations(items, customer.balance, session); toast.success('İade işlemi uygulandı'); }
     catch (err) { handleError(err, 'Toplu İade'); }
-  }, [customers, currentUser, toast, handleError]);
+  }, [customers, session, toast, handleError]);
 
   /**
    * Yanlış girilen bir işlemin tüm kalemlerini gerekçeyle iptal eder.
@@ -218,23 +228,23 @@ export default function App() {
     const customerId = group.items?.[0]?.customerId ?? selectedCustomerId;
     try {
       const res = await cancelDebtTransactionOperations(
-        customerId, group.items, group.batchId, reason, currentUser.uid,
+        customerId, group.items, group.batchId, reason, session,
         revsOf(serviceDebts, drugDebts)
       );
       if (!res.ok) { toast.error(cancelBlockedMessage(res.reason)); return; }
       toast.success('İşlem iptal edildi');
     } catch (err) { handleError(err, 'İşlem İptali'); }
-  }, [selectedCustomerId, transactions, serviceDebts, drugDebts, currentUser, toast, handleError]);
+  }, [selectedCustomerId, transactions, serviceDebts, drugDebts, session, toast, handleError]);
 
   /** Tek bir borç kalemini (hizmet veya ilaç) gerekçeyle iptal eder. */
   const handleCancelItem = useCallback(async (item, reason) => {
     if (!item || !reason) return;
     const customerId = item.customerId ?? selectedCustomerId;
     try {
-      await cancelDebtItemOperations(customerId, item, reason, currentUser.uid);
+      await cancelDebtItemOperations(customerId, item, reason, session);
       toast.success('Kalem iptal edildi');
     } catch (err) { handleError(err, 'Kalem İptali'); }
-  }, [selectedCustomerId, currentUser, toast, handleError]);
+  }, [selectedCustomerId, session, toast, handleError]);
 
   /** Bir ziyarette girilen hizmet ve ilaç kalemlerini tek atomik işlem olarak yazar. */
   const addDebtTransaction = useCallback(async (customerId, payload) => {
@@ -247,9 +257,9 @@ export default function App() {
     if (!payload.service && resolvedItems.length === 0) return;
 
     try {
-      await addDebtTransactionOperations(customerId, { ...payload, drugItems: resolvedItems }, currentUser.uid);
+      await addDebtTransactionOperations(customerId, { ...payload, drugItems: resolvedItems }, session);
     } catch (err) { handleError(err, 'Borç Ekleme'); }
-  }, [drugs, currentUser, handleError]);
+  }, [drugs, session, handleError]);
 
   /**
    * Son tahsilatı gerekçeyle geri alır. Guard yazımdan hemen önce tekrar çalışır: modal
@@ -267,20 +277,20 @@ export default function App() {
 
     try {
       const res = await revertPaymentOperations(
-        customer, fresh.batch.logs, reason, currentUser.uid,
+        customer, fresh.batch.logs, reason, session,
         revsOf(serviceDebts, drugDebts)
       );
       if (!res.ok) { toast.error(revertPaymentBlockedMessage(res.reason)); return; }
       toast.success('Tahsilat geri alındı');
     } catch (err) { handleError(err, 'Tahsilat Geri Alma'); }
-  }, [customers, selectedCustomerId, transactions, serviceDebts, drugDebts, currentUser, toast, handleError]);
+  }, [customers, selectedCustomerId, transactions, serviceDebts, drugDebts, session, toast, handleError]);
 
   const applyPayment = useCallback(async (customerId, receivedAmount, distributionArr) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
-    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts, currentUser.uid); toast.success('Tahsilat başarıyla uygulandı'); }
+    try { await applyPaymentOperations(customer, receivedAmount, distributionArr, serviceDebts, drugDebts, session); toast.success('Tahsilat başarıyla uygulandı'); }
     catch (err) { handleError(err, 'Tahsilat'); }
-  }, [customers, serviceDebts, drugDebts, currentUser, toast, handleError]);
+  }, [customers, serviceDebts, drugDebts, session, toast, handleError]);
 
   const customerProviderValue = useMemo(() => {
     if (!selectedCustomerId) return null;

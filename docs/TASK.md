@@ -2406,7 +2406,15 @@ olur. Riskli olan 038a; tek basina oturmasi gerekiyor.
       ediliyor: eski `userId` esitligi VEYA uyelikteki `clinicId`. `useClinic` kancasi
       eklendi (plandaki siralama duzeltildi: 5. asamada degil burada, cunku cift yazma
       `clinicId`'yi bilmek zorunda)
-- [ ] 3. asama — `ctx = { clinicId, actorId }` ile cift yazma
+- [x] **3. asama — cift yazma.** Konumsal `userId` parametresi `session = { actorId, clinicId }`
+      nesnesine dondu (16 fonksiyondan 14'u + `createLog`). Tek nesne, cunku iki konumsal
+      parametre yer degistirse hata SESSIZ olurdu — kayit yanlis deftere yazilirdi.
+      `ownerFields` sahiplik alanlarini uretir ve **`clinicId` yoksa alani HIC yazmaz**:
+      `clinicId: null` yazmak kuraldaki `'clinicId' in request.resource.data` kontrolunu
+      tetikler ve goc tamamlanana kadar TUM yazmalar `permission-denied` alirdi.
+      Bilinen sinir: `App.jsx` birim testi olmayan bir entegrasyon noktasi; oradaki yanlis
+      baglama iki mutasyonda SIZDI. Karsiligi olarak `ownerFields` yanlis sekle karsi
+      `TypeError` firlatiyor (hata cagri anina cekiliyor) ve baglama tarayicida dogrulandi.
 - [ ] 4. asama — goc scripti (`--dry-run` + Firestore export once)
 - [ ] 5. asama — sorgu gecisi
 - [ ] 6. asama — daraltma (eski `userId` yolu kaldirilir)
