@@ -2415,7 +2415,38 @@ olur. Riskli olan 038a; tek basina oturmasi gerekiyor.
       Bilinen sinir: `App.jsx` birim testi olmayan bir entegrasyon noktasi; oradaki yanlis
       baglama iki mutasyonda SIZDI. Karsiligi olarak `ownerFields` yanlis sekle karsi
       `TypeError` firlatiyor (hata cagri anina cekiliyor) ve baglama tarayicida dogrulandi.
-- [ ] 4. asama — goc scripti (`--dry-run` + Firestore export once)
+- [ ] 4. asama — goc scripti (`--dry-run` + yedek once) — **hazirligi yapildi (2026-09-22)**
+
+#### Goc oncesi TABAN (2026-09-22, silmeden sonra)
+
+Veritabaninda IKI auth hesabi vardi. `omerf.ngin@gmail.com` test hesabiydi (95 dokuman,
+uydurma musteriler); kullanici karariyla **verisi tamamen silindi**, auth hesabi KORUNDU —
+TASK-038b'de "personel" rolunu sinayacak ikinci kullanici o olacak.
+
+Geriye yalnizca asil defter kaldi (`vet.45.cdm@gmail.com`, uid `R5lz...`):
+
+| koleksiyon | dokuman |
+|---|---|
+| customers | 159 |
+| drugs | 352 |
+| serviceDebts | 50 |
+| drugDebts | 524 |
+| transactions | 1103 |
+| **toplam** | **2188** |
+
+`clinicId` tasiyan 0 · `memberships` 0 · `clinics` 0 · **`userId` tasimayan 0** (oksuz kayit
+yok, goc tam kapsayacak). Goc sonrasi bu sayilar BIREBIR tutmali.
+
+**Olcegin zorladigi uc sey:** (1) Firestore batch siniri 500, 2188 dokuman parcalanmali
+(`loadDrugCatalog.js`'teki desen). (2) Defter aktif kullanimda; goc sirasinda yazilan yeni
+kayitlar `clinicId` almadan dogar, bu yuzden script **yeniden calistirilabilir** olmali ve
+kapanista **ikinci bir tur** atilmali (ikinci tur 0 damgaliyorsa temiz). (3) Tek klinik
+olusacak, test hesabi artik veri tasimadigi icin ikinci klinige gerek yok.
+
+**Yedekler alindi ve BAGIMSIZ dogrulandi** (script ciktisina guvenilmedi; dosya canli
+Firestore'a karsi karsilastirildi — eksik 0, yabanci kayit 0): asil defter tek basina
+(2188) ve tam veritabani (2283, silme oncesi). `scripts/backup-*.json` `.gitignore`
+kapsaminda — yedek gercek musteri adi ve borc tutari iceriyor, depo PUBLIC.
 - [ ] 5. asama — sorgu gecisi
 - [ ] 6. asama — daraltma (eski `userId` yolu kaldirilir)
 
