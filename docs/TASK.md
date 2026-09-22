@@ -2415,7 +2415,14 @@ olur. Riskli olan 038a; tek basina oturmasi gerekiyor.
       Bilinen sinir: `App.jsx` birim testi olmayan bir entegrasyon noktasi; oradaki yanlis
       baglama iki mutasyonda SIZDI. Karsiligi olarak `ownerFields` yanlis sekle karsi
       `TypeError` firlatiyor (hata cagri anina cekiliyor) ve baglama tarayicida dogrulandi.
-- [ ] 4. asama — goc scripti (`--dry-run` + yedek once) — **hazirligi yapildi (2026-09-22)**
+- [x] **4. asama — goc CALISTI ve dogrulandi (2026-09-22).** `scripts/migrateClinicId.js`
+      klinigi + `owner` uyeligini olusturdu ve **2188 dokumani** damgaladi. Ikinci tur
+      **0 damgaladi** ve mevcut klinigi yeniden kullandi — idempotentlik kanitlandi.
+
+      Dogrulama script'in kendi ciktisina degil BAGIMSIZ kontrole dayaniyor: bes koleksiyonun
+      sayisi da tabanla birebir tutuyor, damgasiz 0, yabanci klinik damgasi 0, `userId` kaybi 0,
+      ve `clinicId` ile yapilan sorgu `userId` ile ayni 2188 dokumani donduruyor (capraz
+      sizinti yok). Klinik adindaki Turkce karakterler de geri okunup dogrulandi.
 
 #### Goc oncesi TABAN (2026-09-22, silmeden sonra)
 
