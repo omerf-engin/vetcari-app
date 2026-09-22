@@ -2,7 +2,21 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-export function useFirestore(currentUser) {
+/**
+ * Defterin canlı verisi (TASK-038a 5. aşama).
+ *
+ * Artık **kullanıcıya değil kliniğe** bağlı: sorgular `clinicId` üzerinden. Aynı kliniğin
+ * iki farklı hesabı aynı defteri görür — işin bütün amacı bu.
+ *
+ * `clinicId` yoksa hiçbir abonelik kurulmaz ve listeler boş kalır. **Çağıran taraf bu boşluğu
+ * sessizce "defter boş" diye göstermemeli**: üyeliğin henüz yüklenmemiş olması ile gerçekten
+ * olmaması ayrı şeylerdir ve ikincisi kullanıcıya verisi silinmiş gibi görünür. `App.jsx`
+ * bu ayrımı `useClinic`'in `loading`/`error` alanlarıyla yapar.
+ *
+ * Sorguların `clinicId`'ye geçmesi için bileşik indekslerin ÖNCEDEN yayınlanmış olması
+ * gerekiyordu (1. aşama); yoksa dinleyiciler "index required" ile düşer ve uygulama boş açılır.
+ */
+export function useFirestore(clinicId) {
   const [customers, setCustomers] = useState([]);
   const [drugs, setDrugs] = useState([]);
   const [serviceDebts, setServiceDebts] = useState([]);
@@ -11,7 +25,7 @@ export function useFirestore(currentUser) {
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!clinicId) {
       setCustomers([]);
       setDrugs([]);
       setServiceDebts([]);
@@ -42,22 +56,20 @@ export function useFirestore(currentUser) {
       setDataLoading(false);
     };
 
-    const uid = currentUser.uid;
+    // Subscriptions — klinik üyeleri aynı defteri görür
+    unsubs.push(onSnapshot(query(collection(db, 'customers'), where('clinicId', '==', clinicId)), handleSnapshot(setCustomers), handleError));
+    unsubs.push(onSnapshot(query(collection(db, 'drugs'), where('clinicId', '==', clinicId)), handleSnapshot(setDrugs), handleError));
+    unsubs.push(onSnapshot(query(collection(db, 'serviceDebts'), where('clinicId', '==', clinicId)), handleSnapshot(setServiceDebts), handleError));
+    unsubs.push(onSnapshot(query(collection(db, 'drugDebts'), where('clinicId', '==', clinicId)), handleSnapshot(setDrugDebts), handleError));
 
-    // Subscriptions — her kullanıcı sadece kendi verilerini görür
-    unsubs.push(onSnapshot(query(collection(db, 'customers'), where('userId', '==', uid)), handleSnapshot(setCustomers), handleError));
-    unsubs.push(onSnapshot(query(collection(db, 'drugs'), where('userId', '==', uid)), handleSnapshot(setDrugs), handleError));
-    unsubs.push(onSnapshot(query(collection(db, 'serviceDebts'), where('userId', '==', uid)), handleSnapshot(setServiceDebts), handleError));
-    unsubs.push(onSnapshot(query(collection(db, 'drugDebts'), where('userId', '==', uid)), handleSnapshot(setDrugDebts), handleError));
-
-    // Transactions: userId filtresi + timestamp sıralaması (composite index gerektirir)
-    const qTrans = query(collection(db, 'transactions'), where('userId', '==', uid), orderBy('timestamp', 'desc'));
+    // Transactions: clinicId filtresi + timestamp sıralaması (composite index gerektirir)
+    const qTrans = query(collection(db, 'transactions'), where('clinicId', '==', clinicId), orderBy('timestamp', 'desc'));
     unsubs.push(onSnapshot(qTrans, handleSnapshot(setTransactions), handleError));
 
     return () => {
       unsubs.forEach(unsub => unsub());
     };
-  }, [currentUser]);
+  }, [clinicId]);
 
   return { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading };
 }

@@ -180,11 +180,17 @@ export const addCustomer = async (name, session) => {
 
 /** Müşteriyi ve ona bağlı tüm hizmet/ilaç borçları ile ilgili ekstre satırlarını siler. */
 export const deleteCustomer = async (customerId, session) => {
+  // `clinicId` olmadan asagidaki sorgular HIC BORC BULAMAZ ve borclu bir musteri
+  // silinebilir hale gelir. Sessiz yanlis cevap yerine durmak zorundayiz.
+  if (!session?.clinicId) {
+    throw new Error('deleteCustomer: klinik kimligi yok; aktif borc kontrolu yapilamaz.');
+  }
+
   const svcSnap = await getDocs(
-    query(collection(db, 'serviceDebts'), where('customerId', '==', customerId), where('userId', '==', session.actorId))
+    query(collection(db, 'serviceDebts'), where('customerId', '==', customerId), where('clinicId', '==', session.clinicId))
   );
   const drugSnap = await getDocs(
-    query(collection(db, 'drugDebts'), where('customerId', '==', customerId), where('userId', '==', session.actorId))
+    query(collection(db, 'drugDebts'), where('customerId', '==', customerId), where('clinicId', '==', session.clinicId))
   );
 
   const debtIds = [...svcSnap.docs.map((d) => d.id), ...drugSnap.docs.map((d) => d.id)];
@@ -196,12 +202,12 @@ export const deleteCustomer = async (customerId, session) => {
 
   for (const group of chunkIds(debtIds, 10)) {
     if (group.length === 0) continue;
-    const tSnap = await getDocs(query(collection(db, 'transactions'), where('debtId', 'in', group), where('userId', '==', session.actorId)));
+    const tSnap = await getDocs(query(collection(db, 'transactions'), where('debtId', 'in', group), where('clinicId', '==', session.clinicId)));
     addTxRefs(tSnap);
   }
 
   const txByCustomer = await getDocs(
-    query(collection(db, 'transactions'), where('customerId', '==', customerId), where('userId', '==', session.actorId))
+    query(collection(db, 'transactions'), where('customerId', '==', customerId), where('clinicId', '==', session.clinicId))
   );
   addTxRefs(txByCustomer);
 

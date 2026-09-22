@@ -11,6 +11,7 @@ import { useClinic } from './hooks/useClinic';
 import { useFirestore } from './hooks/useFirestore';
 import { useToast } from './hooks/useToast';
 import { CustomerProvider } from './contexts/CustomerContext';
+import { ledgerGate } from './utils/ledgerGate';
 import { canCancelBatch, cancelBlockedMessage } from './utils/batchCancel';
 import { canRevertPriceUpdate, revertBlockedMessage } from './utils/priceImpact';
 import { canRevertPayment, revertPaymentBlockedMessage } from './utils/paymentRevert';
@@ -45,8 +46,8 @@ const revsOf = (...debtArrays) => {
 
 export default function App() {
   const { currentUser, loading } = useAuth();
-  const { clinicId } = useClinic(currentUser);
-  const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(currentUser);
+  const { clinicId, loading: clinicLoading, error: clinicError } = useClinic(currentUser);
+  const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(clinicId);
   const { toast, confirm } = useToast();
 
   // Yazma işlemlerinin taşıdığı kimlik (TASK-038a): kim yaptı + hangi defter.
@@ -317,24 +318,54 @@ export default function App() {
       toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
       handleCancelBatch, handleRevertPayment, handleCancelItem, addDebtTransaction, applyPayment]);
 
-  if (loading) {
+  // Defterin gosterilip gosterilmeyecegi TEK yerde karar veriliyor (`utils/ledgerGate.js`).
+  // Art arda if bloklariyken sirasi yanlis olsa hata sessiz ve agir olurdu: uyelik daha
+  // yuklenmemisken "klinik yok" demek, kullaniciya defterini BOS gostermek demek.
+  const gate = ledgerGate({
+    authLoading: loading, currentUser,
+    clinicLoading, clinicError, clinicId, dataLoading,
+  });
+
+  if (gate === 'login') return <Login />;
+
+  if (gate === 'auth-loading' || gate === 'clinic-loading' || gate === 'data-loading') {
+    const mesaj = {
+      'auth-loading': 'Sistem Hazırlanıyor...',
+      'clinic-loading': 'Defteriniz Hazırlanıyor...',
+      'data-loading': 'Verileriniz Getiriliyor...',
+    }[gate];
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600"></div>
-        <p className="text-slate-500 font-medium">Sistem Hazırlanıyor...</p>
+        <p className="text-slate-500 font-medium">{mesaj}</p>
       </div>
     );
   }
 
-  if (!currentUser) {
-    return <Login />;
+  if (gate === 'clinic-error') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-amber-200 p-6 text-center">
+          <p className="text-slate-800 font-bold mb-2">Defterinize şu an ulaşılamıyor</p>
+          <p className="text-sm text-slate-600">
+            Bağlantı kurulamadı. İnternetinizi kontrol edip sayfayı yenileyin. Verileriniz
+            yerinde duruyor — bu ekran yalnızca erişimin kurulamadığını söylüyor.
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  if (dataLoading) {
+  if (gate === 'no-clinic') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600"></div>
-        <p className="text-slate-500 font-medium">Verileriniz Getiriliyor...</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-slate-200 p-6 text-center">
+          <p className="text-slate-800 font-bold mb-2">Hesabınız bir kliniğe bağlı değil</p>
+          <p className="text-sm text-slate-600">
+            Bu hesap henüz bir defterle ilişkilendirilmemiş. Klinik sahibinden sizi eklemesini
+            isteyin.
+          </p>
+        </div>
       </div>
     );
   }

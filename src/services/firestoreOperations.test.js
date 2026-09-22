@@ -3,6 +3,10 @@ import { createMockBatch, mockDoc, mockCollection, mockAddDoc, mockDeleteDoc, mo
 import { todayLocal } from '../utils/dates';
 import { computePriceImpact } from '../utils/priceImpact';
 
+// `where` argumanlari denetlenebilsin diye adlandirilmis mock: hangi ALANLA suzuldugu
+// TASK-038a'da davranisin kendisi (klinik mi kullanici mi).
+const { whereMock } = vi.hoisted(() => ({ whereMock: vi.fn(() => ({})) }));
+
 // Firebase modulunu mock'la
 const mockBatch = createMockBatch();
 // Transaction yazmalari da ayni diziye dussun: sets()/updates()/deletes() degismeden calissin
@@ -20,7 +24,7 @@ vi.mock('firebase/firestore', () => ({
   getDoc: (...args) => mockGetDoc(...args),
   getDocs: vi.fn(() => Promise.resolve({ docs: [], forEach() {} })),
   query: vi.fn((...args) => args),
-  where: vi.fn(() => ({})),
+  where: (...a) => whereMock(...a),
   writeBatch: () => mockBatch,
   runTransaction: (...args) => mockRunTransaction(...args),
 }));
@@ -42,6 +46,7 @@ beforeEach(() => {
 // Simdi modulu import et (mock'lar yerlestirilmis durumda)
 const {
   addCustomer,
+  deleteCustomer,
   addDrug,
   updateDrugPrice,
   returnDrug,
@@ -1872,5 +1877,22 @@ describe('session — clinicId damgasi (TASK-038a)', () => {
   it('session yerine ciplak uid dizesi gelirse HEMEN patlar', async () => {
     await expect(addCustomer('Musteri', 'uid1')).rejects.toThrow(TypeError);
     await expect(addCustomer('Musteri', 'uid1')).rejects.toThrow(/nesne olmalı/);
+  });
+  // `deleteCustomer` aktif borc kontrolunu `clinicId` ile yapiyor (5. asama). clinicId
+  // yoksa sorgu HIC BORC BULAMAZ ve borclu musteri silinebilir hale gelir — sessiz yanlis
+  // cevap yerine durmali.
+  it('deleteCustomer clinicId olmadan CALISMAZ', async () => {
+    await expect(deleteCustomer('cust1', { actorId: 'uid1', clinicId: null }))
+      .rejects.toThrow(/klinik kimligi yok/);
+  });
+  // 5. asama: aktif borc kontrolu KLINIK uzerinden yapilmali. `userId`'ye geri donerse
+  // personelin girdigi borclar gorunmez olur ve borclu musteri silinebilir hale gelir.
+  it('deleteCustomer aktif borc kontrolunu clinicId ile yapar', async () => {
+    whereMock.mockClear();
+    try { await deleteCustomer('cust1', { actorId: 'uid1', clinicId: 'klinik-a' }); } catch { /* mock */ }
+
+    const alanlar = whereMock.mock.calls.map(c => c[0]);
+    expect(alanlar).toContain('clinicId');
+    expect(alanlar, 'sahiplik suzgeci userId olmamali').not.toContain('userId');
   });
 });
