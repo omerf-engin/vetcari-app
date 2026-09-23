@@ -47,6 +47,7 @@ beforeEach(() => {
 const {
   addCustomer,
   deleteCustomer,
+  deleteDrug,
   addDrug,
   updateDrugPrice,
   returnDrug,
@@ -66,10 +67,10 @@ const {
 const TODAY = todayLocal();
 // Goc ONCESI durum: uyelik yok, dolayisiyla `clinicId` null ve dokumana YAZILMAZ.
 // Klinikli durum ayri testlerde sinaniyor (asagida).
-const SESSION = { actorId: 'uid1', clinicId: null };
+const SESSION = { actorId: 'uid1', clinicId: null, role: 'owner' };
 
 /** Goc SONRASI durum: uyelik var, `clinicId` her dokumana damgalanmali. */
-const SESSION_KLINIK = { actorId: 'uid1', clinicId: 'klinik-a' };
+const SESSION_KLINIK = { actorId: 'uid1', clinicId: 'klinik-a', role: 'owner' };
 
 /** Ilac kalemi kisayolu */
 const item = (drug, qty, unitPrice) => ({ drug, qty, unitPrice });
@@ -194,7 +195,7 @@ describe('Fiyat Guncelleme (Enflasyon Korumasi)', () => {
       { id: 'debt1', drugId: 'drug1', qty: 10, maxPrice: 50, isFixed: false },
     ];
 
-    await updateDrugPrice('drug1', 75, debts);
+    await updateDrugPrice('drug1', 75, debts, SESSION);
 
     expect(mockBatch.commit).toHaveBeenCalled();
     // ilac fiyat update + borc maxPrice update + log = 3 islem
@@ -209,7 +210,7 @@ describe('Fiyat Guncelleme (Enflasyon Korumasi)', () => {
       { id: 'debt1', drugId: 'drug1', qty: 10, maxPrice: 50, isFixed: true },
     ];
 
-    await updateDrugPrice('drug1', 75, debts);
+    await updateDrugPrice('drug1', 75, debts, SESSION);
 
     expect(mockBatch.commit).toHaveBeenCalled();
     // sadece ilac fiyat update — borc dokunulmaz
@@ -224,7 +225,7 @@ describe('Fiyat Guncelleme (Enflasyon Korumasi)', () => {
       { id: 'debt1', drugId: 'drug1', qty: 10, maxPrice: 50, isFixed: false },
     ];
 
-    await updateDrugPrice('drug1', 30, debts);
+    await updateDrugPrice('drug1', 30, debts, SESSION);
 
     expect(mockBatch.commit).toHaveBeenCalled();
     // sadece ilac fiyat update — borc maxPrice degismez
@@ -237,7 +238,7 @@ describe('Fiyat Guncelleme (Enflasyon Korumasi)', () => {
       { id: 'debt1', drugId: 'drug2', qty: 5, maxPrice: 100, isFixed: false },
     ];
 
-    await updateDrugPrice('drug1', 200, debts);
+    await updateDrugPrice('drug1', 200, debts, SESSION);
 
     // drug2 borcuna dokunulmamali
     const updates = mockBatch.operations.filter(op => op.type === 'update');
@@ -1882,17 +1883,55 @@ describe('session — clinicId damgasi (TASK-038a)', () => {
   // yoksa sorgu HIC BORC BULAMAZ ve borclu musteri silinebilir hale gelir — sessiz yanlis
   // cevap yerine durmali.
   it('deleteCustomer clinicId olmadan CALISMAZ', async () => {
-    await expect(deleteCustomer('cust1', { actorId: 'uid1', clinicId: null }))
+    await expect(deleteCustomer('cust1', { actorId: 'uid1', clinicId: null, role: 'owner' }))
       .rejects.toThrow(/klinik kimligi yok/);
   });
   // 5. asama: aktif borc kontrolu KLINIK uzerinden yapilmali. `userId`'ye geri donerse
   // personelin girdigi borclar gorunmez olur ve borclu musteri silinebilir hale gelir.
   it('deleteCustomer aktif borc kontrolunu clinicId ile yapar', async () => {
     whereMock.mockClear();
-    try { await deleteCustomer('cust1', { actorId: 'uid1', clinicId: 'klinik-a' }); } catch { /* mock */ }
+    try { await deleteCustomer('cust1', { actorId: 'uid1', clinicId: 'klinik-a', role: 'owner' }); } catch { /* mock */ }
 
     const alanlar = whereMock.mock.calls.map(c => c[0]);
     expect(alanlar).toContain('clinicId');
     expect(alanlar, 'sahiplik suzgeci userId olmamali').not.toContain('userId');
+  });
+});
+
+/**
+ * ROL KAPISI (TASK-038b). Bes islem sahibe ozel — urun karari 2026-09-23.
+ *
+ * Kapi FAIL-CLOSED: rol bilinmiyorsa da reddeder. `deleteCustomer` icin bu kapi
+ * guvenlik kuralindan DAHA onemli: fonksiyon atomik degil (450'lik parcalar, musteri
+ * dokumani en sonda), yani kurala guvenip burada durmazsak personelin denemesi tum islem
+ * gecmisini silip son adimda reddedilebilir.
+ */
+describe('requireOwner — sahibe ozel islemler', () => {
+  const PERSONEL = { actorId: 'uid2', clinicId: 'klinik-a', role: 'staff' };
+  const ROLSUZ = { actorId: 'uid1', clinicId: 'klinik-a' };
+  const SAHIP = { actorId: 'uid1', clinicId: 'klinik-a', role: 'owner' };
+
+  const senaryolar = [
+    ['musteri silme', (ses) => deleteCustomer('cust1', ses)],
+    ['ilac silme', (ses) => deleteDrug('drug1', ses)],
+    ['fiyat degistirme', (ses) => updateDrugPrice('drug1', 200, [], ses, 100)],
+    ['zam geri alma', (ses) => revertDrugPriceOperations('drug1', [], ses)],
+    ['tahsilat geri alma', (ses) => revertPaymentOperations({ id: 'cust1', balance: 0 }, [], 'sebep', ses)],
+  ];
+
+  for (const [ad, calistir] of senaryolar) {
+    it(`${ad}: PERSONEL yapamaz`, async () => {
+      await expect(calistir(PERSONEL)).rejects.toThrow(/klinik sahibi/);
+    });
+
+    // Rol bilinmiyorsa da durur: belirsizlikte silme yapilmaz
+    it(`${ad}: rol bilinmiyorsa da durur`, async () => {
+      await expect(calistir(ROLSUZ)).rejects.toThrow(/klinik sahibi/);
+    });
+  }
+
+  it('sahip icin kapi acik — rol kontrolune TAKILMAZ', async () => {
+    // Fiyat degistirme sahipte calismali; borc listesi bos oldugu icin yalnizca ilac guncellenir
+    await expect(updateDrugPrice('drug1', 200, [], SAHIP, 100)).resolves.not.toThrow();
   });
 });

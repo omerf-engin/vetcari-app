@@ -8,6 +8,10 @@ import ReportsView from './components/reports/ReportsView';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/auth/Login';
 import { useClinic } from './hooks/useClinic';
+import { useMyInvite } from './hooks/useMyInvite';
+import { useClinicAdmin } from './hooks/useClinicAdmin';
+import ClinicView from './components/clinic/ClinicView';
+import { joinClinic } from './services/clinicOperations';
 import { useFirestore } from './hooks/useFirestore';
 import { useToast } from './hooks/useToast';
 import { CustomerProvider } from './contexts/CustomerContext';
@@ -46,16 +50,22 @@ const revsOf = (...debtArrays) => {
 
 export default function App() {
   const { currentUser, loading } = useAuth();
-  const { clinicId, loading: clinicLoading, error: clinicError } = useClinic(currentUser);
+  const { clinicId, role, loading: clinicLoading, error: clinicError } = useClinic(currentUser);
+  // Davet YALNIZCA uyeligi olmayan icin aranir; uyesi olanin davete bakmasi gereksiz okuma
+  const { invite, loading: inviteLoading } = useMyInvite(currentUser, { enabled: !clinicLoading && !clinicId });
+  const { clinic, invites } = useClinicAdmin(clinicId, role);
   const { customers, drugs, serviceDebts, drugDebts, transactions, dataLoading } = useFirestore(clinicId);
   const { toast, confirm } = useToast();
 
   // Yazma işlemlerinin taşıdığı kimlik (TASK-038a): kim yaptı + hangi defter.
   // Tek nesne, çünkü iki ayrı konumsal parametre yer değiştirse hata SESSİZ olurdu.
   // Göç tamamlanana kadar `clinicId` null; `ownerFields` alanı o zaman hiç yazmaz.
+  // `role` de session'da: sahip gerektiren islemler (`requireOwner`) ve iptal guard'i
+  // ayni kimlik nesnesinden okusun — rolun ayri bir yoldan gelmesi ikisinin ayrismasina
+  // acik kapi birakirdi.
   const session = useMemo(
-    () => ({ actorId: currentUser?.uid ?? null, clinicId }),
-    [currentUser, clinicId]
+    () => ({ actorId: currentUser?.uid ?? null, clinicId, role }),
+    [currentUser, clinicId, role]
   );
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
@@ -147,7 +157,7 @@ export default function App() {
       "Bu ilacı kalıcı olarak silmek istediğinize emin misiniz? Müşterilerin geçmiş ekstresinde ilacın adı 'Bilinmeyen İlaç' olarak görünebilir."
     );
     if (ok) {
-      try { await deleteDrug(drugId); }
+      try { await deleteDrug(drugId, session); }
       catch (err) { handleError(err, 'İlaç Silme'); }
     }
   };
@@ -220,7 +230,7 @@ export default function App() {
   const handleCancelBatch = useCallback(async (group, reason) => {
     if (!group?.batchId || !reason) return;
 
-    const fresh = canCancelBatch(group, transactions);
+    const fresh = canCancelBatch(group, transactions, { uid: session.actorId, role: session.role });
     if (!fresh.ok) {
       toast.error(cancelBlockedMessage(fresh.reason));
       return;
@@ -306,6 +316,8 @@ export default function App() {
       customer, drugs,
       serviceDebts: custServiceDebts, drugDebts: custDrugDebts,
       transactions: custTransactions,
+      // Iptal guard'i ve rol'e gore gizlenen dugmeler icin: ekrani goren kisi kim
+      viewer: { uid: session.actorId, role: session.role },
       onToggleLock: toggleDebtLockHandler, onReturnDrug: handleDrugReturn,
       onToggleBatchLock: toggleBatchLockHandler, onReturnBatch: handleBatchReturn,
       onCancelBatch: handleCancelBatch,
@@ -314,7 +326,7 @@ export default function App() {
       onAddDebtTransaction: (payload) => addDebtTransaction(selectedCustomerId, payload),
       onApplyPayment: (amt, dist) => applyPayment(selectedCustomerId, amt, dist),
     };
-  }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions,
+  }, [selectedCustomerId, customers, drugs, serviceDebts, drugDebts, transactions, session,
       toggleDebtLockHandler, handleDrugReturn, toggleBatchLockHandler, handleBatchReturn,
       handleCancelBatch, handleRevertPayment, handleCancelItem, addDebtTransaction, applyPayment]);
 
@@ -323,7 +335,9 @@ export default function App() {
   // yuklenmemisken "klinik yok" demek, kullaniciya defterini BOS gostermek demek.
   const gate = ledgerGate({
     authLoading: loading, currentUser,
-    clinicLoading, clinicError, clinicId, dataLoading,
+    clinicLoading, clinicError, clinicId,
+    inviteLoading, hasInvite: !!invite,
+    dataLoading,
   });
 
   if (gate === 'login') return <Login />;
@@ -356,6 +370,29 @@ export default function App() {
     );
   }
 
+  if (gate === 'has-invite') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-slate-200 p-6 text-center">
+          <p className="text-slate-800 font-bold mb-2">Bir kliniğe davet edildiniz</p>
+          <p className="text-sm text-slate-600 mb-5">
+            Katıldığınızda kliniğin defterini görür ve işlem yapabilirsiniz. Girdiğiniz her
+            kayıt sizin adınıza kaydedilir.
+          </p>
+          <button
+            onClick={async () => {
+              try { await joinClinic(invite, currentUser); toast.success('Kliniğe katıldınız'); }
+              catch (err) { handleError(err, 'Kliniğe Katılma'); }
+            }}
+            className="w-full px-4 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors touch-target"
+          >
+            Kliniğe Katıl
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (gate === 'no-clinic') {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -372,7 +409,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
-      <Header activeTab={activeTab} onNavigate={setActiveTab} />
+      <Header activeTab={activeTab} onNavigate={setActiveTab} role={role} />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
 
@@ -413,6 +450,12 @@ export default function App() {
 
         {activeTab === 'reports' && (
           <ReportsView transactions={transactions} />
+        )}
+
+        {/* Sekme yalnizca sahibe ciziliyor (Header), ama `role` kontrolu BURADA da var:
+            sekme adi state'te tutuldugu icin rol degisse bile ekran acik kalmasin. */}
+        {activeTab === 'clinic' && role === 'owner' && (
+          <ClinicView session={session} clinic={clinic} invites={invites} />
         )}
 
         {activeTab === 'customerDetail' && selectedCustomerId && customerProviderValue && (

@@ -152,6 +152,24 @@ const ownerFields = (session) => {
   return o;
 };
 
+/**
+ * Sahip gerektiren işlemler için ortak kapı (TASK-038b).
+ *
+ * **Fail-closed:** rol bilinmiyorsa da reddeder. `App.jsx` defteri ancak üyelik
+ * yüklendikten sonra çiziyor (`ledgerGate`), dolayısıyla arayüzden gelen her çağrıda rol
+ * bellidir; bilinmiyorsa bir şey ters gitmiş demektir ve o anda silme yapılmamalı.
+ *
+ * Güvenlik kuralı bu kısıtların bir kısmını ayrıca zorluyor. Ama `deleteCustomer` atomik
+ * DEĞİL (450'lik parçalar, müşteri dokümanı en sonda): kurala güvenip burada durmazsak,
+ * personelin denemesi tüm işlem geçmişini silip son adımda reddedilebilir. Asıl koruma
+ * bu yüzden burada, kural ikinci savunma hattı.
+ */
+const requireOwner = (session, islem) => {
+  if (session?.role !== 'owner') {
+    throw new Error(`${islem} yalnızca klinik sahibi tarafından yapılabilir.`);
+  }
+};
+
 const createLog = (debtId, title, message, type = 'neutral', customerId, drugId, session, dateOverride, meta = {}) => {
   const o = {
     debtId,
@@ -180,6 +198,8 @@ export const addCustomer = async (name, session) => {
 
 /** Müşteriyi ve ona bağlı tüm hizmet/ilaç borçları ile ilgili ekstre satırlarını siler. */
 export const deleteCustomer = async (customerId, session) => {
+  requireOwner(session, 'Müşteri silme');
+
   // `clinicId` olmadan asagidaki sorgular HIC BORC BULAMAZ ve borclu bir musteri
   // silinebilir hale gelir. Sessiz yanlis cevap yerine durmak zorundayiz.
   if (!session?.clinicId) {
@@ -243,7 +263,9 @@ export const addDrug = async (name, price, session, catalogMeta) => {
   await addDoc(collection(db, 'drugs'), data);
 };
 
-export const deleteDrug = async (drugId) => {
+export const deleteDrug = async (drugId, session) => {
+  requireOwner(session, 'İlaç silme');
+
   await deleteDoc(doc(db, 'drugs', drugId));
 };
 
@@ -265,6 +287,7 @@ export const deleteDrug = async (drugId) => {
  *        O durumda geri alma yalnızca borçların `maxPrice`'ini onarır.
  */
 export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, session, currentPrice) => {
+  requireOwner(session, 'Fiyat değiştirme');
   if (newPrice <= 0) return;
   const batch = writeBatch(db);
   const priceBatchId = doc(collection(db, 'transactions')).id;
@@ -317,6 +340,7 @@ export const updateDrugPrice = async (drugId, newPrice, currentDrugDebts, sessio
  * @returns {Promise<{ok: boolean, reason?: 'legacy' | 'stale'}>}
  */
 export const revertDrugPriceOperations = async (drugId, priceLogs, session, expectedRevs = {}) => {
+  requireOwner(session, 'Zam geri alma');
   const logs = (priceLogs || []).filter(l => l?.debtId && l.maxPriceBefore != null);
   if (!drugId || logs.length === 0) return { ok: false, reason: 'legacy' };
 
@@ -800,6 +824,7 @@ export const addDebtTransactionOperations = async (customerId, payload, session)
  * @returns {Promise<{ok: boolean, reason?: 'empty' | 'stale'}>}
  */
 export const revertPaymentOperations = async (customer, paymentLogs, reason, session, expectedRevs = {}) => {
+  requireOwner(session, 'Tahsilat geri alma');
   const trimmedReason = (reason || '').trim();
   const logs = (paymentLogs || []).filter(l => l?.debtId && l.before);
   const balanceDelta = (paymentLogs || []).find(l => l?.balanceDelta != null)?.balanceDelta ?? 0;

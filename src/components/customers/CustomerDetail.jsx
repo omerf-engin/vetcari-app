@@ -14,7 +14,7 @@ import StatementExportModal from '../modals/StatementExportModal';
 import { useCustomer } from '../../hooks/useCustomer';
 
 export default function CustomerDetail({ onBack }) {
-  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onCancelItem, onToggleBatchLock, onReturnBatch, onCancelBatch, onRevertPayment } = useCustomer();
+  const { customer, drugs, serviceDebts, drugDebts, transactions, onToggleLock, onReturnDrug, onCancelItem, onToggleBatchLock, onReturnBatch, onCancelBatch, onRevertPayment, viewer } = useCustomer();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [historyDebtId, setHistoryDebtId] = useState(null);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
@@ -80,9 +80,9 @@ export default function CustomerDetail({ onBack }) {
   // İptal edilebilirlik grup bazinda onceden hesaplanir (guard loglara bakar)
   const cancelStateByBatch = useMemo(() => {
     const map = new Map();
-    debtGroups.forEach(g => map.set(g.batchId, canCancelBatch(g, transactions)));
+    debtGroups.forEach(g => map.set(g.batchId, canCancelBatch(g, transactions, viewer)));
     return map;
-  }, [debtGroups, transactions]);
+  }, [debtGroups, transactions, viewer]);
 
   const totalServiceDebt = serviceDebts.reduce((sum, d) => sum + d.amount, 0);
   const totalDrugDebt = extreDDebts.reduce((sum, d) => sum + d.tlValue, 0);

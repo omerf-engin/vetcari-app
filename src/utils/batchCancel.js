@@ -40,11 +40,15 @@ export const neutralizedBatchIds = (logs) => {
 /**
  * @param {object} group — `groupDebtsByBatch` ciktisindaki bir grup
  * @param {Array<object>} transactions — musteriye ait ekstre loglari
- * @returns {{ok: boolean, reason?: 'empty' | 'legacy' | 'activity'}}
+ * @param {{uid?: string, role?: string}} [viewer] — iptali deneyen kisi (TASK-038b).
+ *        Verilmezse rol kontrolu YAPILMAZ; boylece rolun anlamsiz oldugu cagrilar
+ *        (ornegin testler ve tek kullanicili eski yollar) davranis degistirmez.
+ * @returns {{ok: boolean, reason?: 'empty' | 'legacy' | 'activity' | 'otherActor'}}
  *          `legacy`: batchId tasimayan eski kayit — iptal kapali, sil/iade kullanilir
  *          `activity`: uzerine tahsilat/iade/zam inmis — once o islem geri alinmali
+ *          `otherActor`: personel BASKASININ girdigi islemi iptal edemez (urun karari)
  */
-export const canCancelBatch = (group, transactions) => {
+export const canCancelBatch = (group, transactions, viewer) => {
   const items = group?.items || [];
   if (items.length === 0) return { ok: false, reason: 'empty' };
 
@@ -60,6 +64,20 @@ export const canCancelBatch = (group, transactions) => {
   // bir odeme grubu iptal edilebilir bir giris grubu sanilmamali.
   const hasEntryLogs = logs.some(t => t.batchId === batchId && t.kind === 'entry');
   if (!hasEntryLogs) return { ok: false, reason: 'legacy' };
+
+  // ROL KISITI (TASK-038b): personel yalnizca KENDI girdigi islemi iptal edebilir.
+  //
+  // Aktor, girisin `entry` logundaki `userId`'dir — o alan zaten "islemi yapan"i tasiyor
+  // (TASK-038a'da dogrulandi), bu yuzden yeni bir alan gerekmedi.
+  //
+  // FAIL-CLOSED: aktoru belirlenemeyen (eski, `userId` tasimayan) bir kayitta personel
+  // iptal EDEMEZ. "Bilinmiyor"u yetki gerekcesi yapmak, yetkiyi geri vermek olurdu;
+  // sahip bu kayitlari her zaman iptal edebilir.
+  if (viewer?.role === 'staff') {
+    const girisler = logs.filter(t => t.batchId === batchId && t.kind === 'entry');
+    const hepsiBenim = girisler.every(t => t.userId && t.userId === viewer.uid);
+    if (!hepsiBenim) return { ok: false, reason: 'otherActor' };
+  }
 
   // Fail-closed: kind'i taninmayan (veya hic olmayan) bir log da engeller
   const itemIds = new Set(items.map(i => i.id));
@@ -106,6 +124,8 @@ export const cancelBlockedMessage = (reason) => {
   switch (reason) {
     case 'activity':
       return 'Bu işleme sonradan tahsilat, iade veya zam işlenmiş. Önce o işlemi geri alın.';
+    case 'otherActor':
+      return 'Bu işlemi başka bir kullanıcı girmiş. Yalnızca kendi girdiğiniz işlemleri iptal edebilirsiniz; klinik sahibi tümünü iptal edebilir.';
     case 'legacy':
       return 'Eski kayıt — işlem topluca iptal edilemiyor. Kalemleri tek tek kapatın: hizmet için İptal, ilaç için İade.';
     case 'stale':

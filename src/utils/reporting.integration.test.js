@@ -17,7 +17,7 @@ import { todayLocal } from './dates';
 import { summarizePeriod } from './reporting';
 
 // Goc oncesi durum: uyelik yok, `clinicId` null ve dokumana yazilmaz (TASK-038a).
-const SESSION = { actorId: 'uid1', clinicId: null };
+const SESSION = { actorId: 'uid1', clinicId: null, role: 'owner' };
 
 const mockBatch = createMockBatch();
 // Surum kontrollu islemler transaction kullaniyor; yazmalari ayni diziye dussun

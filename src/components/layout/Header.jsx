@@ -1,9 +1,9 @@
 import React from 'react';
-import { Stethoscope, LayoutDashboard, Users, Pill, BarChart3, LogOut } from 'lucide-react';
+import { Stethoscope, LayoutDashboard, Users, Pill, BarChart3, LogOut, Building2 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 
-export default function Header({ activeTab, onNavigate }) {
+export default function Header({ activeTab, onNavigate, role }) {
   return (
     <header className="bg-indigo-600 text-white shadow-md">
       <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -36,6 +36,17 @@ export default function Header({ activeTab, onNavigate }) {
           >
             <BarChart3 className="w-4 h-4" /> Raporlar
           </button>
+
+          {/* Klinik sekmesi yalnizca SAHIBE gorunur. Kozmetik degil: guvenlik kurali da
+              uye ve davet listesini personele kapatiyor, yani ekran ayni seyi soyluyor. */}
+          {role === 'owner' && (
+            <button
+              onClick={() => onNavigate('clinic')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center gap-2 ${activeTab === 'clinic' ? 'bg-indigo-600 shadow-sm' : 'hover:bg-indigo-600/50 text-indigo-100'}`}
+            >
+              <Building2 className="w-4 h-4" /> Klinik
+            </button>
+          )}
 
           <button
             onClick={() => signOut(auth)}
