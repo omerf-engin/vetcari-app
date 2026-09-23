@@ -2454,7 +2454,34 @@ olusacak, test hesabi artik veri tasimadigi icin ikinci klinige gerek yok.
 Firestore'a karsi karsilastirildi — eksik 0, yabanci kayit 0): asil defter tek basina
 (2188) ve tam veritabani (2283, silme oncesi). `scripts/backup-*.json` `.gitignore`
 kapsaminda — yedek gercek musteri adi ve borc tutari iceriyor, depo PUBLIC.
-- [ ] 5. asama — sorgu gecisi
+- [x] **5. asama — sorgu gecisi (2026-09-23).** Defteri artik KULLANICI degil KLINIK
+      belirliyor: bes sorgu da `clinicId` ile suzuluyor. `deleteCustomer`'in aktif borc
+      kontrolu de cevrildi — atlansaydi personelin girdigi borclar gorunmez olur ve BORCLU
+      musteri silinebilir hale gelirdi; ayrica `clinicId` yokken fonksiyon artik sessizce
+      "borc yok" demek yerine DURUYOR.
+
+      **Bos defter tuzagi ve `utils/ledgerGate.js`.** `clinicId` yoklugu uc AYRI sey olabilir
+      (uyelik yuklenmedi / hata / gercekten yok) ve ucunu de bos liste gostermek 159
+      musterisi olan kullaniciya verisi silinmis gibi gorunur. Karar art arda `if`
+      bloklariyken test EDILEMIYORDU: mutasyon denetiminde App'teki iki kapi SIZDI. Karar
+      saf bir fonksiyona cikarildi; simdi 9 mutasyonun 9'u yakalaniyor.
+
+      **UCTAN UCA DOGRULANDI — isin butun amaci.** Test hesabina (`omerf.ngin`) bu klinikte
+      `staff` uyeligi yazildi ve tarayicida gercek defterle sinandi:
+
+      | Sinama | Sonuc |
+      |---|---|
+      | Uyeligi olmayan hesap | "kliniğe bağlı değil" ekrani — BOS DEFTER DEGIL |
+      | `staff` hesabi defteri goruyor | 159 musteri, 470.120,2 TL |
+      | `staff` gercek deftere yazabiliyor | evet, konsol hatasi yok |
+      | Yazilan kayit `clinicId` | dogru klinik |
+      | Yazilan kayit `userId` | **personelin uid'i**, sahibin DEGIL |
+
+      Son satir "kim girdi" izlenebilirliginin kaniti: log ve dokumanlar aktoru dogru
+      tasiyor. ZZTEST kaydi sonra silindi.
+
+      Test hesabinin `staff` uyeligi DURUYOR (TASK-038b'nin davet akisini sinamak icin
+      elle yapilmis hali). Istenmezse `memberships/lx01...` silinerek geri alinir.
 - [ ] 6. asama — daraltma (eski `userId` yolu kaldirilir)
 
 **Gecis penceresinin kritik kilidi — planda gorulmemisti.** Eski `userId` yolu acikken
