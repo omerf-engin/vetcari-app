@@ -50,6 +50,34 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/memberships/$(request.auth.uid)).data.clinicId;
     }
 
+    function myRole() {
+      return get(/databases/$(database)/documents/memberships/$(request.auth.uid)).data.role;
+    }
+
+    /** Sahip mi? Rol tabanli yazma kisitlarinin tek kaynagi (TASK-038b). */
+    function isOwner() {
+      return isMember() && myRole() == 'owner';
+    }
+
+    /** Davet dokumaninin kimligi KUCUK HARFLI e-postadir.
+     *
+     * Istemci auth kullanicilarini e-postayla SORGULAYAMAZ; kuralin daveti bulabilmesi
+     * icin kimligin token'dan turetilebilir olmasi sart. `.lower()` iki tarafi da
+     * normalize eder, boylece "Ali@X.com" ile "ali@x.com" ayni daveti bulur.
+     * (Emulatorde olculdu — bkz. TASK-038b.)
+     */
+    function inviteKey() {
+      return request.auth.token.email.lower();
+    }
+
+    function myInvitePath() {
+      return /databases/$(database)/documents/invites/$(inviteKey());
+    }
+
+    function myInvite() {
+      return get(myInvitePath()).data;
+    }
+
     function inClinicExisting() {
       return isMember() && myClinicId() == resource.data.clinicId;
     }
@@ -100,18 +128,33 @@ service cloud.firestore {
       return canWriteOwned() && canCreateOwned();
     }
 
+    // Musteri silmek geri donusu olmayan bir istir: borclari ve tum islem gecmisi de
+    // gider. Personel silemez (urun karari 2026-09-23).
+    //
+    // DIKKAT: `deleteCustomer` atomik DEGIL (450'lik parcalar, musteri dokumani en sonda).
+    // Bu kural tek basina kalsaydi, personelin denemesi gecmisi silip son adimda
+    // reddedilebilirdi. Asil koruma fonksiyonun BASINDAKI rol kontrolu; burasi ikinci
+    // savunma hatti.
     match /customers/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
-      allow delete: if canWriteOwned();
+      allow delete: if canWriteOwned() && isOwner();
     }
 
+    // Fiyat degisikligi enflasyon zinciriyle TUM acik borclari etkiliyor; silme de
+    // gecmisi bozar. Ikisi de sahibe ozel (urun karari 2026-09-23).
+    //
+    // Fiyat DISINDAKI guncellemeler (ornegin ad duzeltmesi) personele acik kalir:
+    // kosul yalnizca `price` degistiginde sahiplik arar. `updateDrugPrice` tek bir
+    // `writeBatch` oldugu icin buradaki ret islemin TAMAMINI durdurur — yarim kalmaz.
     match /drugs/{docId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update: if canUpdateOwned();
-      allow delete: if canWriteOwned();
+      allow update: if canUpdateOwned()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['price'])
+            || isOwner());
+      allow delete: if canWriteOwned() && isOwner();
     }
 
     match /serviceDebts/{docId} {
@@ -146,26 +189,71 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Klinik kimligi (TASK-038a) — istemciye SALT OKUNUR.
+
+    // --------------------------------------------------------------------------------
+    // DAVET (TASK-038b)
     //
-    // Uyelik ve klinik kayitlarini yalnizca goc scripti (Admin SDK) olusturur. Istemciye
-    // yazma acilsaydi bir kullanici kendini istedigi klinige uye yapip o defteri acabilirdi
-    // — yani butun yetkilendirmenin anahtarini kendisi basardi. Bu koleksiyonlar tum
-    // sahiplik kontrolunun dayanagi oldugu icin en dar sekilde tutuluyor.
+    // Sahip, personelin e-postasiyla bir davet olusturur; personel giris yapinca KENDI
+    // uyeligini bu davete dayanarak yaratir. Davetin kimligi kucuk harfli e-postadir
+    // (bkz. `inviteKey`) cunku kural "bu kullaniciyi kim davet etti" sorusunu ancak
+    // token'dan turetilen bir yolla cevaplayabilir.
+    // --------------------------------------------------------------------------------
+    match /invites/{emailKey} {
+      // Davetli KENDI davetini gorur; sahip kendi kliniginin davetlerini gorur
+      allow read: if signedIn()
+        && (emailKey == inviteKey() || (isOwner() && myClinicId() == resource.data.clinicId));
+
+      // Yalnizca sahip davet eder, yalnizca KENDI klinigine, yalnizca `staff` olarak.
+      // `role` serbest birakilsaydi sahip birini `owner` davet edip yetki dagitabilirdi.
+      allow create: if isOwner()
+        && request.resource.data.clinicId == myClinicId()
+        && request.resource.data.role == 'staff'
+        && emailKey == request.resource.data.email;
+
+      // Daveti geri almak = silmek. Guncelleme yok: degistirilecek bir sey yok, ve
+      // `clinicId`/`role` degistirilebilseydi kilit anlamini yitirirdi.
+      allow delete: if isOwner() && myClinicId() == resource.data.clinicId;
+      allow update: if false;
+    }
+
+    // --------------------------------------------------------------------------------
+    // UYELIK — defterin anahtari
     //
-    // Self-servis davet akisi TASK-038b'de gelecek ve KENDI kurallariyla acilacak;
-    // o zamana kadar ikinci kullanici elle (script ile) baglanir.
+    // `create` istemciye ACIK ama YALNIZCA esleşen bir davet varsa. Bu blogun her satiri
+    // bir saldiriyi kapatiyor:
+    //   - `request.auth.uid == userId`  -> baskasi adina uyelik yaratilamaz
+    //   - davet VARLIGI                 -> davetsiz kimse deftere giremez
+    //   - clinicId davetten kopyalanir  -> davet alan baska bir klinige giremez
+    //   - role == 'staff'               -> davetle kimse `owner` olamaz
+    // --------------------------------------------------------------------------------
     match /memberships/{userId} {
-      allow read: if signedIn() && request.auth.uid == userId;
+      // Kendi kaydi; ayrica sahip personel listesini gorebilmeli
+      allow read: if signedIn()
+        && (request.auth.uid == userId
+            || (isOwner() && myClinicId() == resource.data.clinicId));
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && exists(myInvitePath())
+        && request.resource.data.clinicId == myInvite().clinicId
+        && request.resource.data.role == myInvite().role
+        && request.resource.data.role == 'staff';
+
+      // Personeli cikarmak: yalnizca ayni klinigin sahibi, KENDI uyeligi haric.
+      // Sahip kendini atabilseydi klinik sahipsiz kalir ve kimse davet edemezdi.
+      allow delete: if isOwner()
+        && myClinicId() == resource.data.clinicId
+        && request.auth.uid != userId;
+
+      // Rol degistirme yok: `staff` kendini `owner` yapamasin diye guncelleme kapali.
+      allow update: if false;
+    }
+
+    // Klinik bilgisi (ad, koltuk sayisi) arayuzde gosteriliyor; yazma Admin SDK'da kalir.
+    match /clinics/{clinicId} {
+      allow read: if isMember() && myClinicId() == clinicId;
       allow write: if false;
     }
 
-    // NOT: `clinics` koleksiyonunun kural blogu BILEREK yok.
-    //
-    // Goc scripti (Admin SDK) klinik dokumanlarini olusturur ama uygulama henuz hicbirini
-    // OKUMUYOR — klinik adi/koltuk sayisi TASK-038b'nin arayuzunde gerekecek. Kurala
-    // simdiden yazmak, hicbir seyin kullanmadigi bir erisim acmak olurdu; blogu olmayan
-    // koleksiyon reddedilir, yani varsayilan fail-closed. Arayuz okumaya basladiginda
-    // kendi blogu eklenecek.
   }
 }

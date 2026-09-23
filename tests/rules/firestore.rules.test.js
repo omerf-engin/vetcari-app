@@ -81,10 +81,19 @@ describe('Sahipli koleksiyonlar — yazma', () => {
       await assertFails(setDoc(doc(asAli(), `${col}/yeni`), { name: 'x' }));
     });
 
-    it(`${col}: sahibi gunceller ve siler`, async () => {
+    it(`${col}: sahibi gunceller`, async () => {
       await seed(`${col}/d1`, { userId: ALI, name: 'x' });
       await assertSucceeds(updateDoc(doc(asAli(), `${col}/d1`), { name: 'y' }));
-      await assertSucceeds(deleteDoc(doc(asAli(), `${col}/d1`)));
+    });
+
+    // TASK-038b: `customers` ve `drugs` silmek artik OWNER rolu istiyor. Uyeligi olmayan
+    // (yalnizca eski `userId` yolundaki) bir kullanici bu ikisini SILEMEZ; borc ve islem
+    // kayitlarini ise silebilmeye devam eder — gunluk is kisitlanmadi.
+    it(`${col}: silme ${['customers', 'drugs'].includes(col) ? 'OWNER ister' : 'sahibe acik'}`, async () => {
+      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
+      const silme = deleteDoc(doc(asAli(), `${col}/d1`));
+      if (['customers', 'drugs'].includes(col)) await assertFails(silme);
+      else await assertSucceeds(silme);
     });
 
     it(`${col}: BASKASININ kaydini guncelleyemez/silemez`, async () => {
@@ -236,12 +245,21 @@ describe('memberships / clinics — yetkilendirmenin dayanagi, salt okunur', () 
     await assertFails(deleteDoc(doc(asAli(), `memberships/${ALI}`)));
   });
 
-  // `clinics` icin kural blogu BILEREK yok: uygulama henuz okumuyor, blogu olmayan
-  // koleksiyon reddedilir. Uyesi bile olsa erisemez — varsayilan fail-closed calisiyor.
-  it('clinics koleksiyonuna istemci HIC erisemez (blogu yok, fail-closed)', async () => {
-    await assertFails(getDoc(doc(asAli(), `clinics/${KLINIK_A}`)));
+  // TASK-038b ile `clinics` okunabilir oldu (arayuz klinik adini ve koltuk sayisini
+  // gosteriyor). Yazma Admin SDK'da kaldi: koltuk sinirini kullanici kendisi degistiremez.
+  it('uyesi kendi klinigini OKUR, yazamaz', async () => {
+    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
+    await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
+
+    await assertSucceeds(getDoc(doc(asAli(), `clinics/${KLINIK_A}`)));
     await assertFails(updateDoc(doc(asAli(), `clinics/${KLINIK_A}`), { seatLimit: 99 }));
     await assertFails(setDoc(doc(asAli(), 'clinics/yeni'), { name: 'sahte' }));
+  });
+
+  it('BASKA klinigi okuyamaz', async () => {
+    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
+    await seed('clinics/baska-klinik', { name: 'B', ownerId: VELI, seatLimit: 2 });
+    await assertFails(getDoc(doc(asAli(), 'clinics/baska-klinik')));
   });
 });
 
