@@ -181,6 +181,70 @@ describe('Personel cikarma ve davet iptali', () => {
   });
 });
 
+/**
+ * CIKARILAN PERSONEL — erisim GERCEKTEN kesiliyor mu (TASK-038a 6. asama).
+ *
+ * Gecis donemindeki eski `userId` yolu uyelik ARAMIYORDU. Uyeligi silinen personel, kendi
+ * girdigi kayitlari okumaya, `where(userId == ben)` ile listelemeye ve borc/islem kayitlarini
+ * SILMEYE devam ediyordu (emulatorde olculdu, 2026-09-24). Alacak da denetim izi de
+ * silinebiliyordu.
+ *
+ * Cikarma burada KURALIN izin verdigi gercek yoldan yapiliyor (sahibin `deleteDoc`'u), elle
+ * tohum silinerek degil: sinanan sey "sahip cikardiginda erisim biter" iddiasinin tamami.
+ * Kayitlar da uygulamanin yazdigi sekilde: `userId` personel, `clinicId` klinik.
+ */
+describe('Cikarilan personel — erisim kesilir (6. asama)', () => {
+  const OWNED = ['customers', 'drugs', 'serviceDebts', 'drugDebts', 'transactions'];
+
+  beforeEach(async () => {
+    for (const col of OWNED) {
+      await seed(`${col}/p1`, { clinicId: KLINIK_A, userId: PERSONEL, name: 'x', amount: 100 });
+    }
+  });
+
+  // Onkosul: cikarilmadan ONCE erisebiliyordu. Olmasaydi asagidaki retler, kuralin
+  // cikarmayi degil personeli bastan hic tanimamasini kanitlardi.
+  it('cikarilmadan once kendi girdigini okur', async () => {
+    for (const col of OWNED) await assertSucceeds(getDoc(doc(personel(), `${col}/p1`)));
+  });
+
+  describe('cikarildiktan sonra', () => {
+    beforeEach(async () => {
+      await assertSucceeds(deleteDoc(doc(sahip(), `memberships/${PERSONEL}`)));
+    });
+
+    for (const col of OWNED) {
+      it(`${col}: kendi girdigini OKUYAMAZ`, async () => {
+        await assertFails(getDoc(doc(personel(), `${col}/p1`)));
+      });
+
+      it(`${col}: where(userId == ben) ile LISTELEYEMEZ`, async () => {
+        await assertFails(getDocs(query(collection(personel(), col), where('userId', '==', PERSONEL))));
+      });
+
+      it(`${col}: kendi girdigini SILEMEZ`, async () => {
+        await assertFails(deleteDoc(doc(personel(), `${col}/p1`)));
+      });
+
+      it(`${col}: klinige kayit YAZAMAZ`, async () => {
+        await assertFails(setDoc(doc(personel(), `${col}/yeni`),
+          { clinicId: KLINIK_A, userId: PERSONEL, name: 'x' }));
+      });
+
+      // Eski yol `clinicId`'siz kaydi serbest birakiyordu: uygulamada gorunmez ama depoya
+      // yazilir. Uyeligi olmayan HERHANGI bir hesap icin gecerliydi.
+      it(`${col}: clinicId'siz kayit da YARATAMAZ`, async () => {
+        await assertFails(setDoc(doc(personel(), `${col}/yeni`), { userId: PERSONEL, name: 'x' }));
+      });
+    }
+
+    // Kayitlar yok olmadi: defter sahibin elinde kaliyor
+    it('sahip personelin girdigi kayitlari okumaya devam eder', async () => {
+      for (const col of OWNED) await assertSucceeds(getDoc(doc(sahip(), `${col}/p1`)));
+    });
+  });
+});
+
 describe('Sahip personel listesini gorur', () => {
   it('sahip kendi kliniginin uyeliklerini sorgular', async () => {
     await assertSucceeds(getDocs(query(collection(sahip(), 'memberships'), where('clinicId', '==', KLINIK_A))));

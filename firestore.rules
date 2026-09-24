@@ -27,15 +27,17 @@ service cloud.firestore {
     }
 
     // --------------------------------------------------------------------------------
-    // GECIS DONEMI (TASK-038a, genislet/goc et/daralt).
+    // SAHIPLIK = KLINIK UYELIGI (TASK-038a; 6. asamada daraltildi, 2026-09-24).
     //
-    // Bir dokuman su an IKI yoldan sahiplenilebilir:
-    //   ESKI: `resource.data.userId == request.auth.uid`  (tek kullanicili model)
-    //   YENI: uyeligimdeki `clinicId`, dokumanin `clinicId`'si ile ayni
+    // Erisim TEK yoldan: uyeligimdeki `clinicId`, dokumanin `clinicId`'si ile ayni.
+    // `userId` artik yetki TASIMAZ; "bu kaydi kim girdi" bilgisidir. Bu yuzden
+    // guncellemede degistirilemez (bkz. `keepsActor`).
     //
-    // Ikisi birlikte acik tutuluyor ki goc scripti calisirken ve sorgular henuz
-    // `userId` uzerindeyken uygulama kesintisiz calissin. Goc oturunca ESKI yol
-    // kaldirilacak (6. asama) ve `tests/rules/` o zaman eski yolun REDDEDILDIGINI sinar.
+    // Gecis doneminde eski `userId == request.auth.uid` yolu da acikti. Kaldirildi, cunku
+    // UYELIK ARAMIYORDU: klinikten cikarilan personel kendi girdigi kayitlari okumaya,
+    // listelemeye ve borc/islem kayitlarini SILMEYE devam ediyordu; uyeligi olmayan
+    // herhangi bir hesap da `clinicId`'siz kayit yaratabiliyordu (ikisi de emulatorde
+    // olculdu). Kaldirmadan once uretimde `clinicId`'siz dokuman sayisi 0 olculdu.
     // --------------------------------------------------------------------------------
 
     // Tek klinik uyeligi karari sayesinde dokuman kimligi dogrudan uid; kural tek
@@ -86,46 +88,54 @@ service cloud.firestore {
       return isMember() && myClinicId() == request.resource.data.clinicId;
     }
 
-    // Gecis doneminin KRITIK kilidi.
-    //
-    // Eski `userId` yolu acikken, kendi kaydima BASKA bir klinigin `clinicId`'sini
-    // yazabilseydim, BAKIM-002'de kapatilan enjeksiyon acigi gecis penceresinde geri
-    // gelirdi (bu sefer `userId` degil `clinicId` uzerinden). Bu yuzden: yazilan
-    // dokumanda `clinicId` VARSA mutlaka benim klinigim olmali.
-    function incomingClinicSafe() {
-      return !('clinicId' in request.resource.data) || inClinicIncoming();
-    }
-
     // `resource == null` dali TASK-033'ten geliyor: silinmis bir dokumani okurken kural
-    // `resource.data.userId`'ye dokunursa `permission-denied` doner ve cagiran taraf
-    // "silinmis mi" sorusunu soramaz. Surum kontrolu (rev) bu davranisa dayaniyor.
+    // `resource.data`ya dokunursa `permission-denied` doner ve cagiran taraf "silinmis mi"
+    // sorusunu soramaz. Surum kontrolu (rev) bu davranisa dayaniyor.
     function canReadOwned() {
-      return signedIn() && (resource == null
-        || request.auth.uid == resource.data.userId
-        || inClinicExisting());
+      return signedIn() && (resource == null || inClinicExisting());
     }
 
     function canWriteOwned() {
-      return signedIn() && (request.auth.uid == resource.data.userId || inClinicExisting());
+      return inClinicExisting();
     }
 
+    // `inClinicIncoming` alanin hem VARLIGINI hem esitligini ister: `clinicId`'siz ya da
+    // baska klinigin `clinicId`'sini tasiyan kayit yaratilamaz. Gecis doneminde bunu ayri
+    // bir `incomingClinicSafe` sagliyordu; eski yol gidince gereksiz kaldi.
     function canCreateOwned() {
-      return signedIn()
-        && (request.auth.uid == request.resource.data.userId || inClinicIncoming())
-        && incomingClinicSafe();
+      return inClinicIncoming();
     }
 
-    // Guncelleme HEM eski HEM yeni sahibin ben olmasini ister.
+    // Kaydi kim girdiyse `userId` odur; guncelleme bunu degistiremez. Kontrolun yalnizca
+    // istemcide durdugu yerlerde (baskasinin islemini iptal, tahsilat/zam geri alma)
+    // koruma ATIFTIR — atif yeniden yazilabilseydi o koruma da kalmazdi.
     //
-    // Yalnizca eskiye bakmak yetmiyordu: kendi kaydimin `userId` alanini baskasinin
-    // uid'i yapip ONUN defterine kayit enjekte edebiliyordum. Veri sizintisi degil
-    // (B'nin kayitlarini hala okuyamiyorum) ama bir muhasebe urununde baska klinigin
-    // defterine sahte borc yazilabilmesi kabul edilemez. BAKIM-002'de yazilan emulator
-    // testi bu acigi kanitladi; uygulamada `userId`'yi degistiren mesru bir yol yok.
+    // Mesru bir yol bunu bozmaz: hicbir guncelleme `userId` yazmaz, tahsilat geri almanin
+    // `set(ref, before)`'u ise `before`'daki ilk giren kisiyi geri yazar (uretimde 106
+    // `before`'un 106'si `userId` tasiyor).
+    function keepsActor() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    // Guncelleme HEM mevcut HEM yazilan dokumanin benim klinigimde olmasini ister.
+    // Yalnizca mevcuda bakmak, kendi kaydimin `clinicId`'sini baska klinige cevirip ONUN
+    // defterine kayit enjekte etmeye izin verirdi — BAKIM-002'de `userId` uzerinden
+    // bulunan acigin klinik modelindeki karsiligi.
     //
     // `delete` bu kontrolu ISTEYEMEZ: silmede `request.resource` yoktur.
     function canUpdateOwned() {
-      return canWriteOwned() && canCreateOwned();
+      return canWriteOwned() && canCreateOwned() && keepsActor();
+    }
+
+    // Olusturan kisi kendini yazar. Musteri, ilac ve islem logu HER ZAMAN o an, islemi
+    // yapanin adiyla yaratilir; islem logu denetim izinin kendisidir ve baskasi adina
+    // yazilabilseydi "kim ne yapti" sorusunun cevabi uydurulabilirdi.
+    //
+    // Borclarda (`serviceDebts`, `drugDebts`) ISTENMEZ: tahsilat geri alma supurulmus bir
+    // borcu ayni kimlikle, borcu ilk GIRENIN `userId`'siyle yeniden yaratir — geri alan
+    // sahip, borcu personel girdiyse bu kontrolu gecemezdi.
+    function createdByMe() {
+      return request.resource.data.userId == request.auth.uid;
     }
 
     // Musteri silmek geri donusu olmayan bir istir: borclari ve tum islem gecmisi de
@@ -137,7 +147,7 @@ service cloud.firestore {
     // savunma hatti.
     match /customers/{docId} {
       allow read: if canReadOwned();
-      allow create: if canCreateOwned();
+      allow create: if canCreateOwned() && createdByMe();
       allow update: if canUpdateOwned();
       allow delete: if canWriteOwned() && isOwner();
     }
@@ -150,7 +160,7 @@ service cloud.firestore {
     // `writeBatch` oldugu icin buradaki ret islemin TAMAMINI durdurur — yarim kalmaz.
     match /drugs/{docId} {
       allow read: if canReadOwned();
-      allow create: if canCreateOwned();
+      allow create: if canCreateOwned() && createdByMe();
       allow update: if canUpdateOwned()
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['price'])
             || isOwner());
@@ -173,7 +183,7 @@ service cloud.firestore {
 
     match /transactions/{docId} {
       allow read: if canReadOwned();
-      allow create: if canCreateOwned();
+      allow create: if canCreateOwned() && createdByMe();
       allow update: if canUpdateOwned();
       allow delete: if canWriteOwned();
     }

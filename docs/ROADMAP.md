@@ -4,11 +4,14 @@
 > ayni defteri gorebiliyor.** 038a veri modelini tasidi (2.188 dokuman damgalandi), 038b davet
 > akisini, rolleri ve personel yonetimini getirdi. Ikisi de canlida uctan uca dogrulandi ve
 > canli dogrulama TESTLERDEN GECMIS uc kusur ortaya cikardi (bkz. TASK.md).
-> Test 734 + 115 kural davranis testi, lint 0/0, build basarili.
+> Test 737 + 187 kural davranis testi, lint 0/0, build basarili.
 > Firestore'da 1.141 katalog dokumani; defterde 2.188 kayit.
-> Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu),
-> TASK-038a 6. asama (eski `userId` yolunun kuraldan kaldirilmasi — canlida bir tur
-> bekledikten sonra), koltuk sinirinin sert zorlanmasi (Cloud Function, ayri gorev).
+> **TASK-038a 6. asama (24 Eylul):** eski `userId` yolu kuraldan kaldirildi — klinikten
+> cikarilan personelin kendi girdigi kayitlari okumaya ve SILMEYE devam edebildigi olculmustu.
+> Ayni is gocten kalma canli bir kusuru kapatti (tahsilat geri alma borcu defterden
+> dusuruyordu).
+> Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu), hata izleme,
+> koltuk sinirinin sert zorlanmasi (Cloud Function, ayri gorev).
 
 ## Urun Yonu
 

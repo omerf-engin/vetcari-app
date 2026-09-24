@@ -2482,7 +2482,8 @@ kapsaminda — yedek gercek musteri adi ve borc tutari iceriyor, depo PUBLIC.
 
       Test hesabinin `staff` uyeligi DURUYOR (TASK-038b'nin davet akisini sinamak icin
       elle yapilmis hali). Istenmezse `memberships/lx01...` silinerek geri alinir.
-- [ ] 6. asama — daraltma (eski `userId` yolu kaldirilir)
+- [x] **6. asama — daraltma (2026-09-24).** Eski `userId` yolu kuraldan kaldirildi; erisim
+      artik YALNIZCA klinik uyeligiyle. Ayrinti asagida "6. asama" bolumunde.
 
 **Gecis penceresinin kritik kilidi — planda gorulmemisti.** Eski `userId` yolu acikken
 kullanici kendi kaydina BASKA bir klinigin `clinicId`'sini yazabilseydi, BAKIM-002'de
@@ -2496,6 +2497,73 @@ koleksiyon reddedilir (varsayilan fail-closed). Arayuz okumaya baslayinca (038b)
 yabanci `clinicId` ile olusturma **permission-denied** · kendi kaydina yabanci `clinicId`
 ekleme **permission-denied** · normal guncelleme calisiyor · kendi uyeligi okunuyor,
 baskasininki **permission-denied**. Test kaydi silindi, kalinti yok.
+
+### TASK-038a 6. asama — eski `userId` yolunun kaldirilmasi (2026-09-24)
+
+Plan "canlida birkac gun sorunsuz donsun, sonra kaldir" diyordu. Iki olcum bu beklemenin
+yerini aldi:
+
+**1. Beklemek kanit uretmiyordu.** Uretimde salt okunur tarama: bes koleksiyonda toplam
+**2.188** dokuman — 22 Eylul goc tabaniyla BIREBIR ayni, yani gocten beri deftere hic yazma
+olmamis. `clinicId`'siz 0 · bilinmeyen klinik damgasi 0 · `userId`'siz 0. Istemcide
+`where('userId', ...)` sorgusu 0.
+
+**2. Eski yol artik temizlik degil, bir ACIKTI.** Uyelik aramiyordu; TASK-038b personel
+cikarmayi getirince anlami degisti. Emulatorde olculdu (sonda, beklenti yazmadan):
+
+| Uyeligi SILINMIS personel | Sonuc |
+|---|---|
+| Kendi girdigini okumak (5 koleksiyon) | **izin** |
+| `where(userId == ben)` ile listelemek | **izin** |
+| Borc ve islem logu silmek | **izin** — alacak da denetim izi de gider |
+| Guncellemek · musteri/ilac silmek | red |
+| Hic uyeligi olmayan hesap, `clinicId`'siz kayit yaratmak | **izin** (5/5) |
+
+O gun canlida cikarilmis personel yoktu (tek `staff` test hesabi); acik ilk personel
+cikarildiginda gercek olurdu.
+
+**Kural degisikligi.** `userId ==` dallari `canReadOwned`/`canWriteOwned`/`canCreateOwned`'dan
+cikti; `inClinicIncoming` `clinicId`'nin varligini da istedigi icin `incomingClinicSafe`
+gereksiz kaldi. `resource == null` dali (TASK-033) KALDI.
+
+**`userId` artik yetki degil ATIF — ve kural bunu korumali.** Eski BAKIM-002 testleri
+("kendi kaydinin `userId`'sini baskasina ceviremez") yalnizca `clinicId`'siz tohumlarla
+geciyordu; klinik damgali GERCEK kayitta bir uye `userId`'yi degistirebiliyordu. Oysa CLAUDE.md
+yalnizca istemcide duran iki rol kisiti icin "kontrol atiftir" diyor. Iki kosul eklendi:
+
+- `keepsActor` — guncelleme `userId`'yi degistiremez (bes koleksiyon). Mesru yol kirilmiyor:
+  hicbir guncelleme `userId` yazmiyor; geri almanin `set(ref, before)`'u ilk gireni geri yaziyor
+- `createdByMe` — `customers`, `drugs`, `transactions` yalnizca kendi uid'inle yaratilir.
+  Borclarda ISTENMEZ: tahsilat geri alma supurulmus borcu ilk GIRENIN `userId`'siyle yeniden
+  yaratir (personelin girdigi borcu sahip geri getirir)
+
+**Yol uzerinde bulunan CANLI kusur — gocten kalma.** `revertPaymentOperations` borcu
+`set(ref, { ...log.before, rev })` ile geri yaziyordu. Goc dokumanlari damgaladi, loglarin
+ICINDEKI `before` anlik goruntulerini degil. Uretimde olculdu: `before` tasiyan 106 tahsilat
+logunun **106'si** `clinicId`'siz; 159 musterinin **11'inde** son tahsilat geri alinabilir
+durumda ve geri alinmasi **100 borcu** (23'u yeniden yaratilan) `clinicId`'siz yazardi.
+Gecis kuralinda bu SESSIZDI: yazma basarili, borc klinik sorgusuna dusmuyor, defterden
+kayboluyor. 6. asamadan sonra `permission-denied` olurdu. Duzeltme istemcide: `clinicId`
+OTURUMDAN damgalanir, `userId` `before`'dan gelir (ilk giren, geri alan degil).
+"Bilinmiyor bir cevap degildir" tablosunun besinci satiri: **damga yok = "defterde yok"**.
+
+**Bilincli olarak DOKUNULMAYAN:** personel islem logu SILEBILIYOR (`transactions` delete =
+`canWriteOwned`). Uygulamada log yalnizca sahibe ozel `deleteCustomer`'da siliniyor; kural
+sahibe kisitlanabilir. 6. asamanin getirdigi bir gerileme degil (oncesinde de acikti), ayri
+karar.
+
+**Dogrulama:**
+
+- 737 birim testi (+3: goc oncesi `before`) · **187 kural davranis testi** (115'ten) · lint 0 ·
+  build temiz. Cikarilan personel senaryosu elle tohum silerek degil, sahibin KURALIN izin
+  verdigi `deleteDoc`'uyla sinaniyor; oncesinde erisebildigi de ayrica dogrulaniyor
+- Eski gecis testleri tersine dondu: `clinicId`'siz kayit artik sahibine bile kapali;
+  `where(userId == ben)` sorgusu reddediliyor
+- **Mutasyon 14/14:** eski okuma/yazma/olusturma yolunun geri gelmesi (21/11/20 test kirmizi) ·
+  `keepsActor` kaldirma ve `true` · `canUpdateOwned`'dan klinik kontrolunu cikarma · uc
+  koleksiyonda `createdByMe` yoklugu · iki borc koleksiyonuna `createdByMe` EKLENMESI (geri
+  almayi kirar) · `inClinicIncoming`'in esitlik aramamasi · istemcide damganin yoklugu ·
+  geri yuklenen borcun `userId`'sinin aktorle ezilmesi
 
 ### Bu kararlarin ZORLADIGI uc sonuc
 

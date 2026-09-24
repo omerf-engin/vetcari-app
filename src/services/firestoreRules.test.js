@@ -105,7 +105,7 @@ describe('firestore.rules', () => {
         continue;
       }
 
-      // Sahipli sekil: kullanici verisi, `userId` uzerinden sahiplik.
+      // Sahipli sekil: klinik verisi, uyelikteki `clinicId` uzerinden sahiplik.
       expect(rule, `${name}: allow create yok`).toMatch(/allow create:/);
 
       // `update` ve `delete` AYRI yazilir ve ayni kurali paylasmaz. Guncelleme yazilan

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where } from 'firebase/firestore';
+import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, collection, query, where } from 'firebase/firestore';
 
 /**
  * Guvenlik kurallarinin DAVRANIS testleri (BAKIM-002).
@@ -11,9 +11,9 @@ import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, 
  * reddetmedigini SOYLEYEMEZ. Bu dosya onu soyler: gercek Firestore emulatorunde,
  * gercek istemci SDK'siyla.
  *
- * Neden onemli: TASK-038'de sahiplik kurali `userId` esitliginden `memberships`
- * varligina gececek. A klinigi ile B kliniginin cari defteri arasinda duran tek sey
- * o satir; oradaki hata bug degil, odeme yapan musteriler arasinda veri sizintisi olur.
+ * Neden onemli: sahiplik TASK-038'de `userId` esitliginden klinik UYELIGINE gecti.
+ * A klinigi ile B kliniginin cari defteri arasinda duran tek sey o kural; oradaki hata
+ * bug degil, odeme yapan musteriler arasinda veri sizintisi olur.
  *
  * Calistirma: `npm run test:rules` (Firestore emulatorunu kendisi baslatir, Java ister).
  * Normal `npm test` bu klasoru DISLAR — emulator olmadan calismaz.
@@ -21,9 +21,16 @@ import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, 
 
 const PROJECT_ID = 'demo-vetcari'; // `demo-` oneki: emulator disina asla cikmaz
 const OWNED = ['customers', 'drugs', 'serviceDebts', 'drugDebts', 'transactions'];
+// Tahsilat geri alma supurulmus borcu ilk GIRENIN `userId`'siyle yeniden yaratir; bu
+// koleksiyonlarda olusturmada "kendi adina" sarti bu yuzden YOK (bkz. `createdByMe`)
+const DEBTS = ['serviceDebts', 'drugDebts'];
 
-const ALI = 'ali-uid';
-const VELI = 'veli-uid';
+const KLINIK_A = 'klinik-a';
+const KLINIK_B = 'klinik-b';
+const ALI = 'ali-uid';            // KLINIK_A sahibi
+const PERSONEL = 'personel-uid';  // KLINIK_A personeli, ALI'den farkli kisi
+const VELI = 'veli-uid';          // KLINIK_B sahibi
+const YABANCI = 'yabanci-uid';    // hicbir uyeligi yok
 
 let testEnv;
 
@@ -39,65 +46,92 @@ afterAll(async () => { await testEnv?.cleanup(); });
 beforeEach(async () => { await testEnv.clearFirestore(); });
 
 const asAli = () => testEnv.authenticatedContext(ALI).firestore();
+const asPersonel = () => testEnv.authenticatedContext(PERSONEL).firestore();
 const asVeli = () => testEnv.authenticatedContext(VELI).firestore();
+const asYabanci = () => testEnv.authenticatedContext(YABANCI).firestore();
 const asAnon = () => testEnv.unauthenticatedContext().firestore();
 
 /** Kurallari baypas ederek tohum verisi yazar (test kurulumu, kural sinamasi degil). */
 const seed = (path, data) =>
   testEnv.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), path), data));
 
+/**
+ * Iki klinik, her birinde bir sahip; A'da ayrica personel.
+ *
+ * VELI'nin BASKA bir klinikte uyeligi OLMALI. Olmasaydi "baska klinigin uyesi okuyamaz"
+ * iddialari yanlis sebepten gecerdi (uye olmadigi icin reddedilir) ve kural "her uye her
+ * klinigi okur"a gevsetilse bile testler yesil kalirdi.
+ */
+const klinikleriKur = async () => {
+  await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
+  await seed(`memberships/${PERSONEL}`, { clinicId: KLINIK_A, role: 'staff' });
+  await seed(`memberships/${VELI}`, { clinicId: KLINIK_B, role: 'owner' });
+  await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
+};
+
+/** Uygulamanin yazdigi sekil: `userId` = giren kisi, `clinicId` = defter. */
+const kayit = (over = {}) => ({ userId: ALI, clinicId: KLINIK_A, name: 'x', ...over });
+
 describe('Sahipli koleksiyonlar — okuma', () => {
+  beforeEach(klinikleriKur);
+
   for (const col of OWNED) {
-    it(`${col}: sahibi kendi kaydini OKUR`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
+    it(`${col}: klinigin uyesi kaydi OKUR`, async () => {
+      await seed(`${col}/d1`, kayit());
       await assertSucceeds(getDoc(doc(asAli(), `${col}/d1`)));
     });
 
-    it(`${col}: BASKASININ kaydini okuyamaz`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
+    it(`${col}: ayni klinigin BASKA uyesi de okur — isin butun amaci`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertSucceeds(getDoc(doc(asPersonel(), `${col}/d1`)));
+    });
+
+    it(`${col}: BASKA klinigin uyesi okuyamaz`, async () => {
+      await seed(`${col}/d1`, kayit());
       await assertFails(getDoc(doc(asVeli(), `${col}/d1`)));
     });
 
+    it(`${col}: uyeligi olmayan kullanici okuyamaz`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertFails(getDoc(doc(asYabanci(), `${col}/d1`)));
+    });
+
     it(`${col}: kimlik dogrulanmamis kullanici okuyamaz`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
+      await seed(`${col}/d1`, kayit());
       await assertFails(getDoc(doc(asAnon(), `${col}/d1`)));
     });
   }
 });
 
 describe('Sahipli koleksiyonlar — yazma', () => {
+  beforeEach(klinikleriKur);
+
   for (const col of OWNED) {
-    it(`${col}: kendi userId'siyle OLUSTURUR`, async () => {
-      await assertSucceeds(setDoc(doc(asAli(), `${col}/yeni`), { userId: ALI, name: 'x' }));
+    it(`${col}: kendi kliniginin clinicId'siyle OLUSTURUR`, async () => {
+      await assertSucceeds(setDoc(doc(asAli(), `${col}/yeni`), kayit()));
     });
 
-    // `canCreateOwned` request.resource.data.userId'ye bakar: baskasinin defterine
-    // kayit ENJEKTE edilemez. Cok kiracili urunde en kritik yazma kurali bu.
-    it(`${col}: BASKASININ userId'siyle olusturamaz`, async () => {
-      await assertFails(setDoc(doc(asAli(), `${col}/yeni`), { userId: VELI, name: 'x' }));
+    it(`${col}: BASKA klinigin clinicId'siyle olusturamaz — enjeksiyon`, async () => {
+      await assertFails(setDoc(doc(asAli(), `${col}/yeni`), kayit({ clinicId: KLINIK_B })));
     });
 
-    it(`${col}: userId'siz olusturamaz`, async () => {
-      await assertFails(setDoc(doc(asAli(), `${col}/yeni`), { name: 'x' }));
+    it(`${col}: uyeligi olmayan kullanici HICBIR klinige yazamaz`, async () => {
+      await assertFails(setDoc(doc(asYabanci(), `${col}/yeni`), kayit({ userId: YABANCI })));
     });
 
-    it(`${col}: sahibi gunceller`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
+    it(`${col}: uyesi gunceller`, async () => {
+      await seed(`${col}/d1`, kayit());
       await assertSucceeds(updateDoc(doc(asAli(), `${col}/d1`), { name: 'y' }));
     });
 
-    // TASK-038b: `customers` ve `drugs` silmek artik OWNER rolu istiyor. Uyeligi olmayan
-    // (yalnizca eski `userId` yolundaki) bir kullanici bu ikisini SILEMEZ; borc ve islem
-    // kayitlarini ise silebilmeye devam eder — gunluk is kisitlanmadi.
-    it(`${col}: silme ${['customers', 'drugs'].includes(col) ? 'OWNER ister' : 'sahibe acik'}`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
-      const silme = deleteDoc(doc(asAli(), `${col}/d1`));
-      if (['customers', 'drugs'].includes(col)) await assertFails(silme);
-      else await assertSucceeds(silme);
+    // Rol kisitlari (personel musteri/ilac silemez) `invites.rules.test.js`'te sinaniyor
+    it(`${col}: sahip siler`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertSucceeds(deleteDoc(doc(asAli(), `${col}/d1`)));
     });
 
-    it(`${col}: BASKASININ kaydini guncelleyemez/silemez`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
+    it(`${col}: BASKA klinigin uyesi guncelleyemez/silemez`, async () => {
+      await seed(`${col}/d1`, kayit());
       await assertFails(updateDoc(doc(asVeli(), `${col}/d1`), { name: 'y' }));
       await assertFails(deleteDoc(doc(asVeli(), `${col}/d1`)));
     });
@@ -105,128 +139,148 @@ describe('Sahipli koleksiyonlar — yazma', () => {
 });
 
 /**
- * BAKIM-002'de bu paket yazilirken BULUNAN acik.
+ * 6. ASAMA — eski `userId` yolu KAPALI (TASK-038a, 2026-09-24).
  *
- * Kural once yalnizca MEVCUT dokumanin sahibine bakiyordu; kendi kaydinin `userId`
- * alanini baskasinin uid'i yapmak serbestti, yani A klinigi B'nin defterine sahte borc
- * ENJEKTE edebiliyordu. Veri sizintisi degil (B'nin kayitlari hala okunamiyor) ama bir
- * muhasebe urununde kabul edilemez. `canUpdateOwned` eski VE yeni sahibi birlikte arar.
+ * Gecis doneminde `userId == request.auth.uid` tek basina erisim veriyordu ve uyelik
+ * aramiyordu. Kaldirildi; buradaki her test o yolun artik HICBIR seye izin vermedigini
+ * sinar. Cikarilan personel senaryosunun tamami `invites.rules.test.js`'te.
  */
-describe('Sahiplik devri — enjeksiyon acigi (BAKIM-002)', () => {
+describe('Eski userId yolu kapali (6. asama)', () => {
+  beforeEach(klinikleriKur);
+
   for (const col of OWNED) {
-    it(`${col}: kendi kaydinin userId'sini BASKASINA cevirmek reddedilir`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
-      await assertFails(updateDoc(doc(asAli(), `${col}/d1`), { userId: VELI }));
+    // Asama 6'nin ana iddiasi: `userId` kendi uid'i olsa bile `clinicId`'siz kayit yok
+    it(`${col}: clinicId'siz OLUSTURULAMAZ — userId kendi uid'i olsa bile`, async () => {
+      await assertFails(setDoc(doc(asAli(), `${col}/yeni`), { userId: ALI, name: 'x' }));
     });
 
-    it(`${col}: setDoc ile sahiplik devri de reddedilir`, async () => {
-      await seed(`${col}/d1`, { userId: ALI, name: 'x' });
-      await assertFails(setDoc(doc(asAli(), `${col}/d1`), { userId: VELI, name: 'x' }));
+    it(`${col}: uyeligi olmayan hesap clinicId'siz kayit YARATAMAZ`, async () => {
+      await assertFails(setDoc(doc(asYabanci(), `${col}/yeni`), { userId: YABANCI, name: 'x' }));
+    });
+
+    // Gecis doneminde bu kayit sahibine acikti ("goc henuz damgalamadi"). Uretimde
+    // damgasiz dokuman 0 olculdu; boyle bir kayit artik yalnizca Admin SDK ile duzeltilir.
+    it(`${col}: clinicId tasimayan kayit sahibine bile KAPALI`, async () => {
+      await seed(`${col}/eski`, { userId: ALI, name: 'Goc oncesi' });
+      await assertFails(getDoc(doc(asAli(), `${col}/eski`)));
+      await assertFails(updateDoc(doc(asAli(), `${col}/eski`), { name: 'y' }));
+      await assertFails(deleteDoc(doc(asAli(), `${col}/eski`)));
+    });
+
+    // Uyelik yokken `userId` esitligi tek basina bir sey kazandirmamali
+    it(`${col}: uyeligi olmayan kullanici userId'si kendisi olan kaydi okuyamaz/silemez`, async () => {
+      await seed(`${col}/d1`, kayit({ userId: YABANCI }));
+      await assertFails(getDoc(doc(asYabanci(), `${col}/d1`)));
+      await assertFails(deleteDoc(doc(asYabanci(), `${col}/d1`)));
     });
   }
-
-  it('kendi userId sabit kalarak guncelleme CALISMAYA devam eder', async () => {
-    await seed('drugDebts/d1', { userId: ALI, amount: 100 });
-    await assertSucceeds(updateDoc(doc(asAli(), 'drugDebts/d1'), { amount: 200 }));
-  });
-
-  // `revertPaymentOperations` borcu `set(ref, before)` ile geri yazar; `snapshotOf`
-  // yalnizca `id` ve `rev` siler, `userId` korunur. Sikilastirma bu yolu kirmamali.
-  it('geri alma yolu (tam dokuman set) userId korundugu icin calisir', async () => {
-    await seed('drugDebts/d1', { userId: ALI, amount: 100, customerId: 'm1' });
-    const before = { userId: ALI, amount: 100, customerId: 'm1' };
-    await assertSucceeds(setDoc(doc(asAli(), 'drugDebts/d1'), { ...before, rev: Date.now() }));
-  });
 });
 
 /**
- * GECIS DONEMI (TASK-038a). Eski `userId` yolu ile yeni klinik yolu BIRLIKTE acik.
- * Amac: goc scripti calisirken ve sorgular henuz `userId` uzerindeyken kesinti olmamasi.
+ * `clinicId` ve `userId` — kayit ne defter degistirebilir ne de atif.
  *
- * Burada sinanan asil sey ucuncu bir yolun ACILMAMIS olmasi — ozellikle eski yol
- * uzerinden baska bir klinige kayit enjekte edilememesi.
+ * BAKIM-002'de bulunan acik: kendi kaydinin sahibini baskasina cevirip ONUN defterine
+ * kayit enjekte etmek. Klinik modelinde defteri `clinicId` belirliyor; enjeksiyonun
+ * karsiligi onu degistirmek. `userId` ise artik "kim girdi" — yeniden yazilabilseydi
+ * yalnizca istemcide duran rol kisitlarinin tek korumasi olan atif da kalmazdi.
  */
-describe('Gecis donemi — klinik yolu (TASK-038a)', () => {
-  const KLINIK_A = 'klinik-a';
-  const KLINIK_B = 'klinik-b';
-  const PERSONEL = 'personel-uid';   // KLINIK_A uyesi, ALI'den farkli kisi
-  const YABANCI = 'yabanci-uid';     // hicbir uyeligi yok
+describe('Defter ve atif degistirilemez', () => {
+  beforeEach(klinikleriKur);
 
-  const asPersonel = () => testEnv.authenticatedContext(PERSONEL).firestore();
-  const asYabanci = () => testEnv.authenticatedContext(YABANCI).firestore();
+  for (const col of OWNED) {
+    it(`${col}: kaydin clinicId'sini BASKA klinige cevirmek reddedilir`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertFails(updateDoc(doc(asAli(), `${col}/d1`), { clinicId: KLINIK_B }));
+    });
 
-  beforeEach(async () => {
-    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
-    await seed(`memberships/${PERSONEL}`, { clinicId: KLINIK_A, role: 'staff' });
-    await seed(`memberships/${VELI}`, { clinicId: KLINIK_B, role: 'owner' });
-    await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
+    it(`${col}: clinicId'yi SILMEK reddedilir — kayit defterden kaybolurdu`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertFails(updateDoc(doc(asAli(), `${col}/d1`), { clinicId: deleteField() }));
+    });
+
+    // Ayni klinik icinde bile: reddin sebebi klinik degil atif olmali
+    it(`${col}: userId'yi ayni klinigin BASKA uyesine cevirmek reddedilir`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertFails(updateDoc(doc(asAli(), `${col}/d1`), { userId: PERSONEL }));
+    });
+
+    it(`${col}: setDoc ile atif devri de reddedilir`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertFails(setDoc(doc(asAli(), `${col}/d1`), kayit({ userId: PERSONEL })));
+    });
+
+    it(`${col}: personel, sahibin girdigi kaydi gunceller — atif sahipte kalir`, async () => {
+      await seed(`${col}/d1`, kayit());
+      await assertSucceeds(updateDoc(doc(asPersonel(), `${col}/d1`), { name: 'y' }));
+    });
+  }
+
+  // Musteri, ilac ve islem logu her zaman o an, islemi yapanin adiyla yaratilir
+  for (const col of OWNED.filter(c => !DEBTS.includes(c))) {
+    it(`${col}: BASKASI adina OLUSTURULAMAZ`, async () => {
+      await assertFails(setDoc(doc(asAli(), `${col}/yeni`), kayit({ userId: PERSONEL })));
+    });
+  }
+
+  // `revertPaymentOperations` borcu `set(ref, before)` ile geri yazar; `snapshotOf` yalnizca
+  // `id` ve `rev` siler, `userId` korunur, `clinicId` oturumdan damgalanir.
+  for (const col of DEBTS) {
+    it(`${col}: geri alma — yasayan borca tam dokuman set CALISIR`, async () => {
+      await seed(`${col}/d1`, kayit({ userId: PERSONEL, amount: 100 }));
+      const before = kayit({ userId: PERSONEL, amount: 300 });
+      await assertSucceeds(setDoc(doc(asAli(), `${col}/d1`), { ...before, rev: Date.now() }));
+    });
+
+    // Sahip, personelin girdigi ve tahsilatin supurdugu borcu geri getiriyor
+    it(`${col}: geri alma — supurulmus borcu ilk GIRENIN userId'siyle yeniden yaratir`, async () => {
+      const before = kayit({ userId: PERSONEL, amount: 300 });
+      await assertSucceeds(setDoc(doc(asAli(), `${col}/supurulmus`), { ...before, rev: Date.now() }));
+    });
+
+    // Goc oncesi `before` clinicId tasimiyordu; istemci damgalamasaydi kural reddetmeli
+    it(`${col}: geri alma — clinicId'siz before REDDEDILIR`, async () => {
+      const { clinicId: _c, ...before } = kayit({ userId: PERSONEL, amount: 300 });
+      await assertFails(setDoc(doc(asAli(), `${col}/supurulmus`), { ...before, rev: Date.now() }));
+    });
+  }
+});
+
+describe('Sorgu (list) davranisi — useFirestore bunun uzerine kurulu', () => {
+  beforeEach(klinikleriKur);
+
+  it('clinicId filtreli sorgu CALISIR', async () => {
+    await seed('customers/d1', kayit());
+    const q = query(collection(asAli(), 'customers'), where('clinicId', '==', KLINIK_A));
+    await assertSucceeds(getDocs(q));
   });
 
-  it('ayni klinigin BASKA bir uyesi defteri okur — isin butun amaci', async () => {
-    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
-    await assertSucceeds(getDoc(doc(asPersonel(), 'customers/d1')));
+  it('personel de klinigin sorgusunu calistirir', async () => {
+    await seed('customers/d1', kayit());
+    const q = query(collection(asPersonel(), 'customers'), where('clinicId', '==', KLINIK_A));
+    await assertSucceeds(getDocs(q));
   });
 
-  it('ayni klinigin uyesi kayit olusturur (kendi uid, klinigin clinicId)', async () => {
-    await assertSucceeds(setDoc(doc(asPersonel(), 'customers/yeni'),
-      { userId: PERSONEL, clinicId: KLINIK_A, name: 'Musteri' }));
+  it('filtresiz koleksiyon sorgusu REDDEDILIR', async () => {
+    await seed('customers/d1', kayit());
+    await assertFails(getDocs(collection(asAli(), 'customers')));
   });
 
-  it('ayni klinigin uyesi BASKASININ girdigi kaydi gunceller', async () => {
-    await seed('drugDebts/d1', { userId: ALI, clinicId: KLINIK_A, amount: 100 });
-    await assertSucceeds(updateDoc(doc(asPersonel(), 'drugDebts/d1'), { amount: 200 }));
+  it('BASKA klinigin clinicId sorgusu reddedilir', async () => {
+    await seed('customers/d1', kayit({ userId: VELI, clinicId: KLINIK_B }));
+    const q = query(collection(asAli(), 'customers'), where('clinicId', '==', KLINIK_B));
+    await assertFails(getDocs(q));
   });
 
-  it('BASKA klinigin uyesi okuyamaz/yazamaz', async () => {
-    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
-    await assertFails(getDoc(doc(asVeli(), 'customers/d1')));
-    await assertFails(updateDoc(doc(asVeli(), 'customers/d1'), { name: 'x' }));
-  });
-
-  it('hic uyeligi olmayan kullanici klinik verisine erisemez', async () => {
-    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
-    await assertFails(getDoc(doc(asYabanci(), 'customers/d1')));
-  });
-
-  // GECIS PENCERESININ KRITIK KILIDI: eski `userId` yolu acikken kendi kaydima
-  // BASKA bir klinigin clinicId'sini yazabilseydim, BAKIM-002'de kapatilan enjeksiyon
-  // acigi bu sefer `clinicId` uzerinden geri gelirdi.
-  it('eski userId yoluyla BASKA klinige kayit ENJEKTE edilemez', async () => {
-    await assertFails(setDoc(doc(asAli(), 'customers/enjekte'),
-      { userId: ALI, clinicId: KLINIK_B, name: 'sahte' }));
-  });
-
-  it('kendi kaydinin clinicId sini baska klinige cevirmek reddedilir', async () => {
-    await seed('customers/d1', { userId: ALI, clinicId: KLINIK_A, name: 'Musteri' });
-    await assertFails(updateDoc(doc(asAli(), 'customers/d1'), { clinicId: KLINIK_B }));
-  });
-
-  // Goc henuz damgalamadiysa kayit clinicId TASIMAZ; eski yol calismaya devam etmeli
-  it('clinicId tasimayan ESKI kayit sahibi tarafindan hala okunur/yazilir', async () => {
-    await seed('customers/eski', { userId: ALI, name: 'Goc oncesi' });
-    await assertSucceeds(getDoc(doc(asAli(), 'customers/eski')));
-    await assertSucceeds(updateDoc(doc(asAli(), 'customers/eski'), { name: 'y' }));
-  });
-
-  it('clinicId tasimayan eski kayit KLINIK YOLUYLA okunamaz (henuz damgalanmadi)', async () => {
-    await seed('customers/eski', { userId: ALI, name: 'Goc oncesi' });
-    await assertFails(getDoc(doc(asPersonel(), 'customers/eski')));
+  // Gecis doneminin sorgusu. Istemcide artik yok (`src/`'de 0 eslesme); kural da reddetmeli
+  it('userId filtreli sorgu REDDEDILIR — kendi uid ile bile', async () => {
+    await seed('customers/d1', kayit());
+    const q = query(collection(asAli(), 'customers'), where('userId', '==', ALI));
+    await assertFails(getDocs(q));
   });
 });
 
 describe('memberships / clinics — yetkilendirmenin dayanagi, salt okunur', () => {
-  const KLINIK_A = 'klinik-a';
-  const KLINIK_B = 'klinik-b';
-
-  beforeEach(async () => {
-    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
-    // VELI'nin BASKA bir klinikte uyeligi OLMALI. Olmasaydi asagidaki "baskasininkini
-    // okumaz" iddiasi yanlis sebepten gecerdi (uye olmadigi icin reddedilir) ve kural
-    // "her uye her klinigi okur"a gevsetilse bile test yesil kalirdi — mutasyon
-    // denetimi bunu yakaladi.
-    await seed(`memberships/${VELI}`, { clinicId: KLINIK_B, role: 'owner' });
-    await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
-  });
+  beforeEach(klinikleriKur);
 
   it('kendi uyeligini okur', async () => {
     await assertSucceeds(getDoc(doc(asAli(), `memberships/${ALI}`)));
@@ -248,46 +302,25 @@ describe('memberships / clinics — yetkilendirmenin dayanagi, salt okunur', () 
   // TASK-038b ile `clinics` okunabilir oldu (arayuz klinik adini ve koltuk sayisini
   // gosteriyor). Yazma Admin SDK'da kaldi: koltuk sinirini kullanici kendisi degistiremez.
   it('uyesi kendi klinigini OKUR, yazamaz', async () => {
-    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
-    await seed(`clinics/${KLINIK_A}`, { name: 'A Klinigi', ownerId: ALI, seatLimit: 2 });
-
     await assertSucceeds(getDoc(doc(asAli(), `clinics/${KLINIK_A}`)));
     await assertFails(updateDoc(doc(asAli(), `clinics/${KLINIK_A}`), { seatLimit: 99 }));
     await assertFails(setDoc(doc(asAli(), 'clinics/yeni'), { name: 'sahte' }));
   });
 
   it('BASKA klinigi okuyamaz', async () => {
-    await seed(`memberships/${ALI}`, { clinicId: KLINIK_A, role: 'owner' });
     await seed('clinics/baska-klinik', { name: 'B', ownerId: VELI, seatLimit: 2 });
     await assertFails(getDoc(doc(asAli(), 'clinics/baska-klinik')));
   });
 });
 
-describe('Sorgu (list) davranisi — useFirestore bunun uzerine kurulu', () => {
-  it('userId filtreli sorgu CALISIR', async () => {
-    await seed('customers/d1', { userId: ALI, name: 'x' });
-    const q = query(collection(asAli(), 'customers'), where('userId', '==', ALI));
-    await assertSucceeds(getDocs(q));
-  });
-
-  it('filtresiz koleksiyon sorgusu REDDEDILIR', async () => {
-    await seed('customers/d1', { userId: ALI, name: 'x' });
-    await assertFails(getDocs(collection(asAli(), 'customers')));
-  });
-
-  it('BASKASININ userId sorgusu reddedilir', async () => {
-    await seed('customers/d1', { userId: VELI, name: 'x' });
-    const q = query(collection(asAli(), 'customers'), where('userId', '==', VELI));
-    await assertFails(getDocs(q));
-  });
-});
-
 /**
- * TASK-033'ten gelen dal. Kural `resource.data.userId`'ye kosulsuz dokunsaydi, VAR OLMAYAN
- * bir dokumani okumak `permission-denied` dondururdu ve cagiran taraf "silinmis mi"
- * sorusunu soramazdi. `rev` surum kontrolu ve geri alma yollari bu davranisa dayaniyor.
+ * TASK-033'ten gelen dal. Kural `resource.data`ya kosulsuz dokunsaydi, VAR OLMAYAN bir
+ * dokumani okumak `permission-denied` dondururdu ve cagiran taraf "silinmis mi" sorusunu
+ * soramazdi. `rev` surum kontrolu ve geri alma yollari bu davranisa dayaniyor.
  */
 describe('resource == null dali (TASK-033)', () => {
+  beforeEach(klinikleriKur);
+
   it('var olmayan dokumani okumak BASARILI olur ve exists=false doner', async () => {
     const snap = await assertSucceeds(getDoc(doc(asAli(), 'drugDebts/hicyok')));
     expect(snap.exists()).toBe(false);
@@ -334,12 +367,14 @@ describe('drugCatalog — ortak, salt okunur (TASK-037)', () => {
  * surece istedigi adda koleksiyon olusturup veri yazabiliyordu.
  */
 describe('Kurala yazilmamis koleksiyon', () => {
-  it('kendi userId ile bile YAZILAMAZ', async () => {
-    await assertFails(setDoc(doc(asAli(), 'rastgeleKoleksiyon/d1'), { userId: ALI }));
+  beforeEach(klinikleriKur);
+
+  it('kendi userId ve clinicId ile bile YAZILAMAZ', async () => {
+    await assertFails(setDoc(doc(asAli(), 'rastgeleKoleksiyon/d1'), kayit()));
   });
 
   it('OKUNAMAZ', async () => {
-    await seed('rastgeleKoleksiyon/d1', { userId: ALI });
+    await seed('rastgeleKoleksiyon/d1', kayit());
     await assertFails(getDoc(doc(asAli(), 'rastgeleKoleksiyon/d1')));
   });
 });
