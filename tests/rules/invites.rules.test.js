@@ -161,6 +161,19 @@ describe('Personel cikarma ve davet iptali', () => {
     await assertFails(deleteDoc(doc(bSahibi(), `memberships/${PERSONEL}`)));
   });
 
+
+  // Katildiktan sonra davet dokumaninin kalmasi, sahibin "bekleyen davetler" listesinde
+  // katilmis birini gosterirdi. Davetli kendi davetini silebilir — yetki genislemesi degil,
+  // kisi yalnizca kendi katilma hakkini kaybeder.
+  it('davetli KENDI davetini silebilir', async () => {
+    await seed('invites/yeni@ornek.com', davet());
+    await assertSucceeds(deleteDoc(doc(yeni(), 'invites/yeni@ornek.com')));
+  });
+
+  it('BASKASININ davetini silemez', async () => {
+    await seed('invites/yeni@ornek.com', davet());
+    await assertFails(deleteDoc(doc(as('ilgisiz', 'ilgisiz@ornek.com'), 'invites/yeni@ornek.com')));
+  });
   it('sahip daveti iptal eder, personel edemez', async () => {
     await seed('invites/yeni@ornek.com', davet());
     await assertFails(deleteDoc(doc(personel(), 'invites/yeni@ornek.com')));

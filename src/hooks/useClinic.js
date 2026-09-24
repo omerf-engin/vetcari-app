@@ -33,6 +33,16 @@ export function useClinic(currentUser) {
     const unsubscribe = onSnapshot(
       doc(db, 'memberships', currentUser.uid),
       (snapshot) => {
+        // ONAYLANMAMIS yazmaya dayanarak yetki varsayilmaz.
+        //
+        // `setDoc` yereldeki dinleyicilere ANINDA yansir; sunucu henuz gormemis olabilir.
+        // Katilma aninda bu fark gercek bir soruna yol aciyordu: `clinicId` yayinlanir,
+        // `useFirestore` abone olur, ama kural sunucuda `memberships/{uid}`'i bulamadigi
+        // icin bes dinleyici de `permission-denied` alir ve kullanici bir an BOS defter
+        // gorurdu. Uyelik, sunucu onaylayana kadar "henuz yuklenmedi" sayilir.
+        // (Ayni ders: `useDrugCatalog`'daki `fromCache` — canlida olculdu, TASK-038b.)
+        if (snapshot.metadata.hasPendingWrites) return;
+
         const data = snapshot.exists() ? snapshot.data() : null;
         setSnap({
           uid: currentUser.uid,

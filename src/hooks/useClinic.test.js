@@ -15,8 +15,12 @@ import { useClinic } from './useClinic';
 const user = (uid) => ({ uid });
 
 /** Yakalanan basari geri cagrisi — `n`. abonelige ait. */
-const emit = (data, n = 0) => act(() => {
-  onSnapshotMock.mock.calls[n][1]({ exists: () => data != null, data: () => data });
+const emit = (data, n = 0, { pending = false } = {}) => act(() => {
+  onSnapshotMock.mock.calls[n][1]({
+    exists: () => data != null,
+    data: () => data,
+    metadata: { hasPendingWrites: pending },
+  });
 });
 const fail = (err, n = 0) => act(() => { onSnapshotMock.mock.calls[n][2](err); });
 
@@ -58,6 +62,22 @@ describe('useClinic', () => {
     expect(result.current).toEqual({ clinicId: null, role: null, loading: false, error: null });
   });
 
+
+  // CANLIDA BULUNDU (TASK-038b): `setDoc` yereldeki dinleyiciye ANINDA yansiyor, sunucu
+  // henuz gormemis oluyor. O anlik goruntuye guvenip `clinicId` yayinlanirsa `useFirestore`
+  // abone olur ve kural sunucuda uyeligi bulamadigi icin BES dinleyici de `permission-denied`
+  // alir — kullanici bir an bos defter gorur. Onaylanmamis yazma "henuz yuklenmedi" sayilir.
+  it('ONAYLANMAMIS yerel yazma uyelik sayilmaz', () => {
+    const { result } = renderHook(() => useClinic(user('ali')));
+
+    emit({ clinicId: 'klinik-a', role: 'staff' }, 0, { pending: true });
+    expect(result.current.loading).toBe(true);   // hala bekliyor
+    expect(result.current.clinicId).toBeNull();
+
+    emit({ clinicId: 'klinik-a', role: 'staff' }, 0);  // sunucu onayladi
+    expect(result.current.clinicId).toBe('klinik-a');
+    expect(result.current.role).toBe('staff');
+  });
   it('izin hatasi uyeligin yoklugundan ayrilir', () => {
     const { result } = renderHook(() => useClinic(user('ali')));
     const err = new Error('permission-denied');

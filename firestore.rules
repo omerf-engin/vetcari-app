@@ -212,7 +212,13 @@ service cloud.firestore {
 
       // Daveti geri almak = silmek. Guncelleme yok: degistirilecek bir sey yok, ve
       // `clinicId`/`role` degistirilebilseydi kilit anlamini yitirirdi.
-      allow delete: if isOwner() && myClinicId() == resource.data.clinicId;
+      //
+      // Davetli de KENDI davetini silebilir. Katildiktan sonra davet dokumaninin kalmasi
+      // sahibin "bekleyen davetler" listesinde katilmis birini gosterirdi. Yetki genislemesi
+      // DEGIL: kisi yalnizca kendi e-postasinin davetini silebiliyor ve bu ona hicbir sey
+      // kazandirmiyor — olsa olsa kendi katilma hakkini kaybeder.
+      allow delete: if (isOwner() && myClinicId() == resource.data.clinicId)
+        || emailKey == inviteKey();
       allow update: if false;
     }
 
