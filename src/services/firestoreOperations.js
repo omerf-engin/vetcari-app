@@ -129,11 +129,11 @@ const runGuarded = async (work) => {
  * - `actorId` → dokümandaki `userId` alanı. Anlamı DEĞİŞMİYOR: bugün de "işlemi yapan" yazılıyor
  *   (tek kullanıcı olduğu için aynı zamanda sahip). Bu yüzden eski loglar aktörü zaten
  *   doğru taşıyor; "bilinmiyor" yazmak gerekmiyor.
- * - `clinicId` → hangi defter. Göç tamamlanana kadar `null` olabilir.
+ * - `clinicId` → hangi defter.
  *
- * **`clinicId` yoksa alan HİÇ yazılmaz.** `clinicId: null` yazmak güvenlik kuralındaki
- * `'clinicId' in request.resource.data` kontrolünü tetikler ve göç öncesi TÜM yazmalar
- * `permission-denied` alırdı (bkz. firestore.rules `incomingClinicSafe`).
+ * **`clinicId` yoksa alan HİÇ yazılmaz** (`null` yazılmaz). Göç döneminde bu, damgasız yazmanın
+ * eski `userId` yoluyla geçmesini sağlıyordu. TASK-038a 6. aşamadan beri o yol kapalı:
+ * `clinicId`'siz bir doküman hiçbir deftere ait değildir ve kural onu reddeder.
  */
 const ownerFields = (session) => {
   // Eski konumsal `userId` çağrısından kalma bir dize gelirse SESSİZCE sahipsiz doküman
@@ -886,13 +886,21 @@ export const revertPaymentOperations = async (customer, paymentLogs, reason, ses
   // olması durumu zaten `canRevertPayment` guard'ında yakalanıyor.
   const toVerify = entries.filter(e => !e.log.removed);
 
+  // Defter OTURUMDAN damgalanır, `before`'dan değil. Göçten (2026-09-22) önceki tahsilatların
+  // `before`'u `clinicId` taşımıyor: göç dokümanları damgaladı, logların içindeki anlık
+  // görüntüleri değil. Damgasız geri yazılan borç klinik sorgusuna düşmez ve defterden SESSİZCE
+  // kaybolurdu (canlıda ölçüldü: 11 müşteri, 100 borç). `userId` ise `before`'dan gelir —
+  // borcu ilk GİREN kişi, geri alan değil; `ownerFields` bu yüzden bütünüyle kullanılmıyor.
+  const { clinicId } = ownerFields(session);
+  const ledger = clinicId ? { clinicId } : {};
+
   return runGuarded(async (tx) => {
     const snaps = await Promise.all(toVerify.map(e => tx.get(e.ref)));
     snaps.forEach((snap, i) => assertUnchanged(snap, expectedRevs[toVerify[i].log.debtId]));
 
     entries.forEach(({ log, ref, logRef, entry }) => {
       // `before` `rev` taşımaz (bkz. `snapshotOf`); geri yüklenen borç taze damga alır
-      tx.set(ref, { ...log.before, rev });
+      tx.set(ref, { ...log.before, ...ledger, rev });
       tx.set(logRef, entry);
     });
 

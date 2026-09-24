@@ -1138,6 +1138,33 @@ describe('revertPaymentOperations', () => {
     expect(restored.data.rev).toBeGreaterThan(1);
   });
 
+  // Goc (2026-09-22) dokumanlari damgaladi, loglarin icindeki `before` anlik goruntulerini
+  // DEGIL. Canlida geri alinabilir 11 tahsilatin 11'i de clinicId'siz `before` tasiyordu;
+  // oldugu gibi geri yazilsaydi borc klinik sorgusuna dusmez, defterden kaybolurdu.
+  describe('goc oncesi before (clinicId tasimayan)', () => {
+    const eskiLog = (over = {}) => drugLog({
+      before: { customerId: 'cust1', drugId: 'drug1', qty: 5, maxPrice: 100, isFixed: false, userId: 'personel-uid' },
+      ...over
+    });
+
+    it('yeniden yaratilan borc oturumun clinicId sini alir', async () => {
+      await revertPaymentOperations(customer, [eskiLog({ removed: true })], 'Hatalı', SESSION_KLINIK);
+      expect(sets().find(op => op.ref.path === 'drugDebts/d1').data.clinicId).toBe('klinik-a');
+    });
+
+    it('yasayan borc da oturumun clinicId sini alir', async () => {
+      seedDebts('drugDebts/d1');
+      await revertPaymentOperations(customer, [eskiLog()], 'Hatalı', SESSION_KLINIK);
+      expect(sets().find(op => op.ref.path === 'drugDebts/d1').data.clinicId).toBe('klinik-a');
+    });
+
+    // `userId` "kim girdi" demek: geri alan sahip borcu kendi adina gecirmemeli
+    it('userId borcu ilk girenin kalir, geri alanin olmaz', async () => {
+      await revertPaymentOperations(customer, [eskiLog({ removed: true })], 'Hatalı', SESSION_KLINIK);
+      expect(sets().find(op => op.ref.path === 'drugDebts/d1').data.userId).toBe('personel-uid');
+    });
+  });
+
   it('yasayan borcu odeme oncesi haline geri yazar', async () => {
     seedDebts('drugDebts/d1');
     await revertPaymentOperations(customer, [drugLog()], 'Yanlış tahsilat', SESSION);
