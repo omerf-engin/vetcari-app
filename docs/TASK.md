@@ -2520,6 +2520,78 @@ istemciden yazilabildigi surece bu sinir tavsiye niteliginde kalir. **Bu, projen
 sunucu tarafi ihtiyaci.** Faturalama zorlamasi ya bir Cloud Function'a taşınmali ya da bilincli
 olarak "yumusak sinir + faturada mutabakat" kabul edilmeli.
 
+### TASK-038b — Davet akisi, roller, personel yonetimi (DONE 2026-09-24)
+
+038a defteri klinige tasidi ama ikinci hesabi deftere ELLE, script ile baglamistim.
+038b bunu urune cevirdi: sahip arayuzden davet ediyor, personel kendi hesabiyla katiliyor,
+roller anlam kazaniyor.
+
+**Davet dokumaninin kimligi KUCUK HARFLI E-POSTA.** Tercih degil zorunluluk: istemci auth
+kullanicilarini e-postayla sorgulayamaz, kural daveti ancak token'dan turetilebilir bir
+yolda bulabilir. Tasarim once SONDA ile olculdu (emulator, 5/5): `request.auth.token.email
+.lower()` ve hesaplanmis yolla `get()` calisiyor.
+
+**Uyelik create istemciye acildi** — defterin anahtari. Blogun her satiri bir saldiriyi
+kapatiyor: `uid == userId` (baskasi adina uyelik yok) · davet varligi (davetsiz giris yok) ·
+`clinicId` davetten kopyalanir (baska klinige atlama yok) · `role == 'staff'` (davetle owner
+olunmaz). Son satir ADMIN SDK ile yazilmis bir `owner` davetine karsi duruyor — kural onu
+engelleyemez; mutasyon denetimi bu boslugu ortaya cikardi ve testi yazildi.
+
+#### Rol kisitlari nerede zorlaniyor — durust tablo
+
+| Kisit | Kural | Istemci |
+|---|---|---|
+| Davet et / personel cikar | evet | evet |
+| Musteri sil · Ilac sil · Fiyat degistir | evet | evet |
+| Baskasinin islemini iptal | **hayir** | evet |
+| Tahsilat/zam geri al | **hayir** | evet |
+
+Son iki satir yalnizca istemcide: kural "bu girisi kim yapti" sorusunu cevaplayamiyor
+(iptal, borc dokumanlarini silip log yazan bilesik bir islem). Orada gercek kontrol
+**onleme degil atfetme** — her log aktoru tasiyor. Sert zorlama Cloud Function ister
+(koltuk siniriyla ayni sepette).
+
+**`deleteCustomer` icin rol kapisi kuraldan DAHA onemli.** Fonksiyon atomik degil (450'lik
+parcalar, musteri dokumani en sonda); kurala guvenip fonksiyonda durmasaydik personelin
+denemesi tum islem gecmisini silip son adimda reddedilebilirdi. Kapi ilk okumadan ONCE.
+
+**Iptal guard'i fail-closed:** aktoru belirlenemeyen eski kayitta personel iptal EDEMEZ.
+"Bilinmiyor"u yetki gerekcesi yapmak yetkiyi geri vermek olurdu; sahip her zaman edebilir.
+
+#### CANLIDA bulunan iki kusur (testlerden gecmisti)
+
+**1. Katilma aninda bes dinleyici birden `permission-denied` aliyordu.** `setDoc` yereldeki
+dinleyiciye ANINDA yansiyor, sunucu henuz gormemis oluyor; `useClinic` o goruntuye guvenip
+`clinicId` yayinlayinca kural sunucuda uyeligi bulamiyordu. Veri sonra kurtariliyordu ama
+kullanici bir an BOS DEFTER gorebilirdi. Duzeltme: `metadata.hasPendingWrites` true iken
+uyelik "henuz yuklenmedi" sayilir — ONAYLANMAMIS yazmaya dayanarak yetki varsayilmaz.
+TASK-037'deki `fromCache` dersinin aynisi. Canlida konsol hatasi **5 -> 0**.
+
+**2. Katilan kisi sahibin "bekleyen davetler" listesinde kaliyordu.** `joinClinic` daveti
+silemiyordu (yetki yok), hata yutuluyordu. Kural artik davetlinin KENDI davetini silmesine
+izin veriyor — yetki genislemesi degil, kisi olsa olsa kendi katilma hakkini kaybeder.
+
+#### Dogrulama
+
+- 734 birim testi · 115 kural testi · lint 0 · build temiz
+- Kural mutasyonlari 16'nin 15'i (kalan ESDEGER: `exists()` kaldirilsa da `get()` null
+  donup hata verdigi icin kural yine reddediyor) + davet silme icin 2/2
+- Rol kisiti mutasyonlari 12/12
+- **Iki gercek hesapla uctan uca canli:** script uyeligi silinip akisin kendisiyle yeniden
+  kuruldu. Uretim token'inin `email` tasidigi dogrulandi (tasarimin temeli). Personel:
+  defteri goruyor, gunluk isi yapabiliyor; klinik sekmesi gizli; uye listesi/rol yukseltme/
+  davet/koltuk siniri reddediliyor; fiyat-silme reddediliyor; sahibin islemini iptal
+  edemiyor (`otherActor`). Sahip tarafindaki arayuz kullanici tarafindan dogrulandi.
+  ZZTEST kayitlari silindi, defter sayilari tabanla birebir.
+
+#### Bu gorevde COZULMEYEN (bilincli)
+
+- **E-posta gonderilmiyor.** Davet uygulama ici: sahip e-postayi girer, personele kendisi
+  haber verir, personel kayit olup girince daveti eslesir. Gercek e-posta sunucu tarafi ister
+- **Koltuk siniri yumusak** — kurallar sayamaz (kullanici karari); arayuz uyarir, engellemez
+- **Iki kisit yalnizca istemcide** (yukaridaki tablo)
+- **`deleteCustomer` atomik degil** — onceden var olan sorun, burada yalnizca kayda geciyor
+
 ---
 
 ## TASK-039: Katalog Secici Iyilestirmeleri (ambalaj gucu, gurultu, bolum)

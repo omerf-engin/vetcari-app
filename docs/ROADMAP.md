@@ -1,20 +1,21 @@
 # VetCari — Yol Haritasi (Roadmap)
 
-> Son guncelleme: 8 Eylul 2026 (TASK-039 katalog secici iyilestirmeleri tamamlandi; TASK-037'de
-> atlanan cevrimdisi dogrulamasi yapildi ve **gercek bir kusuru ortaya cikardi** — katalog
-> cevrimdisiyken "bos" gorunuyordu, duzeltildi). Test 676, lint 0/0, build basarili.
-> Firestore'da 1.141 katalog dokumani.
-> BAKIM-002 tamamlandi: kural DAVRANIS testleri (emulator, 64 test) — yazilirken bir
-> **sahiplik devri acigi** bulundu ve kapatildi. Kural yayinlandi ve CANLIDA dogrulandi.
-> Kalan: TASK-038 (tek defter cok kullanici, P1), TASK-022 (ilac stok takibi),
-> TASK-023 (TypeScript migrasyonu).
+> Son guncelleme: 24 Eylul 2026. **TASK-038 tamamlandi: defter artik klinige ait, iki hesap
+> ayni defteri gorebiliyor.** 038a veri modelini tasidi (2.188 dokuman damgalandi), 038b davet
+> akisini, rolleri ve personel yonetimini getirdi. Ikisi de canlida uctan uca dogrulandi ve
+> canli dogrulama TESTLERDEN GECMIS uc kusur ortaya cikardi (bkz. TASK.md).
+> Test 734 + 115 kural davranis testi, lint 0/0, build basarili.
+> Firestore'da 1.141 katalog dokumani; defterde 2.188 kayit.
+> Kalan: TASK-022 (ilac stok takibi), TASK-023 (TypeScript migrasyonu),
+> TASK-038a 6. asama (eski `userId` yolunun kuraldan kaldirilmasi — canlida bir tur
+> bekledikten sonra), koltuk sinirinin sert zorlanmasi (Cloud Function, ayri gorev).
 
 ## Urun Yonu
 
 Uygulama ilerde **veteriner kliniklerine satilacak**. Bu iki seyi degistiriyor:
 
-- **TASK-038 (tek defter, cok kullanici) P1'e cikti.** "Tek kisilik defter" varsayimi klinik
-  satisinin onundeki en buyuk mimari engel
+- **TASK-038 (tek defter, cok kullanici) TAMAMLANDI.** "Tek kisilik defter" varsayimi
+  klinik satisinin onundeki en buyuk mimari engeldi; kalkti
 - **Ortak katalog Firestore'da tutulacak** (gomulu degil): katalog bir urun varligi, veri
   duzeltmesi kod dagitimina baglanmamali; ayrica klinikler kendi ekledikleri ilaclarla katalogda
   ne eksik oldugunu soylemis olurlar

@@ -4,7 +4,7 @@
 > **Son güncelleme:** 8 Eylül 2026  
 > **Durum:** Üretimde. TASK-036 (arama tabanlı çoklu ilaç girişi), TASK-037 (ortak ilaç kataloğu)
 > ve TASK-039 (katalog seçici iyileştirmeleri) tamamlandı; güvenlik kuralları blanket kalıptan
-> çıkarıldı ve yayınlandı. 676 test.
+> çıkarıldı ve yayınlandı. 734 test + 115 kural davranış testi.
 > Kalan: TASK-038 (tek defter çok kullanıcı, P1), TASK-022 (ilaç stok takibi),
 > TASK-023 (TypeScript migrasyonu)
 
