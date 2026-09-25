@@ -2565,6 +2565,40 @@ karar.
   almayi kirar) · `inClinicIncoming`'in esitlik aramamasi · istemcide damganin yoklugu ·
   geri yuklenen borcun `userId`'sinin aktorle ezilmesi
 
+**Yayin (2026-09-25):** push → Vercel Production deployment `5cff615`; canli adresin sundugu
+bundle yerel build ile ayni (`index-BZ6gAcgc.js`). `firebase deploy --only firestore:rules`;
+deploy mesajina guvenilmedi — uretimdeki ruleset Admin SDK ile cekildi, test edilen yerel
+dosyayla BIREBIR ayni.
+
+**CANLI dogrulama (2026-09-25, iki gercek hesap, ZZTEST):**
+
+| Sinama | Sonuc |
+|---|---|
+| Personel gunluk akis: musteri, 2 hizmet borcu, supurmeli tahsilat | calisiyor, konsol hatasi yok |
+| Uyeyken dogrudan REST (personelin kendi token'i): sahip adina log/musteri yaratma, `userId`'yi sahibe cevirme, `clinicId` silme, `clinicId`'siz kayit, `where(userId)` | **10/10** beklendigi gibi (5 ret + 5 kontrol 200) |
+| Cikarildiktan sonra: kendi girdigi musteri/borc/logu okuma, `where(userId)` listeleme, SILME, yazma | **12/12 ret**; kontrol (var olmayan dokuman) 404 — token gecerli, ret kuraldan |
+| Cikarilan hesabin ekrani | "Hesabiniz bir klinige bagli degil" — bos defter DEGIL |
+| Davetle yeniden katilma | calisiyor; davet dokumani silindi |
+| **Goc oncesi tahsilatin geri alinmasi** (logun `before.clinicId`'si Admin SDK ile silindi; sahip arayuzden geri aldi) | supurulmus borc AYNI kimlikle yeniden yaratildi, yasayan borc geri yazildi; ikisi de `clinicId` klinik, `userId` PERSONEL (ilk giren); klinik sorgusu 2/2 goruyor. Sahip baskasi adina borc yaratti — borclardaki `createdByMe` muafiyeti canlida gerekli ve calisiyor |
+
+ZZTEST kayitlari silindi (1 musteri, 2 borc, 7 log); defter 2.188 · `clinicId`'siz 0 · uyelik 2
+· davet 0 — tabanla birebir.
+
+**Canli dogrulamada bulunan, 6. asamayla ILGISIZ iki kusur:**
+
+1. **Beyaz ekran — silinen musterinin detayi.** Personel bir musterinin detayindayken musteri
+   silinirse uygulama coker (`TypeError: ... reading 'id'`, olculdu). Ayni kok: hesap
+   klinikten cikarilip yeniden katildiginda da (bir render boyunca `dataLoading` bayat `false`,
+   `customers` bos). `App.jsx:461` `customer`'in bulunup bulunmadigina bakmadan
+   `CustomerDetail` ciziyor. Veri kaybi yok, yenileme duzeltiyor. TASK-038'den beri gercek bir
+   senaryo; ayni kullanicinin iki sekmesiyle de tetiklenebilir
+2. **Personele sahip dugmeleri gorunuyor.** "Son Tahsilati Geri Al" (`CustomerDetail.jsx:78`,
+   rol kontrolu yok) ve musteri kartindaki silme (`CustomersView.jsx:88`). Islemler
+   `requireOwner` ile ilk okumadan ONCE reddediliyor — yetki acigi degil, gorunurluk
+
+Ayrica gozlendi (yeni degil): cikarma aninda sunucu bes defter dinleyicisini
+`permission-denied` ile kesiyor; arayuz dogru ekrana dusuyor.
+
 ### Bu kararlarin ZORLADIGI uc sonuc
 
 **(a) Tek uyelik, `memberships` dokumanini gereksiz kilabilir.** Bir kullanici tek klinige
